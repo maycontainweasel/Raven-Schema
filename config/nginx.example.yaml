@@ -1,0 +1,9 @@
+# Example nginx config for schema CLI (copy to nginx.yaml)
+serversPath: /opt/homebrew/etc/nginx/servers
+certsPath: /Users/your-user/certs
+hostsPath: /etc/hosts
+templatePath: ./config/nginx.template.conf
+defaultListenPort: 4443
+defaultProxyPort: 3000
+restartCommand: "nginx -t && brew services restart nginx"
+mkcertCommand: "mkcert"

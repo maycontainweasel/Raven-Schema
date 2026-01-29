@@ -2485,6 +2485,11 @@ function buildParentSubtableRouters(
     const createEnabled = isOperationEnabled(childCrud?.create);
     const updateEnabled = isOperationEnabled(childCrud?.update);
     const deleteEnabled = isOperationEnabled(childCrud?.delete);
+    const childFields = normalizeFields(child.fields ?? []);
+    const allowedSortFields = Array.from(
+      new Set(['id', ...childFields.map((field) => field.name)])
+    );
+    const defaultSortField = allowedSortFields.includes('order') ? 'order' : undefined;
 
     const createSchema = `${prefix}CreateInput`;
     const updateSchema = `${prefix}UpdateInput`;
@@ -2526,6 +2531,9 @@ function buildParentSubtableRouters(
         `  id: ${baseIdSchema},`,
         `  start: z.number().optional(),`,
         `  limit: z.number().optional(),`,
+        `  sortBy: z.string().optional(),`,
+        `  sortDir: z.enum(['asc', 'desc']).optional(),`,
+        `  filters: z.record(z.string(), z.any()).optional(),`,
         `});`
       );
     }
@@ -2665,10 +2673,33 @@ function buildParentSubtableRouters(
         `      const limit = typeof input.data?.limit === 'number' ? input.data.limit : -1;`,
         `      const start = typeof input.data?.start === 'number' ? input.data.start : -1;`,
         `      const params: Record<string, any> = { id };`,
+        `      const allowedFields = new Set(${JSON.stringify(allowedSortFields)});`,
+        `      const filters = input.data?.filters ?? {};`,
+        `      const whereParts: string[] = [];`,
+        `      for (const [key, value] of Object.entries(filters)) {`,
+        `        if (value === undefined) continue;`,
+        `        if (!allowedFields.has(key)) {`,
+        `          throw new Error(\`subtable.list | unsupported filter: \\${key}\`);`,
+        `        }`,
+        `        const paramKey = \`filter_\\${key.replace(/[^a-zA-Z0-9_]/g, "_")}\`;`,
+        `        whereParts.push(\`\\${key} = $\\${paramKey}\`);`,
+        `        params[paramKey] = value;`,
+        `      }`,
+        `      const sortBy = input.data?.sortBy ?? ${defaultSortField ? `'${defaultSortField}'` : 'undefined'};`,
+        `      const sortDir = (input.data?.sortDir ?? 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';`,
+        `      if (sortBy && !allowedFields.has(sortBy)) {`,
+        `        throw new Error(\`subtable.list | unsupported sort field: \\${sortBy}\`);`,
+        `      }`,
         `      let query = /* surql */ \``,
         `        LET $RID = fn::ridParam("${tableModel}", $id);`,
         `        RETURN SELECT * FROM ${childModel} WHERE <-( ${edgeTable} WHERE in = $RID );`,
         `      \`;`,
+        `      if (whereParts.length > 0) {`,
+        `        query += ' AND ' + whereParts.join(' AND ');`,
+        `      }`,
+        `      if (sortBy) {`,
+        `        query += \` ORDER BY \${sortBy} \${sortDir}\`;`,
+        `      }`,
         `      if (limit >= 0) {`,
         `        query += ' LIMIT $limit';`,
         `        params.limit = limit;`,
@@ -2717,6 +2748,11 @@ function buildSubtableProcedures(
   }
 
   const tableType = table.tableType === 'submany' ? 'submany' : 'subsingle';
+  const tableFields = normalizeFields(table.fields ?? []);
+  const allowedSortFields = Array.from(
+    new Set(['id', ...tableFields.map((field) => field.name)])
+  );
+  const defaultSortField = allowedSortFields.includes('order') ? 'order' : undefined;
   const schemaLines: string[] = [];
   const routerLines: string[] = [];
 
@@ -2778,6 +2814,9 @@ function buildSubtableProcedures(
       `  id: z.union([z.string().min(1), z.number(), RecordID_z]),`,
       `  start: z.number().optional(),`,
       `  limit: z.number().optional(),`,
+      `  sortBy: z.string().optional(),`,
+      `  sortDir: z.enum(['asc', 'desc']).optional(),`,
+      `  filters: z.record(z.string(), z.any()).optional(),`,
       `});`
     );
 
@@ -2797,10 +2836,33 @@ function buildSubtableProcedures(
       `      const limit = typeof input.data?.limit === 'number' ? input.data.limit : -1;`,
       `      const start = typeof input.data?.start === 'number' ? input.data.start : -1;`,
       `      const params: Record<string, any> = { id };`,
+      `      const allowedFields = new Set(${JSON.stringify(allowedSortFields)});`,
+      `      const filters = input.data?.filters ?? {};`,
+      `      const whereParts: string[] = [];`,
+      `      for (const [key, value] of Object.entries(filters)) {`,
+      `        if (value === undefined) continue;`,
+      `        if (!allowedFields.has(key)) {`,
+      `          throw new Error(\`subtable.list | unsupported filter: \\${key}\`);`,
+      `        }`,
+      `        const paramKey = \`filter_\\${key.replace(/[^a-zA-Z0-9_]/g, "_")}\`;`,
+      `        whereParts.push(\`\\${key} = $\\${paramKey}\`);`,
+      `        params[paramKey] = value;`,
+      `      }`,
+      `      const sortBy = input.data?.sortBy ?? ${defaultSortField ? `'${defaultSortField}'` : 'undefined'};`,
+      `      const sortDir = (input.data?.sortDir ?? 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';`,
+      `      if (sortBy && !allowedFields.has(sortBy)) {`,
+      `        throw new Error(\`subtable.list | unsupported sort field: \\${sortBy}\`);`,
+      `      }`,
       `      let query = /* surql */ \``,
       `        LET $RID = fn::ridParam("${parentModel}", $id);`,
       `        RETURN SELECT * FROM ${tableModel} WHERE <-( ${edgeTable} WHERE in = $RID );`,
       `      \`;`,
+      `      if (whereParts.length > 0) {`,
+      `        query += ' AND ' + whereParts.join(' AND ');`,
+      `      }`,
+      `      if (sortBy) {`,
+      `        query += \` ORDER BY \${sortBy} \${sortDir}\`;`,
+      `      }`,
       `      if (limit >= 0) {`,
       `        query += ' LIMIT $limit';`,
       `        params.limit = limit;`,

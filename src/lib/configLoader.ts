@@ -101,6 +101,7 @@ export async function loadTableMigrations(
 
     applyInstanceDefaults(parsed, instanceConfig);
     normalizeTableType(parsed);
+    applySubmanyDefaults(parsed);
     parsed.__filePath = filePath;
     migrations.push(parsed);
   }
@@ -164,6 +165,20 @@ function applyInstanceDefaults(
 
     fields.push({ [fieldName]: meta });
   }
+}
+
+function applySubmanyDefaults(table: TableMigrationConfig): void {
+  if (table.tableType !== 'submany') return;
+  const fields = (table.fields = table.fields ?? []);
+  const hasOrder = fields.some((item) => Object.prototype.hasOwnProperty.call(item, 'order'));
+  if (hasOrder) return;
+  fields.push({
+    order: {
+      type: 'number',
+      required: false,
+      default: 0,
+    },
+  });
 }
 
 function normalizeTableType(table: TableMigrationConfig): void {
