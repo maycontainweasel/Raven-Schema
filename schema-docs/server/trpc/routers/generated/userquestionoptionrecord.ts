@@ -32,6 +32,9 @@ const UserQuestionOptionRecordSubtableListInput = z.object({
   id: z.union([z.string().min(1), z.number(), RecordID_z]),
   start: z.number().optional(),
   limit: z.number().optional(),
+  sortBy: z.string().optional(),
+  sortDir: z.enum(['asc', 'desc']).optional(),
+  filters: z.record(z.string(), z.any()).optional(),
 });
 
 export const userQuestionOptionRecordRouter = t.router({
@@ -159,10 +162,33 @@ export const userQuestionOptionRecordRouter = t.router({
       const limit = typeof input.data?.limit === 'number' ? input.data.limit : -1;
       const start = typeof input.data?.start === 'number' ? input.data.start : -1;
       const params: Record<string, any> = { id };
+      const allowedFields = new Set(["id","u","qOption","attempts","correct","incorrect","percCorrect","order"]);
+      const filters = input.data?.filters ?? {};
+      const whereParts: string[] = [];
+      for (const [key, value] of Object.entries(filters)) {
+        if (value === undefined) continue;
+        if (!allowedFields.has(key)) {
+          throw new Error(`subtable.list | unsupported filter: ${key}`);
+        }
+        const paramKey = `filter_${key.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+        whereParts.push(`${key} = $${paramKey}`);
+        params[paramKey] = value;
+      }
+      const sortBy = input.data?.sortBy ?? 'order';
+      const sortDir = (input.data?.sortDir ?? 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      if (sortBy && !allowedFields.has(sortBy)) {
+        throw new Error(`subtable.list | unsupported sort field: ${sortBy}`);
+      }
       let query = /* surql */ `
         LET $RID = fn::ridParam("qOption", $id);
         RETURN SELECT * FROM uqor WHERE <-( UserQuestionOptionRecord WHERE in = $RID );
       `;
+      if (whereParts.length > 0) {
+        query += ' AND ' + whereParts.join(' AND ');
+      }
+      if (sortBy) {
+        query += ` ORDER BY ${sortBy} ${sortDir}`;
+      }
       if (limit >= 0) {
         query += ' LIMIT $limit';
         params.limit = limit;

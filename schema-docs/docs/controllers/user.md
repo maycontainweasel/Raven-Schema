@@ -150,7 +150,7 @@ Endpoints:
 
 ## 10) Typesense Helper
 
-Typesense enabled: no
+Typesense enabled: yes
 
 Endpoints (if enabled):
 - `user.typesense.resource`

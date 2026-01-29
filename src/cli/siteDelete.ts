@@ -24,6 +24,8 @@ export async function runSiteDelete(options: {
   yes?: boolean;
   skipRestart?: boolean;
   removeApp?: boolean;
+  keepSpec?: boolean;
+  keepNginx?: boolean;
 }): Promise<void> {
   const projectRoot = options.projectRoot;
   const repoRoot = path.resolve(projectRoot, '..', '..');
@@ -47,6 +49,11 @@ export async function runSiteDelete(options: {
 
   const appTarget = resolveAppTarget(repoRoot, spec, slug);
   const removeApp = await resolveRemoveAppChoice(appTarget, options.removeApp, options.yes);
+  const removeSpec = await resolveRemoveSpecChoice(
+    specPath,
+    options.keepSpec,
+    options.yes
+  );
 
   const resolved = await resolveNginxConfig(projectRoot);
   const configFileName = deriveNginxFileName(hostname);
@@ -63,13 +70,33 @@ export async function runSiteDelete(options: {
     .some((line) => line.trim().length > 0 && line.split(/\s+/).includes(hostname));
 
   console.log('\nDelete plan:');
-  console.log(`- Nginx config: ${configExists?.isFile() ? 'remove' : 'not found'} (${configPath})`);
-  console.log(`- Cert: ${certExists?.isFile() ? 'remove' : 'not found'} (${certPath})`);
-  console.log(`- Cert key: ${certKeyExists?.isFile() ? 'remove' : 'not found'} (${certKeyPath})`);
-  console.log(`- Hosts entry: ${hostsHasEntry ? 'remove' : 'not found'} (${resolved.hostsPath})`);
+  console.log(
+    `- Nginx config: ${
+      options.keepNginx ? 'keep' : configExists?.isFile() ? 'remove' : 'not found'
+    } (${configPath})`
+  );
+  console.log(
+    `- Cert: ${
+      options.keepNginx ? 'keep' : certExists?.isFile() ? 'remove' : 'not found'
+    } (${certPath})`
+  );
+  console.log(
+    `- Cert key: ${
+      options.keepNginx ? 'keep' : certKeyExists?.isFile() ? 'remove' : 'not found'
+    } (${certKeyPath})`
+  );
+  console.log(
+    `- Hosts entry: ${
+      options.keepNginx ? 'keep' : hostsHasEntry ? 'remove' : 'not found'
+    } (${resolved.hostsPath})`
+  );
   if (appTarget) {
     const appExists = await stat(appTarget).catch(() => null);
     console.log(`- App folder: ${removeApp && appExists ? 'remove' : 'keep'} (${appTarget})`);
+  }
+  if (specPath) {
+    const specExists = await stat(specPath).catch(() => null);
+    console.log(`- Site spec: ${removeSpec && specExists ? 'remove' : 'keep'} (${specPath})`);
   }
 
   if (!options.yes) {
@@ -80,21 +107,23 @@ export async function runSiteDelete(options: {
     }
   }
 
-  if (configExists?.isFile()) {
-    await runSudo(['rm', '-f', configPath]);
-  }
-  if (certExists?.isFile()) {
-    await runSudo(['rm', '-f', certPath]);
-  }
-  if (certKeyExists?.isFile()) {
-    await runSudo(['rm', '-f', certKeyPath]);
-  }
-  if (hostsHasEntry) {
-    const updated = removeHostEntry(hostsContent, hostname);
-    await writeFileWithSudo(resolved.hostsPath, updated);
+  if (!options.keepNginx) {
+    if (configExists?.isFile()) {
+      await runSudo(['rm', '-f', configPath]);
+    }
+    if (certExists?.isFile()) {
+      await runSudo(['rm', '-f', certPath]);
+    }
+    if (certKeyExists?.isFile()) {
+      await runSudo(['rm', '-f', certKeyPath]);
+    }
+    if (hostsHasEntry) {
+      const updated = removeHostEntry(hostsContent, hostname);
+      await writeFileWithSudo(resolved.hostsPath, updated);
+    }
   }
 
-  if (!options.skipRestart) {
+  if (!options.skipRestart && !options.keepNginx) {
     const restart = options.yes ? true : await promptYesNo('Restart nginx now?', true);
     if (restart) {
       await runShellCommand(`sudo ${resolved.restartCommand}`);
@@ -105,6 +134,13 @@ export async function runSiteDelete(options: {
     const appExists = await stat(appTarget).catch(() => null);
     if (appExists) {
       await rmSafe(appTarget, repoRoot);
+    }
+  }
+
+  if (removeSpec && specPath) {
+    const specExists = await stat(specPath).catch(() => null);
+    if (specExists) {
+      await rmSafeLocal(specPath, projectRoot);
     }
   }
 
@@ -182,11 +218,32 @@ async function resolveRemoveAppChoice(
   return promptYesNo('Remove the app folder too?', true);
 }
 
+async function resolveRemoveSpecChoice(
+  specPath: string | null,
+  keepSpec: boolean | undefined,
+  skipPrompt?: boolean
+): Promise<boolean> {
+  if (!specPath) return false;
+  if (keepSpec === true) return false;
+  if (skipPrompt) return true;
+  return promptYesNo('Remove the site YAML spec too?', true);
+}
+
 async function rmSafe(targetPath: string, repoRoot: string): Promise<void> {
   const resolvedTarget = path.resolve(targetPath);
   const resolvedRoot = path.resolve(repoRoot);
   if (!resolvedTarget.startsWith(resolvedRoot)) {
     throw new Error(`Refusing to delete outside repo: ${resolvedTarget}`);
+  }
+  const { rm } = await import('fs/promises');
+  await rm(resolvedTarget, { recursive: true, force: true });
+}
+
+async function rmSafeLocal(targetPath: string, projectRoot: string): Promise<void> {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(projectRoot);
+  if (!resolvedTarget.startsWith(resolvedRoot)) {
+    throw new Error(`Refusing to delete outside project: ${resolvedTarget}`);
   }
   const { rm } = await import('fs/promises');
   await rm(resolvedTarget, { recursive: true, force: true });

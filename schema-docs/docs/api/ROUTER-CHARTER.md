@@ -194,12 +194,15 @@ const { $process } = useCRUD()
 const record = await $process('question.subtables.questionOption.get', {}, { instance: 'test' })
 ```
 - `question.subtables.questionOption.list` (query)
-  - fields: id (required), start (optional), limit (optional)
+  - fields: id (required), start (optional), limit (optional), sortBy (optional), sortDir (optional), filters (optional)
   ```ts
 const { $process } = useCRUD()
 const record = await $process('question.subtables.questionOption.list', {
   "start": 0,
-  "limit": 0
+  "limit": 0,
+  "sortBy": "",
+  "sortDir": "",
+  "filters": ""
 }, { instance: 'test' })
 ```
 - `question.subtables.questionRecord.create` (mutation)
@@ -267,12 +270,15 @@ const { $process } = useCRUD()
 const record = await $process('questionOption.get', {}, { instance: 'test' })
 ```
 - `questionOption.list` (query)
-  - fields: id (required), start (optional), limit (optional)
+  - fields: id (required), start (optional), limit (optional), sortBy (optional), sortDir (optional), filters (optional)
   ```ts
 const { $process } = useCRUD()
 const record = await $process('questionOption.list', {
   "start": 0,
-  "limit": 0
+  "limit": 0,
+  "sortBy": "",
+  "sortDir": "",
+  "filters": ""
 }, { instance: 'test' })
 ```
 - `questionOption.subtables.questionOptionRecord.create` (mutation)
@@ -332,12 +338,15 @@ const { $process } = useCRUD()
 const record = await $process('questionOption.subtables.userQuestionOptionRecord.get', {}, { instance: 'test' })
 ```
 - `questionOption.subtables.userQuestionOptionRecord.list` (query)
-  - fields: id (required), start (optional), limit (optional)
+  - fields: id (required), start (optional), limit (optional), sortBy (optional), sortDir (optional), filters (optional)
   ```ts
 const { $process } = useCRUD()
 const record = await $process('questionOption.subtables.userQuestionOptionRecord.list', {
   "start": 0,
-  "limit": 0
+  "limit": 0,
+  "sortBy": "",
+  "sortDir": "",
+  "filters": ""
 }, { instance: 'test' })
 ```
 
@@ -452,12 +461,15 @@ const { $process } = useCRUD()
 const record = await $process('userQuestionOptionRecord.get', {}, { instance: 'test' })
 ```
 - `userQuestionOptionRecord.list` (query)
-  - fields: id (required), start (optional), limit (optional)
+  - fields: id (required), start (optional), limit (optional), sortBy (optional), sortDir (optional), filters (optional)
   ```ts
 const { $process } = useCRUD()
 const record = await $process('userQuestionOptionRecord.list', {
   "start": 0,
-  "limit": 0
+  "limit": 0,
+  "sortBy": "",
+  "sortDir": "",
+  "filters": ""
 }, { instance: 'test' })
 ```
 
@@ -466,6 +478,7 @@ const record = await $process('userQuestionOptionRecord.list', {
 - Views/Resources: resource
 - Taxonomies:
   - role: createTaxonomy, addTerm, removeTerm, attach, detach, getTerms, getRecordTerms
+- Typesense: resource, list, refresh, count, collection
 
 Endpoints:
 - `user.create` (mutation)
@@ -516,6 +529,16 @@ const record = await $process('user.resource', {
   - data: {}
 - `user.role.getRecordTerms` (query)
   - data: { id: <record sub-id> }
+- `user.typesense.resource` (query)
+  - input: RequestSchema<typesense payload>
+- `user.typesense.list` (query)
+  - input: RequestSchema<typesense payload>
+- `user.typesense.refresh` (mutation)
+  - input: RequestSchema<typesense payload>
+- `user.typesense.count` (query)
+  - input: RequestSchema<typesense payload>
+- `user.typesense.collection` (query)
+  - input: RequestSchema<typesense payload>
 
 ### instance
 - CRUD: create, update, delete

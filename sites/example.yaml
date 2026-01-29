@@ -2,6 +2,8 @@ name: Example Site
 slug: example-site
 template: templates/nuxt-4.3.0
 target: apps/example-site
+layers:
+  - schema-core
 nuxtConfig:
   extends:
     - ./layers/admin-core
@@ -33,3 +35,7 @@ nuxtConfig:
 packageJson:
   scripts:
     dev: nuxt dev --port 1300
+env:
+  SCHEMA_API_URL:
+    local: http://localhost:3000
+    staging: https://api.schema.dev

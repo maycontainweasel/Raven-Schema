@@ -55,7 +55,17 @@ export interface SubtableController {
   update: (id: QuestionOptionIdInput, payload: Record<string, any>, options?: ApiOptions) => Promise<any>
   delete: (id: QuestionOptionIdInput, options?: ApiOptions) => Promise<any>
   get: (id: QuestionOptionIdInput, options?: ApiOptions) => Promise<any>
-  list: (id: QuestionOptionIdInput, params?: { start?: number; limit?: number }, options?: ApiOptions) => Promise<any>
+  list: (
+    id: QuestionOptionIdInput,
+    params?: {
+      start?: number;
+      limit?: number;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      filters?: Record<string, any>;
+    },
+    options?: ApiOptions
+  ) => Promise<any>
 }
 
 export interface RelationController {

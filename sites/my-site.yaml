@@ -17,3 +17,11 @@ nuxtConfig:
         clientPort: 4443
         path: /__vitews
         port: 49995
+
+
+layers:
+  - ./layers/admin-core
+  - ./layers/api-toolkit
+
+env:
+  SCHEMA_API_URL: https://api.schema.dev | http://localhost:3000

@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile, rm } from 'fs/promises';
 import path from 'path';
 
 import type { AppConfig, ProjectPathsConfig } from '../types';
+import { loadSiteSpec, writeSiteSpec, ensureNuxtConfigExtends } from './siteSpec';
 
 export type LayerSyncMode = 'auto' | 'force' | 'off';
 
@@ -16,8 +17,13 @@ export async function syncProjectLayers(options: {
   const { projectRoot, app, project } = options;
   if (!project.nuxtProjectRoot) return;
 
-  const layers = resolveLayerList(app, project);
-  const layersDisabled = project.layers === 'none' || project.layers === false;
+  const specEntry = await loadSiteSpec(projectRoot, project);
+  const layers = Array.isArray(specEntry?.spec.layers)
+    ? specEntry?.spec.layers ?? []
+    : resolveLayerList(app, project);
+  const layersDisabled = Array.isArray(specEntry?.spec.layers)
+    ? specEntry?.spec.layers.length === 0
+    : project.layers === 'none' || project.layers === false;
   if (layers.length === 0 && !layersDisabled) return;
 
   const appRoot = path.resolve(projectRoot, project.nuxtProjectRoot);
@@ -77,7 +83,21 @@ export async function syncProjectLayers(options: {
 
   const configPath = await findNuxtConfig(appRoot);
   if (!configPath) {
-    console.warn(`⚠️  nuxt.config not found in ${appRoot}`);
+    const specEntry = await loadSiteSpec(projectRoot, project);
+    if (specEntry) {
+      const { spec, path: specPath } = specEntry;
+      const changed = ensureNuxtConfigExtends(spec, layerRefs, layersDisabled);
+      if (changed) {
+        await writeSiteSpec(specPath, spec);
+        if (log) {
+          console.log(`🧩 Updated site YAML extends for ${project.name}`);
+        }
+      } else if (log) {
+        console.log(`ℹ️  Site YAML extends already up to date for ${project.name}`);
+      }
+    } else {
+      console.warn(`⚠️  nuxt.config not found in ${appRoot}`);
+    }
     return;
   }
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-28T23:27:24.223Z",
+  "generatedAt": "2026-01-29T15:48:46.897Z",
   "source": "schema-docs/server/trpc/routers/generated",
   "models": {
     "admin": {
@@ -722,6 +722,25 @@
               "key": "limit",
               "type": "number",
               "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
+              "required": false
             }
           },
           "router": "QuestionQuestionOptionSubtableRouter",
@@ -950,6 +969,25 @@
               "key": "limit",
               "type": "number",
               "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
+              "required": false
             }
           },
           "router": "questionOptionRouter",
@@ -1150,6 +1188,25 @@
             "limit": {
               "key": "limit",
               "type": "number",
+              "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
               "required": false
             }
           },
@@ -1549,6 +1606,25 @@
               "key": "limit",
               "type": "number",
               "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
+              "required": false
             }
           },
           "router": "userQuestionOptionRecordRouter",
@@ -1805,6 +1881,95 @@
             }
           },
           "router": "UserRoleRouter",
+          "file": "user.ts"
+        },
+        {
+          "path": "user.typesense.resource",
+          "name": "resource",
+          "method": "query",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseResourceInput",
+            "raw": "RequestSchema(UserTypesenseResourceInput)"
+          },
+          "fields": {
+            "id": {
+              "key": "id",
+              "type": "union",
+              "required": true
+            }
+          },
+          "router": "userRouter_typesense",
+          "file": "user.ts"
+        },
+        {
+          "path": "user.typesense.list",
+          "name": "list",
+          "method": "query",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseListInput",
+            "raw": "RequestSchema(UserTypesenseListInput)"
+          },
+          "fields": {
+            "limit": {
+              "key": "limit",
+              "type": "number",
+              "required": false
+            },
+            "start": {
+              "key": "start",
+              "type": "number",
+              "required": false
+            }
+          },
+          "router": "userRouter_typesense",
+          "file": "user.ts"
+        },
+        {
+          "path": "user.typesense.refresh",
+          "name": "refresh",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseListInput",
+            "raw": "RequestSchema(UserTypesenseListInput)"
+          },
+          "fields": {
+            "limit": {
+              "key": "limit",
+              "type": "number",
+              "required": false
+            },
+            "start": {
+              "key": "start",
+              "type": "number",
+              "required": false
+            }
+          },
+          "router": "userRouter_typesense",
+          "file": "user.ts"
+        },
+        {
+          "path": "user.typesense.count",
+          "name": "count",
+          "method": "query",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseCountInput",
+            "raw": "RequestSchema(UserTypesenseCountInput)"
+          },
+          "fields": null,
+          "router": "userRouter_typesense",
+          "file": "user.ts"
+        },
+        {
+          "path": "user.typesense.collection",
+          "name": "collection",
+          "method": "query",
+          "input": null,
+          "fields": null,
+          "router": "userRouter_typesense",
           "file": "user.ts"
         }
       ]
@@ -2588,6 +2753,25 @@
               "key": "limit",
               "type": "number",
               "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
+              "required": false
             }
           }
         }
@@ -3065,6 +3249,25 @@
               "key": "limit",
               "type": "number",
               "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
+              "required": false
             }
           }
         }
@@ -3207,6 +3410,25 @@
             "limit": {
               "key": "limit",
               "type": "number",
+              "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
               "required": false
             }
           }
@@ -3575,6 +3797,25 @@
               "key": "limit",
               "type": "number",
               "required": false
+            },
+            "sortBy": {
+              "key": "sortBy",
+              "type": "string",
+              "required": false
+            },
+            "sortDir": {
+              "key": "sortDir",
+              "type": "enum",
+              "required": false,
+              "enumValues": [
+                "asc",
+                "desc"
+              ]
+            },
+            "filters": {
+              "key": "filters",
+              "type": "record",
+              "required": false
             }
           }
         }
@@ -3682,6 +3923,87 @@
               "required": true
             }
           }
+        }
+      ],
+      "children": [],
+      "file": "user.ts"
+    },
+    "userRouter_typesense": {
+      "name": "userRouter_typesense",
+      "endpoints": [
+        {
+          "name": "resource",
+          "method": "query",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseResourceInput",
+            "raw": "RequestSchema(UserTypesenseResourceInput)"
+          },
+          "fields": {
+            "id": {
+              "key": "id",
+              "type": "union",
+              "required": true
+            }
+          }
+        },
+        {
+          "name": "list",
+          "method": "query",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseListInput",
+            "raw": "RequestSchema(UserTypesenseListInput)"
+          },
+          "fields": {
+            "limit": {
+              "key": "limit",
+              "type": "number",
+              "required": false
+            },
+            "start": {
+              "key": "start",
+              "type": "number",
+              "required": false
+            }
+          }
+        },
+        {
+          "name": "refresh",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseListInput",
+            "raw": "RequestSchema(UserTypesenseListInput)"
+          },
+          "fields": {
+            "limit": {
+              "key": "limit",
+              "type": "number",
+              "required": false
+            },
+            "start": {
+              "key": "start",
+              "type": "number",
+              "required": false
+            }
+          }
+        },
+        {
+          "name": "count",
+          "method": "query",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "UserTypesenseCountInput",
+            "raw": "RequestSchema(UserTypesenseCountInput)"
+          },
+          "fields": null
+        },
+        {
+          "name": "collection",
+          "method": "query",
+          "input": null,
+          "fields": null
         }
       ],
       "children": [],
@@ -3811,6 +4133,10 @@
         {
           "name": "role",
           "ref": "UserRoleRouter"
+        },
+        {
+          "name": "typesense",
+          "ref": "userRouter_typesense"
         }
       ],
       "file": "user.ts"

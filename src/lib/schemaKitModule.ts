@@ -3,6 +3,7 @@ import path from 'path';
 import { createHash } from 'crypto';
 
 import type { ProjectPathsConfig } from '../types';
+import { loadSiteSpec, writeSiteSpec, ensureNuxtConfigModule, ensureNuxtConfigTranspile } from './siteSpec';
 
 const MODULE_FILE_NAME = 'index.ts';
 const MODULE_REF = './modules/schema-kit';
@@ -95,7 +96,27 @@ export async function ensureSchemaKitModule(options: {
 
   const configPath = await findNuxtConfig(appRoot);
   if (!configPath) {
-    console.warn(`⚠️  nuxt.config not found in ${appRoot}`);
+    const specEntry = await loadSiteSpec(projectRoot, project);
+    if (specEntry) {
+      const { spec, path: specPath } = specEntry;
+      const moduleRef =
+        options.mode === 'shared'
+          ? resolveSharedModuleRef(appRoot, projectRoot, options.sharedModulePath)
+          : MODULE_REF;
+      const changed =
+        ensureNuxtConfigModule(spec, moduleRef) ||
+        ensureNuxtConfigTranspile(spec, 'trpc-nuxt');
+      if (changed) {
+        await writeSiteSpec(specPath, spec);
+        if (log) {
+          console.log(`🧩 Updated site YAML modules for ${project.name}`);
+        }
+      } else if (log) {
+        console.log(`ℹ️  Site YAML modules already up to date for ${project.name}`);
+      }
+    } else {
+      console.warn(`⚠️  nuxt.config not found in ${appRoot}`);
+    }
     return;
   }
 

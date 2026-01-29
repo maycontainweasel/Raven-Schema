@@ -1,4 +1,0 @@
-name: testsite
-slug: testsite
-template: templates/nuxt-4.3.0
-target: apps/testsite

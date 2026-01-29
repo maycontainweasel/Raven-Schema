@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-28T23:27:27.851Z",
+  "generatedAt": "2026-01-29T15:48:50.457Z",
   "source": "config/specs",
   "instances": {
     "default": "mpd",
@@ -355,7 +355,7 @@
           "update": true,
           "delete": true
         },
-        "typesense": false,
+        "typesense": true,
         "taxonomies": [
           "role"
         ],
@@ -433,7 +433,71 @@
         }
       ],
       "typesense": {
-        "enabled": false
+        "enabled": true,
+        "collection": "user",
+        "view": {
+          "name": "Typesense",
+          "fields": [
+            "id",
+            "email",
+            "firstName",
+            "surname",
+            "uniqueId"
+          ],
+          "functionMode": "generate",
+          "function": "viewUserTypesense"
+        },
+        "schema": {
+          "collection": "user",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "string"
+            },
+            {
+              "name": "firstName",
+              "type": "string"
+            },
+            {
+              "name": "surname",
+              "type": "string"
+            },
+            {
+              "name": "uniqueId",
+              "type": "string"
+            }
+          ],
+          "sortableFields": [
+            "surname"
+          ],
+          "settings": {
+            "enable_nested_fields": true
+          }
+        },
+        "meta": {
+          "settings": {
+            "synonyms": false,
+            "searchAsYouType": false,
+            "perDocumentSynonyms": false,
+            "perDocumentSearchAsYouType": false,
+            "queryBy": [
+              "firstName",
+              "surname",
+              "email",
+              "uniqueId"
+            ],
+            "queryByWeights": [
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
       },
       "docs": {
         "types": "docs/api/models/user/types.md"

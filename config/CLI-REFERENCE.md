@@ -24,6 +24,12 @@ pnpm -C apps/schema run project:setup -- --project schema-docs
 This checks for missing deps, missing Nuxt scaffolds, runtimeConfig blocks, and env files.  
 Use `--fix` to auto‑create missing scaffolds and env files.
 
+Alias for site-aware setups:
+
+```
+pnpm -C apps/schema run site:project:setup -- --project admin
+```
+
 ---
 
 ## Core generation
@@ -99,6 +105,12 @@ Use `--fix` to auto‑create missing scaffolds and env files.
   - Writes `nuxt.config.generated.ts` from `nuxtConfig` in the site spec.
   - Preserves `nuxt.config.overrides.ts` for manual overrides.
   - Merges `packageJson` from the site spec into `package.json` (arrays override, objects merge).
+  - Writes `.env` and `.env.staging` when `env` is present in the site spec.
+  - Writes `ecosystem.config.cjs` when `deploy.ecosystem` is present.
+  Flags:
+  - `--nginx` run nginx setup
+  - `--nginx-config` capture nginx settings without applying
+  - `--no-nginx` skip nginx prompts entirely
 
 - `site:delete [name]`  
   Remove nginx server block, certs, and hosts entry for a site.  
@@ -107,6 +119,43 @@ Use `--fix` to auto‑create missing scaffolds and env files.
   - `pnpm -C apps/schema run site:delete -- --spec sites/example.yaml`
   - `pnpm -C apps/schema run site:delete -- --host my-site.schema.dev --yes`
   - `pnpm -C apps/schema run site:delete -- --remove-app`
+  - `pnpm -C apps/schema run site:delete -- --keep-spec`
+  - `pnpm -C apps/schema run site:delete -- --keep-nginx`
+
+- `site:env:sync [name]`  
+  Generate `.env` and `.env.staging` from the site spec `env` block.  
+  Examples:
+  - `pnpm -C apps/schema run site:env:sync my-site`
+  - `pnpm -C apps/schema run site:env:sync -- --spec sites/example.yaml`
+
+- `site:deploy:init [name]`  
+  SSH setup for nginx + app folder + PM2 placeholder.  
+  Examples:
+  - `pnpm -C apps/schema run site:deploy:init my-site`
+  - `pnpm -C apps/schema run site:deploy:init -- --host mpire.live --domain mysite.mpire.live --port 4041`
+
+- `site:deploy:setup [name]`  
+  Alias for the initial SSH setup (preferred name).  
+  Example:
+  - `pnpm -C apps/schema run site:deploy:setup my-site`
+
+- `site:deploy [name]`  
+  Deploy site (runs setup until deploy is implemented).  
+  Example:
+  - `pnpm -C apps/schema run site:deploy my-site`
+
+- `site:adopt [name]`  
+  Adopt an existing Nuxt app into the site system.  
+  Examples:
+  - `pnpm -C apps/schema run site:adopt admin`
+  - `pnpm -C apps/schema run site:adopt -- --app apps/admin --force`
+  - `pnpm -C apps/schema run site:adopt -- --no-update-app`
+
+- `site:layers:sync [name]`  
+  Sync site YAML layers from `app.config.yaml`.  
+  Examples:
+  - `pnpm -C apps/schema run site:layers:sync`
+  - `pnpm -C apps/schema run site:layers:sync -- --project admin`
 
 - `request-schema:generate`  
   Generate RequestSchema helper.

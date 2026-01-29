@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { t } from '@schema/server/trpc/context';
+import { collections } from '@schema/typesense/collections';
+import { upsertTypesenseDocuments } from '@schema/server/typesense';
 
 import { RequestSchema } from '@schema/request-schema';
 import { Z_User, RecordID_z } from '@schema/types';
@@ -45,6 +47,19 @@ const UserResourceInput = z.object({
   message: 'A resource key or name is required',
   path: ['resource'],
 });
+
+const UserTypesenseResourceInput = z.object({
+  id: z.union([z.string().min(1), z.number()]),
+});
+
+const UserTypesenseListInput = z.object({
+  limit: z.number().int().min(-1).optional(),
+  start: z.number().int().min(-1).optional(),
+});
+
+const UserTypesenseCountInput = z.object({});
+
+const UserTypesenseCollection = collections['user'];
 
 const UserRoleTaxonomyPayload = z.record(z.string(), z.any());
 const UserRoleTermPayload = z.union([z.string(), z.record(z.string(), z.any())]);
@@ -345,4 +360,94 @@ export const userRouter = t.router({
       }
       throw new Error(`Unsupported resource key: ${resolvedKey}`);
     }),
+  typesense: t.router({
+  resource: t.procedure
+    .input(RequestSchema(UserTypesenseResourceInput))
+    .query(async ({ input, ctx }) => {
+      const { db, LRS } = ctx;
+      const dbInstance = input.instance && (ctx as any).$api?.DB
+        ? await (ctx as any).$api.DB(input.instance as any)
+        : db;
+      const id = input.data?.id;
+      if (!id) {
+        throw new Error('typesense.resource | id is required');
+      }
+      const query = /* surql */ `
+        RETURN fn::viewUserTypesense(type::record('u', $id));
+      `;
+      const result = await LRS(await dbInstance.query(query, { id }));
+      return result;
+    }),
+  list: t.procedure
+    .input(RequestSchema(UserTypesenseListInput))
+    .query(async ({ input, ctx }) => {
+      const { db, LRS } = ctx;
+      const dbInstance = input.instance && (ctx as any).$api?.DB
+        ? await (ctx as any).$api.DB(input.instance as any)
+        : db;
+      const limit = typeof input.data?.limit === 'number' ? input.data.limit : -1;
+      const start = typeof input.data?.start === 'number' ? input.data.start : -1;
+      const params: Record<string, number> = {};
+      let query = 'LET $ids = SELECT value id FROM u';
+      if (limit >= 0) {
+        query += ' LIMIT $limit';
+        params.limit = limit;
+      }
+      if (start >= 0) {
+        query += ' START $start';
+        params.start = start;
+      }
+      query += ';';
+      query += ' LET $rids = array::map($ids, |$id| fn::ridParam("u", $id));';
+      query += ' LET $rids = array::filter($rids, |$rid| record::exists($rid));';
+      query += ' RETURN array::map($rids, |$rid| fn::viewUserTypesense($rid));';
+      const result = await LRS(await dbInstance.query(/* surql */ query, params));
+      return result;
+    }),
+  refresh: t.procedure
+    .input(RequestSchema(UserTypesenseListInput))
+    .mutation(async ({ input, ctx }) => {
+      const { db, LRS } = ctx;
+      const dbInstance = input.instance && (ctx as any).$api?.DB
+        ? await (ctx as any).$api.DB(input.instance as any)
+        : db;
+      const limit = typeof input.data?.limit === 'number' ? input.data.limit : -1;
+      const start = typeof input.data?.start === 'number' ? input.data.start : -1;
+      const params: Record<string, number> = {};
+      let query = 'LET $ids = SELECT value id FROM u';
+      if (limit >= 0) {
+        query += ' LIMIT $limit';
+        params.limit = limit;
+      }
+      if (start >= 0) {
+        query += ' START $start';
+        params.start = start;
+      }
+      query += ';';
+      query += ' LET $rids = array::map($ids, |$id| fn::ridParam("u", $id));';
+      query += ' LET $rids = array::filter($rids, |$rid| record::exists($rid));';
+      query += ' RETURN array::map($rids, |$rid| fn::viewUserTypesense($rid));';
+      const result = await LRS(await dbInstance.query(/* surql */ query, params));
+      const records = Array.isArray(result) ? result : result ? [result] : [];
+      const upserted = await upsertTypesenseDocuments(UserTypesenseCollection, records, 'upsert');
+      return { fetched: records.length, upserted, records };
+    }),
+  count: t.procedure
+    .input(RequestSchema(UserTypesenseCountInput))
+    .query(async ({ input, ctx }) => {
+      const { db, LRS } = ctx;
+      const dbInstance = input.instance && (ctx as any).$api?.DB
+        ? await (ctx as any).$api.DB(input.instance as any)
+        : db;
+      const query = /* surql */ `
+        RETURN count(select value id from u);
+      `;
+      const result = await LRS(await dbInstance.query(query));
+      return result;
+    }),
+  collection: t.procedure
+    .query(async () => {
+      return UserTypesenseCollection;
+    }),
+  }),
 });

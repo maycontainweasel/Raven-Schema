@@ -52,6 +52,10 @@ import { rebuildIndexes } from './lib/indexRebuilder';
 import { generateModules } from './cli/moduleGenerate';
 import { runSiteCreate } from './cli/siteCreate';
 import { runSiteDelete } from './cli/siteDelete';
+import { runSiteEnvSync } from './cli/siteEnvSync';
+import { runSiteDeployInit } from './cli/siteDeployInit';
+import { runSiteAdopt } from './cli/siteAdopt';
+import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures } from './lib/schemaKitConfig';
 import { ensureSchemaKitModule } from './lib/schemaKitModule';
@@ -84,6 +88,347 @@ import type { AppConfig, AppDatabaseConfig, ProjectPathsConfig } from './types';
 
 const argv = yargs(hideBin(process.argv))
   .scriptName('schema-tools')
+  .command(
+    'site:deploy:setup [name]',
+    'Initial SSH deployment setup (nginx + app folder + PM2)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host (default from deploy.host or mpire.live)',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user (optional)',
+        })
+        .option('domain', {
+          type: 'string',
+          describe: 'Domain to serve (default <slug>.mpire.live)',
+        })
+        .option('port', {
+          type: 'number',
+          describe: 'Upstream port (default 4041)',
+        })
+        .option('app-dir', {
+          type: 'string',
+          describe: 'Remote app directory (default ~/<slug>)',
+        })
+        .option('overwrite-nginx', {
+          type: 'boolean',
+          describe: 'Overwrite nginx config if it exists',
+        })
+        .option('overwrite-app', {
+          type: 'boolean',
+          describe: 'Overwrite app folder if it exists',
+        })
+        .option('start-pm2', {
+          type: 'boolean',
+          describe: 'Start PM2 with ecosystem.config.cjs',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDeployInit({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        domain: args.domain ? String(args.domain) : undefined,
+        port: typeof args.port === 'number' ? args.port : undefined,
+        appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        overwriteNginx: args['overwrite-nginx'],
+        overwriteApp: args['overwrite-app'],
+        startPm2: args['start-pm2'],
+        yes: args.yes === true,
+      });
+    }
+  )
+  .command(
+    'site:adopt [name]',
+    'Adopt an existing Nuxt app into the site system',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (defaults to apps/<name>)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('app', {
+          type: 'string',
+          describe: 'Path to app folder (default apps/<name>)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('force', {
+          type: 'boolean',
+          default: false,
+          describe: 'Overwrite existing spec file',
+        })
+        .option('no-update-app', {
+          type: 'boolean',
+          describe: 'Only write the site spec, do not modify nuxt config files',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteAdopt({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        appPath: args.app ? String(args.app) : undefined,
+        specPath: args.spec ? String(args.spec) : undefined,
+        force: args.force === true,
+        updateApp: args['no-update-app'] !== true,
+      });
+    }
+  )
+  .command(
+    'site:layers:sync [name]',
+    'Sync site YAML layers from app.config.yaml',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Optional project name to sync',
+          type: 'string',
+        })
+        .option('project', {
+          alias: 'p',
+          type: 'string',
+          describe: 'Comma-separated list of project names to sync',
+        })
+        .option('force', {
+          type: 'boolean',
+          default: false,
+          describe: 'Overwrite existing layers in site YAML',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      const positional = args.name || (args._ && args._[1]);
+      const projectFilter = parseList(args.project ?? positional);
+      const targetProjects = projectFilter
+        ? bundle.app.paths.projects.filter((proj) => projectFilter.has(proj.name))
+        : bundle.app.paths.projects;
+
+      for (const project of targetProjects) {
+        const specEntry = await loadSiteSpec(projectRoot, project);
+        if (!specEntry) {
+          console.warn(`⚠️  No site YAML found for ${project.name}.`);
+          continue;
+        }
+        const desired = resolveLayerList(bundle.app, project);
+        const next = ensureSchemaCoreLayer(desired);
+        if (!args.force && Array.isArray(specEntry.spec.layers) && specEntry.spec.layers.length > 0) {
+          console.log(`ℹ️  Layers already set for ${project.name}; skipping.`);
+          continue;
+        }
+        specEntry.spec.layers = next;
+        await writeSiteSpec(specEntry.path, specEntry.spec);
+        console.log(`✅ Synced layers for ${project.name}: ${next.join(', ')}`);
+      }
+    }
+  )
+  .command(
+    'site:deploy [name]',
+    'Deploy site (setup if needed)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user',
+        })
+        .option('domain', {
+          type: 'string',
+          describe: 'Domain to serve',
+        })
+        .option('port', {
+          type: 'number',
+          describe: 'Upstream port',
+        })
+        .option('app-dir', {
+          type: 'string',
+          describe: 'Remote app directory',
+        })
+        .option('overwrite-nginx', {
+          type: 'boolean',
+          describe: 'Overwrite nginx config if it exists',
+        })
+        .option('overwrite-app', {
+          type: 'boolean',
+          describe: 'Overwrite app folder if it exists',
+        })
+        .option('start-pm2', {
+          type: 'boolean',
+          describe: 'Start PM2 with ecosystem.config.cjs',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDeployInit({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        domain: args.domain ? String(args.domain) : undefined,
+        port: typeof args.port === 'number' ? args.port : undefined,
+        appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        overwriteNginx: args['overwrite-nginx'],
+        overwriteApp: args['overwrite-app'],
+        startPm2: args['start-pm2'],
+        yes: args.yes === true,
+      });
+    }
+  )
+  .command(
+    'site:deploy:init [name]',
+    'Initial SSH deployment setup (nginx + app folder + PM2)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host (default from deploy.host or mpire.live)',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user (optional)',
+        })
+        .option('domain', {
+          type: 'string',
+          describe: 'Domain to serve (default <slug>.mpire.live)',
+        })
+        .option('port', {
+          type: 'number',
+          describe: 'Upstream port (default 4041)',
+        })
+        .option('app-dir', {
+          type: 'string',
+          describe: 'Remote app directory (default ~/<slug>)',
+        })
+        .option('overwrite-nginx', {
+          type: 'boolean',
+          describe: 'Overwrite nginx config if it exists',
+        })
+        .option('overwrite-app', {
+          type: 'boolean',
+          describe: 'Overwrite app folder if it exists',
+        })
+        .option('start-pm2', {
+          type: 'boolean',
+          describe: 'Start PM2 with ecosystem.config.cjs',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDeployInit({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        domain: args.domain ? String(args.domain) : undefined,
+        port: typeof args.port === 'number' ? args.port : undefined,
+        appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        overwriteNginx: args['overwrite-nginx'],
+        overwriteApp: args['overwrite-app'],
+        startPm2: args['start-pm2'],
+        yes: args.yes === true,
+      });
+    }
+  )
+  .command(
+    'site:env:sync [name]',
+    'Write .env/.env.staging from a site spec',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('update-package', {
+          type: 'boolean',
+          default: true,
+          describe: 'Update package.json build script + dotenv-cli dependency',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteEnvSync({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        updatePackage: args['update-package'] !== false,
+      });
+    }
+  )
   .command(
     'site:delete [name]',
     'Remove nginx config, certs, and hosts entry for a site',
@@ -119,6 +464,14 @@ const argv = yargs(hideBin(process.argv))
         .option('remove-app', {
           type: 'boolean',
           describe: 'Delete the app folder too',
+        })
+        .option('keep-spec', {
+          type: 'boolean',
+          describe: 'Keep the site spec YAML file',
+        })
+        .option('keep-nginx', {
+          type: 'boolean',
+          describe: 'Keep nginx config, certs, and hosts entry',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
@@ -130,6 +483,8 @@ const argv = yargs(hideBin(process.argv))
         yes: args.yes === true,
         skipRestart: args['skip-restart'] === true,
         removeApp: args['remove-app'],
+        keepSpec: args['keep-spec'] === true,
+        keepNginx: args['keep-nginx'] === true,
       });
     }
   )
@@ -168,6 +523,18 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Run "pnpm --filter <name> install" from repo root after creation',
         })
+        .option('nginx', {
+          type: 'boolean',
+          describe: 'Run nginx setup during create',
+        })
+        .option('nginx-config', {
+          type: 'boolean',
+          describe: 'Capture nginx settings into config without applying',
+        })
+        .option('no-nginx', {
+          type: 'boolean',
+          describe: 'Skip nginx prompts entirely',
+        })
         .option('cd', {
           type: 'boolean',
           describe: 'Open a subshell in the new app folder after creation',
@@ -181,6 +548,7 @@ const argv = yargs(hideBin(process.argv))
         template: args.template ? String(args.template) : undefined,
         target: args.target ? String(args.target) : undefined,
         force: args.force === true,
+        nginxMode: resolveNginxMode(args),
       });
       let shouldInstall = args.install === true;
       if (args.install === undefined && process.stdin.isTTY) {
@@ -1635,7 +2003,21 @@ export type AppRouter = typeof appRouter
 
         const configPath = await findNuxtConfig(report.appRoot);
         if (!configPath) {
-          console.log('⚠️  nuxt.config not found; unable to add runtimeConfig blocks.');
+          const specEntry = await loadSiteSpec(projectRoot, project);
+          if (specEntry) {
+            const changed = ensureRuntimeConfigBlocks(specEntry.spec, {
+              surrealdb: wantsSurreal,
+              typesense: wantsTypesense,
+              sentry: wantsSentry,
+              redis: wantsRedis,
+            });
+            if (changed) {
+              await writeSiteSpec(specEntry.path, specEntry.spec);
+              console.log('✅ Added runtimeConfig blocks to site YAML.');
+            }
+          } else {
+            console.log('⚠️  nuxt.config not found; unable to add runtimeConfig blocks.');
+          }
         } else {
           const configContent = await readFile(configPath, 'utf-8');
           let updated = configContent;
@@ -1678,18 +2060,28 @@ export type AppRouter = typeof appRouter
           for (const file of report.missingEnvFiles) {
             console.log(`- ${file}`);
           }
-          const created = await applyEnvFileFixes(report, {
-            sections: {
-              surrealdb: wantsSurreal,
-              typesense: wantsTypesense,
-              sentry: wantsSentry,
-              redis: wantsRedis,
-            },
-          });
-          if (created.length > 0) {
-            console.log('✅ Created env files:');
-            for (const file of created) {
-              console.log(`- ${file}`);
+          const specEntry = await loadSiteSpec(projectRoot, project);
+          if (specEntry) {
+            await runSiteEnvSync({
+              projectRoot,
+              specPath: specEntry.path,
+              updatePackage: true,
+            });
+            console.log('✅ Generated env files from site YAML.');
+          } else {
+            const created = await applyEnvFileFixes(report, {
+              sections: {
+                surrealdb: wantsSurreal,
+                typesense: wantsTypesense,
+                sentry: wantsSentry,
+                redis: wantsRedis,
+              },
+            });
+            if (created.length > 0) {
+              console.log('✅ Created env files:');
+              for (const file of created) {
+                console.log(`- ${file}`);
+              }
             }
           }
         }
@@ -1835,7 +2227,21 @@ export type AppRouter = typeof appRouter
         if (shouldAddRuntime) {
           const configPath = await findNuxtConfig(report.appRoot);
           if (!configPath) {
-            console.log('⚠️  nuxt.config not found; unable to add runtimeConfig blocks.');
+            const specEntry = await loadSiteSpec(projectRoot, project);
+            if (specEntry) {
+              const changed = ensureRuntimeConfigBlocks(specEntry.spec, {
+                surrealdb: wantsSurreal,
+                typesense: wantsTypesense,
+                sentry: wantsSentry,
+                redis: wantsRedis,
+              });
+              if (changed) {
+                await writeSiteSpec(specEntry.path, specEntry.spec);
+                console.log('✅ Added runtimeConfig blocks to site YAML.');
+              }
+            } else {
+              console.log('⚠️  nuxt.config not found; unable to add runtimeConfig blocks.');
+            }
           } else {
             const configContent = await readFile(configPath, 'utf-8');
             let updated = configContent;
@@ -1879,52 +2285,65 @@ export type AppRouter = typeof appRouter
           for (const file of report.missingEnvFiles) {
             console.log(`- ${file}`);
           }
-          const shouldFixEnv = args.fix || await promptToContinue('Create .env/.env.staging now?');
-          if (shouldFixEnv) {
-            let values: {
-              url?: string;
-              user?: string;
-              pass?: string;
-              namespace?: string;
-              database?: string;
-              typesenseHost?: string;
-              typesenseApiKey?: string;
-              typesensePort?: string;
-              typesenseEnableCors?: string;
-            } | undefined;
-            if (process.stdin.isTTY) {
-              const hasCreds = await promptToContinue('Do you know the SurrealDB credentials to fill now?');
-              if (hasCreds) {
-                values = {
-                  url: await promptInput('NUXT_SURREALDB_URL'),
-                  user: await promptInput('NUXT_SURREALDB_USER'),
-                  pass: await promptInput('NUXT_SURREALDB_PASS'),
-                  namespace: await promptInput('NUXT_SURREALDB_NAMESPACE'),
-                  database: await promptInput('NUXT_SURREALDB_DATABASE'),
-                };
-              }
-              const hasTypesense = await promptToContinue('Do you know the Typesense credentials to fill now?');
-              if (hasTypesense) {
-                values = values ?? {};
-                values.typesenseHost = await promptInput('NUXT_TYPESENSE_HOST');
-                values.typesenseApiKey = await promptInput('NUXT_TYPESENSE_API_KEY');
-                values.typesensePort = await promptInput('NUXT_TYPESENSE_PORT');
-                values.typesenseEnableCors = await promptInput('NUXT_TYPESENSE_ENABLE_CORS');
-              }
+          const specEntry = await loadSiteSpec(projectRoot, project);
+          if (specEntry) {
+            const shouldSync = args.fix || await promptToContinue('Generate env files from site YAML now?');
+            if (shouldSync) {
+              await runSiteEnvSync({
+                projectRoot,
+                specPath: specEntry.path,
+                updatePackage: true,
+              });
+              console.log('✅ Generated env files from site YAML.');
             }
-            const created = await applyEnvFileFixes(report, {
-              values,
-              sections: {
-                surrealdb: wantsSurreal,
-                typesense: wantsTypesense,
-                sentry: wantsSentry,
-                redis: wantsRedis,
-              },
-            });
-            if (created.length > 0) {
-              console.log('✅ Created env files:');
-              for (const file of created) {
-                console.log(`- ${file}`);
+          } else {
+            const shouldFixEnv = args.fix || await promptToContinue('Create .env/.env.staging now?');
+            if (shouldFixEnv) {
+              let values: {
+                url?: string;
+                user?: string;
+                pass?: string;
+                namespace?: string;
+                database?: string;
+                typesenseHost?: string;
+                typesenseApiKey?: string;
+                typesensePort?: string;
+                typesenseEnableCors?: string;
+              } | undefined;
+              if (process.stdin.isTTY) {
+                const hasCreds = await promptToContinue('Do you know the SurrealDB credentials to fill now?');
+                if (hasCreds) {
+                  values = {
+                    url: await promptInput('NUXT_SURREALDB_URL'),
+                    user: await promptInput('NUXT_SURREALDB_USER'),
+                    pass: await promptInput('NUXT_SURREALDB_PASS'),
+                    namespace: await promptInput('NUXT_SURREALDB_NAMESPACE'),
+                    database: await promptInput('NUXT_SURREALDB_DATABASE'),
+                  };
+                }
+                const hasTypesense = await promptToContinue('Do you know the Typesense credentials to fill now?');
+                if (hasTypesense) {
+                  values = values ?? {};
+                  values.typesenseHost = await promptInput('NUXT_TYPESENSE_HOST');
+                  values.typesenseApiKey = await promptInput('NUXT_TYPESENSE_API_KEY');
+                  values.typesensePort = await promptInput('NUXT_TYPESENSE_PORT');
+                  values.typesenseEnableCors = await promptInput('NUXT_TYPESENSE_ENABLE_CORS');
+                }
+              }
+              const created = await applyEnvFileFixes(report, {
+                values,
+                sections: {
+                  surrealdb: wantsSurreal,
+                  typesense: wantsTypesense,
+                  sentry: wantsSentry,
+                  redis: wantsRedis,
+                },
+              });
+              if (created.length > 0) {
+                console.log('✅ Created env files:');
+                for (const file of created) {
+                  console.log(`- ${file}`);
+                }
               }
             }
           }
@@ -2604,6 +3023,34 @@ async function promptYesNo(question: string, defaultYes: boolean): Promise<boole
   const answer = await promptInput(`${question} (${hint})`);
   if (!answer) return defaultYes;
   return /^y(es)?$/i.test(answer.trim());
+}
+
+function resolveNginxMode(args: Record<string, any>): 'apply' | 'config' | 'skip' | 'prompt' {
+  if (args['no-nginx'] === true) return 'skip';
+  if (args['nginx-config'] === true) return 'config';
+  if (args.nginx === true) return 'apply';
+  return 'prompt';
+}
+
+function resolveLayerList(app: AppConfig, project: ProjectPathsConfig): string[] {
+  if (project.layers === false || project.layers === 'none') {
+    return [];
+  }
+  if (Array.isArray(project.layers) && project.layers.length > 0) {
+    return project.layers.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (Array.isArray(app.layers?.defaults) && app.layers?.defaults.length > 0) {
+    return app.layers.defaults.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function ensureSchemaCoreLayer(layers: string[]): string[] {
+  const next = layers.filter(Boolean);
+  if (!next.includes('schema-core')) {
+    next.push('schema-core');
+  }
+  return next;
 }
 
 const execFileAsync = promisify(execFile);

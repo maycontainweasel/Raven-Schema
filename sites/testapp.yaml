@@ -1,0 +1,29 @@
+name: testapp
+slug: testapp
+template: templates/nuxt-4.3.0
+target: apps/testapp
+nuxtConfig:
+  devServer:
+    port: 1235
+    host: 0.0.0.0
+  vite:
+    server:
+      allowedHosts:
+        - testapp.schema.dev
+      origin: https://testapp.schema.dev:4443
+      hmr:
+        protocol: wss
+        host: testapp.schema.dev
+        clientPort: 4443
+        path: /__vitews
+        port: 43384
+layers:
+  - schema-core
+deploy:
+  host: mpire.live
+  domain: testapp.mpire.live
+  port: 4372
+  appDir: ~/testapp
+  pm2Name: testapp
+  nginxSitesEnabled: /etc/nginx/sites-enabled
+  restartCommand: systemctl reload nginx

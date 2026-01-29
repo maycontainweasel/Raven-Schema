@@ -2,6 +2,7 @@ import { mkdir, readFile, stat, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type { AppConfig, ProjectPathsConfig } from '../types';
+import { loadSiteSpec } from './siteSpec';
 
 export interface ProjectSetupReport {
   project: ProjectPathsConfig;
@@ -87,7 +88,10 @@ export async function checkProjectSetup(options: {
   const notes: string[] = [];
   const nuxtConfig = await findNuxtConfig(appRoot);
   if (!nuxtConfig) {
-    notes.push('nuxt.config not found (nuxt.config.ts/js/mjs).');
+    const specEntry = await loadSiteSpec(projectRoot, project);
+    if (!specEntry) {
+      notes.push('nuxt.config not found (nuxt.config.ts/js/mjs).');
+    }
   }
 
   const missingFiles = await findMissingFiles(appRoot, requiredFiles);

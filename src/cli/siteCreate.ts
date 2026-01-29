@@ -15,6 +15,9 @@ interface SiteSpec {
   target: string;
   nuxtConfig?: Record<string, unknown>;
   packageJson?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+  deploy?: Record<string, unknown>;
+  layers?: string[];
 }
 
 export interface SiteCreateResult {
@@ -54,6 +57,7 @@ export async function runSiteCreate(options: {
   template?: string;
   target?: string;
   force?: boolean;
+  nginxMode?: 'apply' | 'config' | 'skip';
 }): Promise<SiteCreateResult> {
   const projectRoot = options.projectRoot;
   const repoRoot = path.resolve(projectRoot, '..', '..');
@@ -109,6 +113,7 @@ export async function runSiteCreate(options: {
       projectRoot,
       slug,
       existingConfig: spec.nuxtConfig,
+      mode: options.nginxMode ?? 'prompt',
     });
     if (nginxAnswers) {
       spec.nuxtConfig = mergeConfig(
@@ -116,6 +121,7 @@ export async function runSiteCreate(options: {
         buildNuxtConfigForNginx(nginxAnswers)
       ) as Record<string, unknown>;
     }
+    spec.layers = ensureSchemaCoreLayer(spec.layers);
     await writeSiteSpec(specPath, spec);
   }
 
@@ -151,12 +157,17 @@ export async function runSiteCreate(options: {
 
   await writeGeneratedNuxtConfig(targetPath, spec.nuxtConfig);
   await ensureNuxtOverridesFile(targetPath);
-  await updatePackageJson(targetPath, slug, spec);
+  await updatePackageJson(targetPath, repoRoot, slug, spec);
+  await writeEnvFiles(targetPath, spec.env);
+  await writeEcosystemConfig(targetPath, spec.deploy);
 
   console.log(`✅ Site created: ${path.relative(repoRoot, targetPath)}`);
   console.log(`📝 Spec written: ${path.relative(projectRoot, specPath)}`);
-  if (nginxAnswers) {
-    console.log(`🌐 URL: https://${nginxAnswers.hostname}:${nginxAnswers.listenPort}`);
+  const url = nginxAnswers
+    ? `https://${nginxAnswers.hostname}:${nginxAnswers.listenPort}`
+    : resolveSiteUrlFromConfig(spec.nuxtConfig);
+  if (url) {
+    console.log(`🌐 URL: ${url}`);
   }
 
   return {
@@ -222,6 +233,8 @@ async function readSiteSpec(specPath: string): Promise<SiteSpec | null> {
     target: String(parsed.target),
     nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
     packageJson: parsed.packageJson as Record<string, unknown> | undefined,
+    env: parsed.env as Record<string, unknown> | undefined,
+    deploy: parsed.deploy as Record<string, unknown> | undefined,
   };
 }
 
@@ -245,6 +258,7 @@ async function ensureTargetDir(targetPath: string, force: boolean): Promise<void
 
 async function updatePackageJson(
   targetPath: string,
+  repoRoot: string,
   slug: string,
   spec: SiteSpec
 ): Promise<void> {
@@ -261,6 +275,44 @@ async function updatePackageJson(
       ...(isPlainObject(base.scripts) ? base.scripts : {}),
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
       dev: `nuxt dev --port ${port}`,
+    };
+  }
+
+  if (spec.env && Object.keys(spec.env).length > 0 && !hasScriptOverride(override, 'build')) {
+    override.scripts = {
+      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...(isPlainObject(override.scripts) ? override.scripts : {}),
+      build: 'dotenv -e .env.staging -- nuxi build',
+    };
+    override.dependencies = {
+      ...(isPlainObject(base.dependencies) ? base.dependencies : {}),
+      ...(isPlainObject(override.dependencies) ? override.dependencies : {}),
+      'dotenv-cli': '^7.4.0',
+    };
+  }
+
+  if (!hasScriptOverride(override, 'install')) {
+    const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
+    override.scripts = {
+      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...(isPlainObject(override.scripts) ? override.scripts : {}),
+      install: `pnpm -C ${relRoot} --filter ${slug} install`,
+    };
+  }
+  if (!hasScriptOverride(override, 'add')) {
+    const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
+    override.scripts = {
+      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...(isPlainObject(override.scripts) ? override.scripts : {}),
+      add: `pnpm -C ${relRoot} --filter ${slug} add`,
+    };
+  }
+  if (!hasScriptOverride(override, 'remove')) {
+    const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
+    override.scripts = {
+      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...(isPlainObject(override.scripts) ? override.scripts : {}),
+      remove: `pnpm -C ${relRoot} --filter ${slug} remove`,
     };
   }
 
@@ -287,6 +339,90 @@ async function ensureNuxtOverridesFile(targetPath: string): Promise<void> {
   await writeFile(filePath, 'export default {};\n', 'utf-8');
 }
 
+async function writeEnvFiles(
+  targetPath: string,
+  envConfig: Record<string, unknown> | undefined
+): Promise<void> {
+  if (!envConfig || Object.keys(envConfig).length === 0) return;
+  const { localLines, stagingLines } = buildEnvLines(envConfig);
+  if (localLines.length > 0) {
+    await writeFile(path.join(targetPath, '.env'), `${localLines.join('\n')}\n`, 'utf-8');
+  }
+  if (stagingLines.length > 0) {
+    await writeFile(path.join(targetPath, '.env.staging'), `${stagingLines.join('\n')}\n`, 'utf-8');
+  }
+}
+
+function buildEnvLines(envConfig: Record<string, unknown>): {
+  localLines: string[];
+  stagingLines: string[];
+} {
+  const localLines: string[] = [];
+  const stagingLines: string[] = [];
+
+  for (const [key, value] of Object.entries(envConfig)) {
+    const normalized = normalizeEnvValue(value);
+    if (normalized.local !== undefined) {
+      localLines.push(`${key}=${normalized.local}`);
+    }
+    if (normalized.staging !== undefined) {
+      stagingLines.push(`${key}=${normalized.staging}`);
+    }
+  }
+
+  return { localLines, stagingLines };
+}
+
+function normalizeEnvValue(value: unknown): { local?: string; staging?: string } {
+  if (typeof value === 'string') {
+    if (value.includes('|')) {
+      const parts = value.split('|').map((part) => part.trim()).filter(Boolean);
+      const left = parts[0];
+      const right = parts[1];
+      if (left && right) {
+        if (looksLocal(right) && !looksLocal(left)) {
+          return { local: right, staging: left };
+        }
+        if (looksLocal(left) && !looksLocal(right)) {
+          return { local: left, staging: right };
+        }
+        return { local: left, staging: right };
+      }
+    }
+    return { local: value, staging: value };
+  }
+
+  if (Array.isArray(value)) {
+    const local = value[0] !== undefined ? String(value[0]) : undefined;
+    const staging = value[1] !== undefined ? String(value[1]) : local;
+    return { local, staging };
+  }
+
+  if (isPlainObject(value)) {
+    const local = value.local !== undefined ? String(value.local) : undefined;
+    const staging = value.staging !== undefined ? String(value.staging) : local;
+    return { local, staging };
+  }
+
+  return {};
+}
+
+function looksLocal(value: string): boolean {
+  return value.includes('localhost') || value.includes('127.0.0.1');
+}
+
+async function writeEcosystemConfig(
+  targetPath: string,
+  deployConfig: Record<string, unknown> | undefined
+): Promise<void> {
+  if (!deployConfig || Object.keys(deployConfig).length === 0) return;
+  const ecosystem = (deployConfig as Record<string, unknown>).ecosystem;
+  if (!ecosystem || !isPlainObject(ecosystem)) return;
+  const body = JSON.stringify(ecosystem, null, 2);
+  const output = `module.exports = ${body};\n`;
+  await writeFile(path.join(targetPath, 'ecosystem.config.cjs'), output, 'utf-8');
+}
+
 function normalizeConfigValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => normalizeConfigValue(item)).filter((item) => item !== undefined);
@@ -303,6 +439,15 @@ function normalizeConfigValue(value: unknown): unknown {
   }
   if (value === undefined) return undefined;
   return value;
+}
+
+function ensureSchemaCoreLayer(layers: string[] | undefined): string[] {
+  const current = Array.isArray(layers) ? layers : [];
+  const entries = current.filter(Boolean);
+  if (!entries.includes('schema-core')) {
+    return [...entries, 'schema-core'];
+  }
+  return entries;
 }
 
 function resolveDevServerPort(config: Record<string, unknown> | undefined): number | null {
@@ -342,14 +487,29 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function toPosixPath(value: string): string {
+  return value.split(path.sep).join('/');
+}
+
 async function maybeCollectNginxAnswers(options: {
   projectRoot: string;
   slug: string;
   existingConfig?: Record<string, unknown>;
+  mode: 'prompt' | 'apply' | 'config' | 'skip';
 }): Promise<NginxAnswers | null> {
-  if (!process.stdin.isTTY) return null;
-  const run = await promptYesNo('Run nginx setup now?', false);
-  if (!run) return null;
+  if (options.mode === 'skip') return null;
+  if (!process.stdin.isTTY && options.mode === 'prompt') return null;
+  if (options.mode === 'prompt') {
+    const run = await promptYesNo('Run nginx setup now?', false);
+    if (!run) {
+      const capture = await promptYesNo(
+        'Capture nginx settings for config without applying?',
+        false
+      );
+      if (!capture) return null;
+      options.mode = 'config';
+    }
+  }
 
   const resolved = await resolveNginxConfig(options.projectRoot);
   const defaults = deriveNginxDefaults(options.slug, options.existingConfig, resolved);
@@ -361,31 +521,35 @@ async function maybeCollectNginxAnswers(options: {
   const finalHmrPort =
     hmrPort ?? generateRandomPort(42000, 49999, [proxyPort, listenPort]);
 
-  const configFileName = deriveNginxFileName(hostname);
-  const configPath = path.resolve(resolved.serversPath, `${configFileName}.conf`);
-  const configExists = await stat(configPath).catch(() => null);
-  let skipNginxApply = false;
-  if (configExists?.isFile()) {
-    const overwrite = await promptYesNo(
-      `Nginx config exists (${configPath}). Overwrite?`,
-      false
-    );
-    if (!overwrite) {
-      skipNginxApply = true;
+  let skipNginxApply = options.mode === 'config';
+  if (!skipNginxApply) {
+    const configFileName = deriveNginxFileName(hostname);
+    const configPath = path.resolve(resolved.serversPath, `${configFileName}.conf`);
+    const configExists = await stat(configPath).catch(() => null);
+    if (configExists?.isFile()) {
+      const overwrite = await promptYesNo(
+        `Nginx config exists (${configPath}). Overwrite?`,
+        false
+      );
+      if (!overwrite) {
+        skipNginxApply = true;
+      }
     }
   }
 
-  const certPath = path.resolve(resolved.certsPath, `${hostname}.pem`);
-  const certKeyPath = path.resolve(resolved.certsPath, `${hostname}-key.pem`);
-  const certExists = await stat(certPath).catch(() => null);
-  const keyExists = await stat(certKeyPath).catch(() => null);
   let skipMkcert = false;
-  if ((certExists?.isFile() || keyExists?.isFile()) && !skipNginxApply) {
-    const reuse = await promptYesNo(
-      'Certificate already exists. Reuse existing certs?',
-      true
-    );
-    skipMkcert = reuse;
+  if (!skipNginxApply) {
+    const certPath = path.resolve(resolved.certsPath, `${hostname}.pem`);
+    const certKeyPath = path.resolve(resolved.certsPath, `${hostname}-key.pem`);
+    const certExists = await stat(certPath).catch(() => null);
+    const keyExists = await stat(certKeyPath).catch(() => null);
+    if (certExists?.isFile() || keyExists?.isFile()) {
+      const reuse = await promptYesNo(
+        'Certificate already exists. Reuse existing certs?',
+        true
+      );
+      skipMkcert = reuse;
+    }
   }
 
   return {
@@ -543,6 +707,26 @@ function isValidHostname(value: string): boolean {
   if (trimmed.startsWith('.') || trimmed.endsWith('.')) return false;
   if (trimmed.includes('..')) return false;
   return true;
+}
+
+function resolveSiteUrlFromConfig(
+  config: Record<string, unknown> | undefined
+): string | null {
+  if (!config) return null;
+  const origin = resolvePath(config, ['vite', 'server', 'origin']);
+  if (typeof origin === 'string' && origin.length > 0) {
+    return origin;
+  }
+  const allowedHosts = resolvePath(config, ['vite', 'server', 'allowedHosts']);
+  const listenPort = resolvePath(config, ['vite', 'server', 'hmr', 'clientPort']);
+  if (Array.isArray(allowedHosts) && typeof allowedHosts[0] === 'string') {
+    const host = allowedHosts[0];
+    if (listenPort) {
+      return `https://${host}:${listenPort}`;
+    }
+    return `https://${host}`;
+  }
+  return null;
 }
 
 async function promptInput(label: string): Promise<string> {

@@ -143,6 +143,11 @@ config/graph.mpdg
 config/graph.mmd
 config/graph.ts
 
+# Module
+
+module/src/runtime/generated/
+module/src/runtime/controllers/generated/
+module/src/runtime/controllers/controller-manifest.json
 
 # schema docs
 
