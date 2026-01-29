@@ -108,58 +108,11 @@ sync-itemize.log
 # Disable when we want to keep these in the repo  FROM HERE DOWN WHEN YOU're pushing to "schema"
 # 
 
-# admin folder
-#***************
-config/admin/bootstrap/*
-config/admin/migrations/*
-config/admin/overrides/*
-config/admin/specs/*
-config/admin/types/*
-
-#bootstrap folder
-#***************
-config/bootstrap/functions/*
-config/bootstrap/modules/*
-config/bootstrap/seed/*
-config/generated/*
-config/migrations/*
-config/overrides/*
-config/specs/*
-config/types/*
-config/typesense/*
 
 
-## Files
-#***************
-
-config/app.config.yaml
-config/environments.yaml
-config/imports.config.yaml
-config/schema-assets.ts
-
-config/graph.mpdg
-config/graph.mmd
-config/graph.ts
 
 
-# schema docs
 
-schema-docs/.nuxt/
-schema-docs/.output/
-schema-docs/dist/
-schema-docs/.nitro/
-schema-docs/.cache/
-schema-docs/test/capabilities/reports/
-
-# Schema docs generated assets
-schema-docs/app/data/router-manifest.json
-schema-docs/app/data/docs-manifest.json
-schema-docs/app/types/schema/generated/
-schema-docs/modules/schema-kit/runtime/generated/
-schema-docs/modules/schema-kit/.schema-kit.hash
-
-# Generated docs output (schema app)
-docs/generated/
 
 # --- Cleanup (remove already-tracked generated files) ---
 # Use these commands when you want to untrack generated content:
