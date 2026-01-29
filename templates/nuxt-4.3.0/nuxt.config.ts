@@ -1,6 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import generated from './nuxt.config.generated';
-import overrides from './nuxt.config.overrides';
+import runtime from './nuxt.config.runtime';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -21,4 +21,10 @@ function mergeConfig(base: unknown, override: unknown): unknown {
   return override;
 }
 
-export default defineNuxtConfig(mergeConfig(generated, overrides));
+const overrides = {
+  nitro: {
+    preset: 'node-server',
+  },
+};
+
+export default defineNuxtConfig(mergeConfig(mergeConfig(generated, runtime), overrides));

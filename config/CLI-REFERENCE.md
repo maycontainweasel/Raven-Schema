@@ -103,7 +103,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:create -- my-site --install`
   Notes:
   - Writes `nuxt.config.generated.ts` from `nuxtConfig` in the site spec.
-  - Preserves `nuxt.config.overrides.ts` for manual overrides.
+  - Use `nuxt.config.ts` for manual overrides (merged after generated + runtime).
   - Merges `packageJson` from the site spec into `package.json` (arrays override, objects merge).
   - Writes `.env` and `.env.staging` when `env` is present in the site spec.
   - Writes `ecosystem.config.cjs` when `deploy.ecosystem` is present.
@@ -128,6 +128,17 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:env:sync my-site`
   - `pnpm -C apps/schema run site:env:sync -- --spec sites/example.yaml`
 
+- `site:env:sync:yaml [name]`  
+  Generate `.env`, `.env.staging`, `env.config.cjs`, and `nuxt.config.runtime.ts` from `env.yaml`.  
+  Examples:
+  - `pnpm -C apps/schema run site:env:sync:yaml -- my-site`
+  - `pnpm -C apps/schema run site:env:sync:yaml -- --app apps/testapp --env env.yaml`
+
+- `site:env [name]`  
+  Alias for `site:env:sync:yaml`.  
+  Example:
+  - `pnpm -C apps/schema run site:env -- testapp`
+
 - `site:deploy:init [name]`  
   SSH setup for nginx + app folder + PM2 placeholder.  
   Examples:
@@ -140,7 +151,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:deploy:setup my-site`
 
 - `site:deploy [name]`  
-  Deploy site (runs setup until deploy is implemented).  
+  Build, sync `.output` to the remote `output/` folder, sync `ecosystem.config.cjs`, and reload PM2.  
   Example:
   - `pnpm -C apps/schema run site:deploy my-site`
 

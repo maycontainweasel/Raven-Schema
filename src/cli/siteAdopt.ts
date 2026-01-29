@@ -146,7 +146,7 @@ async function adoptNuxtConfig(appRoot: string): Promise<void> {
   const existing = await readFile(nuxtConfigPath, 'utf-8').catch(() => null);
   if (!existing) return;
 
-  if (existing.includes('nuxt.config.generated') && existing.includes('nuxt.config.overrides')) {
+  if (existing.includes('nuxt.config.generated') && existing.includes('nuxt.config.runtime')) {
     return;
   }
 
@@ -156,10 +156,10 @@ async function adoptNuxtConfig(appRoot: string): Promise<void> {
     await writeFile(legacyPath, existing, 'utf-8');
   }
 
-  const overridesPath = path.join(appRoot, 'nuxt.config.overrides.ts');
-  const overridesExists = await stat(overridesPath).catch(() => null);
-  if (!overridesExists?.isFile()) {
-    await writeFile(overridesPath, existing, 'utf-8');
+  const runtimePath = path.join(appRoot, 'nuxt.config.runtime.ts');
+  const runtimeExists = await stat(runtimePath).catch(() => null);
+  if (!runtimeExists?.isFile()) {
+    await writeFile(runtimePath, 'export default {};\n', 'utf-8');
   }
 
   const generatedPath = path.join(appRoot, 'nuxt.config.generated.ts');
@@ -170,7 +170,8 @@ async function adoptNuxtConfig(appRoot: string): Promise<void> {
 
   const wrapper = `// https://nuxt.com/docs/api/configuration/nuxt-config
 import generated from './nuxt.config.generated';
-import overrides from './nuxt.config.overrides';
+import runtime from './nuxt.config.runtime';
+import legacy from './nuxt.config.legacy';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -191,7 +192,9 @@ function mergeConfig(base: unknown, override: unknown): unknown {
   return override;
 }
 
-export default defineNuxtConfig(mergeConfig(generated, overrides));
+const overrides = legacy;
+
+export default defineNuxtConfig(mergeConfig(mergeConfig(generated, runtime), overrides));
 `;
 
   await writeFile(nuxtConfigPath, wrapper, 'utf-8');

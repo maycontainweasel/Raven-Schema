@@ -4,14 +4,18 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
+    "build-local": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
+    "deploy": "pnpm -C ../schema run site:deploy -- $npm_package_name",
     "preview": "nuxt preview",
+    "start": "NITRO_HOST=0.0.0.0 NITRO_PORT=3123 node .output/server/index.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "@nuxt/eslint": "1.13.0",
     "@nuxt/fonts": "0.13.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.0.0",
     "nuxt": "^4.3.0",
     "vue": "^3.5.27",

@@ -156,7 +156,7 @@ export async function runSiteCreate(options: {
   }
 
   await writeGeneratedNuxtConfig(targetPath, spec.nuxtConfig);
-  await ensureNuxtOverridesFile(targetPath);
+  await ensureNuxtRuntimeFile(targetPath);
   await updatePackageJson(targetPath, repoRoot, slug, spec);
   await writeEnvFiles(targetPath, spec.env);
   await writeEcosystemConfig(targetPath, spec.deploy);
@@ -332,8 +332,8 @@ async function writeGeneratedNuxtConfig(
   await writeFile(filePath, output, 'utf-8');
 }
 
-async function ensureNuxtOverridesFile(targetPath: string): Promise<void> {
-  const filePath = path.join(targetPath, 'nuxt.config.overrides.ts');
+async function ensureNuxtRuntimeFile(targetPath: string): Promise<void> {
+  const filePath = path.join(targetPath, 'nuxt.config.runtime.ts');
   const exists = await stat(filePath).catch(() => null);
   if (exists?.isFile()) return;
   await writeFile(filePath, 'export default {};\n', 'utf-8');

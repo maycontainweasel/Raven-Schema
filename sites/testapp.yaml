@@ -19,7 +19,11 @@ nuxtConfig:
         port: 43384
 layers:
   - schema-core
-deploy:
+
+env: 
+  NUXT_BASE_URL: https://testapp.schema.dev:4443 | https://testapp.mpire.live
+
+deploy: 
   host: mpire.live
   domain: testapp.mpire.live
   port: 4372
@@ -27,3 +31,11 @@ deploy:
   pm2Name: testapp
   nginxSitesEnabled: /etc/nginx/sites-enabled
   restartCommand: systemctl reload nginx
+  restartNginx: true
+  rsyncDelete: true
+  ssl:
+    email: michael@mpiredigital.co.za
+    redirect: true
+    
+  build: /.output
+  overwriteApp: true

@@ -53,7 +53,10 @@ import { generateModules } from './cli/moduleGenerate';
 import { runSiteCreate } from './cli/siteCreate';
 import { runSiteDelete } from './cli/siteDelete';
 import { runSiteEnvSync } from './cli/siteEnvSync';
+import { runSiteEnvYamlSync } from './cli/siteEnvYamlSync';
 import { runSiteDeployInit } from './cli/siteDeployInit';
+import { runSiteDeploySsl } from './cli/siteDeploySsl';
+import { runSiteDeploy } from './cli/siteDeploy';
 import { runSiteAdopt } from './cli/siteAdopt';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
@@ -162,6 +165,69 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:deploy:ssl [name]',
+    'Enable SSL via certbot for a deployed site',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host (default from deploy.host or mpire.live)',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user (optional)',
+        })
+        .option('domain', {
+          type: 'string',
+          describe: 'Domain to secure (default <slug>.mpire.live)',
+        })
+        .option('email', {
+          type: 'string',
+          describe: 'Email for certbot (required)',
+        })
+        .option('redirect', {
+          type: 'boolean',
+          describe: 'Redirect HTTP to HTTPS',
+        })
+        .option('staging', {
+          type: 'boolean',
+          describe: 'Use Let’s Encrypt staging',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDeploySsl({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        domain: args.domain ? String(args.domain) : undefined,
+        email: args.email ? String(args.email) : undefined,
+        redirect: args.redirect,
+        staging: args.staging,
+        yes: args.yes === true,
+      });
+    }
+  )
+  .command(
     'site:adopt [name]',
     'Adopt an existing Nuxt app into the site system',
     (yargsBuilder: any) =>
@@ -252,7 +318,7 @@ const argv = yargs(hideBin(process.argv))
   )
   .command(
     'site:deploy [name]',
-    'Deploy site (setup if needed)',
+    'Build + sync .output + restart PM2',
     (yargsBuilder: any) =>
       yargsBuilder
         .positional('name', {
@@ -288,26 +354,37 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Remote app directory',
         })
-        .option('overwrite-nginx', {
-          type: 'boolean',
-          describe: 'Overwrite nginx config if it exists',
+        .option('build-command', {
+          type: 'string',
+          describe: 'Build command (default from deploy.buildCommand or pnpm run build)',
         })
-        .option('overwrite-app', {
+        .option('no-build', {
           type: 'boolean',
-          describe: 'Overwrite app folder if it exists',
+          describe: 'Skip the build step',
         })
-        .option('start-pm2', {
+        .option('no-env-sync', {
           type: 'boolean',
-          describe: 'Start PM2 with ecosystem.config.cjs',
+          describe: 'Skip env.yaml sync',
         })
-        .option('yes', {
+        .option('no-sync', {
           type: 'boolean',
-          default: false,
-          describe: 'Skip confirmation prompts',
+          describe: 'Skip rsync of .output',
+        })
+        .option('no-pm2', {
+          type: 'boolean',
+          describe: 'Skip PM2 start/reload',
+        })
+        .option('rsync-delete', {
+          type: 'boolean',
+          describe: 'Delete extra files on remote output (default from deploy.rsyncDelete)',
+        })
+        .option('restart-nginx', {
+          type: 'boolean',
+          describe: 'Restart nginx after deploy',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
-      await runSiteDeployInit({
+      await runSiteDeploy({
         projectRoot,
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
@@ -316,10 +393,13 @@ const argv = yargs(hideBin(process.argv))
         domain: args.domain ? String(args.domain) : undefined,
         port: typeof args.port === 'number' ? args.port : undefined,
         appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
-        overwriteNginx: args['overwrite-nginx'],
-        overwriteApp: args['overwrite-app'],
-        startPm2: args['start-pm2'],
-        yes: args.yes === true,
+        buildCommand: args['build-command'] ? String(args['build-command']) : undefined,
+        rsyncDelete: args['rsync-delete'],
+        restartNginx: args['restart-nginx'],
+        noBuild: args['no-build'] === true,
+        noEnvSync: args['no-env-sync'] === true,
+        noSync: args['no-sync'] === true,
+        noPm2: args['no-pm2'] === true,
       });
     }
   )
@@ -426,6 +506,112 @@ const argv = yargs(hideBin(process.argv))
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
         updatePackage: args['update-package'] !== false,
+      });
+    }
+  )
+  .command(
+    'site:env [name]',
+    'Generate env files from env.yaml (alias for site:env:sync:yaml)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('app', {
+          type: 'string',
+          describe: 'Path to app folder (overrides site spec target)',
+        })
+        .option('env', {
+          type: 'string',
+          describe: 'Path to env.yaml (defaults to <app>/env.yaml)',
+        })
+        .option('update-package', {
+          type: 'boolean',
+          default: true,
+          describe: 'Update package.json build script + dotenv-cli dependency',
+        })
+        .option('no-runtime-config', {
+          type: 'boolean',
+          describe: 'Skip writing nuxt.config.runtime.ts',
+        })
+        .option('no-env-config', {
+          type: 'boolean',
+          describe: 'Skip writing env.config.cjs',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteEnvYamlSync({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        appPath: args.app ? String(args.app) : undefined,
+        envPath: args.env ? String(args.env) : undefined,
+        updatePackage: args['update-package'] !== false,
+        writeRuntimeConfig: args['no-runtime-config'] !== true,
+        writeEnvConfig: args['no-env-config'] !== true,
+      });
+    }
+  )
+  .command(
+    'site:env:sync:yaml [name]',
+    'Generate .env, .env.staging, env.config.cjs, and runtime config from env.yaml',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('app', {
+          type: 'string',
+          describe: 'Path to app folder (overrides site spec target)',
+        })
+        .option('env', {
+          type: 'string',
+          describe: 'Path to env.yaml (defaults to <app>/env.yaml)',
+        })
+        .option('update-package', {
+          type: 'boolean',
+          default: true,
+          describe: 'Update package.json build script + dotenv-cli dependency',
+        })
+        .option('no-runtime-config', {
+          type: 'boolean',
+          describe: 'Skip writing nuxt.config.runtime.ts',
+        })
+        .option('no-env-config', {
+          type: 'boolean',
+          describe: 'Skip writing env.config.cjs',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteEnvYamlSync({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        appPath: args.app ? String(args.app) : undefined,
+        envPath: args.env ? String(args.env) : undefined,
+        updatePackage: args['update-package'] !== false,
+        writeRuntimeConfig: args['no-runtime-config'] !== true,
+        writeEnvConfig: args['no-env-config'] !== true,
       });
     }
   )
