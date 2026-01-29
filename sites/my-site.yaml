@@ -1,0 +1,19 @@
+name: my-site
+slug: my-site
+template: templates/nuxt-4.3.0
+target: apps/my-site
+nuxtConfig:
+  devServer:
+    port: 8276
+    host: 0.0.0.0
+  vite:
+    server:
+      allowedHosts:
+        - my-site.schema.dev
+      origin: https://my-site.schema.dev:4443
+      hmr:
+        protocol: wss
+        host: my-site.schema.dev
+        clientPort: 4443
+        path: /__vitews
+        port: 49995

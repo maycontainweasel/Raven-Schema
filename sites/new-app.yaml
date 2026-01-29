@@ -1,0 +1,4 @@
+name: new-app
+slug: new-app
+template: templates/nuxt-4.3.0
+target: apps/new-app

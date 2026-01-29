@@ -89,6 +89,25 @@ Use `--fix` to auto‑create missing scaffolds and env files.
 
 ## Other utilities
 
+- `site:create [name]`  
+  Generate a Nuxt app scaffold from a local template and write a site spec.  
+  Examples:
+  - `pnpm -C apps/schema run site:create my-site`
+  - `pnpm -C apps/schema run site:create -- --template templates/nuxt-4.3.0 --target apps/my-site`
+  - `pnpm -C apps/schema run site:create -- my-site --install`
+  Notes:
+  - Writes `nuxt.config.generated.ts` from `nuxtConfig` in the site spec.
+  - Preserves `nuxt.config.overrides.ts` for manual overrides.
+  - Merges `packageJson` from the site spec into `package.json` (arrays override, objects merge).
+
+- `site:delete [name]`  
+  Remove nginx server block, certs, and hosts entry for a site.  
+  Examples:
+  - `pnpm -C apps/schema run site:delete my-site`
+  - `pnpm -C apps/schema run site:delete -- --spec sites/example.yaml`
+  - `pnpm -C apps/schema run site:delete -- --host my-site.schema.dev --yes`
+  - `pnpm -C apps/schema run site:delete -- --remove-app`
+
 - `request-schema:generate`  
   Generate RequestSchema helper.
 

@@ -1,7 +1,6 @@
 import { useCRUD, type ApiOptions } from '../../composables/useCRUD'
 import type { User, UserId, UserIdSubId } from '@schema/types'
-type UserDocument = any;
-type TypesenseCollectionSchema = any;
+import type { UserDocument, TypesenseCollectionSchema } from '@schema/typesense/collections'
 import type { ControllerIdInput, ControllerOverride } from '../_shared'
 
 export type UserCreateInput = Pick<User, 'email' | 'password' | 'firstName' | 'surname' | 'role'> & Partial<Omit<User, 'id'>>
@@ -55,7 +54,17 @@ export interface SubtableController {
   update: (id: UserIdInput, payload: Record<string, any>, options?: ApiOptions) => Promise<any>
   delete: (id: UserIdInput, options?: ApiOptions) => Promise<any>
   get: (id: UserIdInput, options?: ApiOptions) => Promise<any>
-  list: (id: UserIdInput, params?: { start?: number; limit?: number }, options?: ApiOptions) => Promise<any>
+  list: (
+    id: UserIdInput,
+    params?: {
+      start?: number;
+      limit?: number;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      filters?: Record<string, any>;
+    },
+    options?: ApiOptions
+  ) => Promise<any>
 }
 
 export interface RelationController {

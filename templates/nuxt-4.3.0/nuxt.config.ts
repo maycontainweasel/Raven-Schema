@@ -1,0 +1,24 @@
+// https://nuxt.com/docs/api/configuration/nuxt-config
+import generated from './nuxt.config.generated';
+import overrides from './nuxt.config.overrides';
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeConfig(base: unknown, override: unknown): unknown {
+  if (override === undefined) return base;
+  if (Array.isArray(base) || Array.isArray(override)) {
+    return override;
+  }
+  if (isPlainObject(base) && isPlainObject(override)) {
+    const out: Record<string, unknown> = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+      out[key] = mergeConfig(out[key], value);
+    }
+    return out;
+  }
+  return override;
+}
+
+export default defineNuxtConfig(mergeConfig(generated, overrides));

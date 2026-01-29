@@ -50,6 +50,8 @@ import { resolveModulesConfig } from './lib/configLoader';
 import { runBootstrapFunctions } from './lib/bootstrapRunner';
 import { rebuildIndexes } from './lib/indexRebuilder';
 import { generateModules } from './cli/moduleGenerate';
+import { runSiteCreate } from './cli/siteCreate';
+import { runSiteDelete } from './cli/siteDelete';
 import { importSeeds } from './lib/seedImporter';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures } from './lib/schemaKitConfig';
 import { ensureSchemaKitModule } from './lib/schemaKitModule';
@@ -82,6 +84,122 @@ import type { AppConfig, AppDatabaseConfig, ProjectPathsConfig } from './types';
 
 const argv = yargs(hideBin(process.argv))
   .scriptName('schema-tools')
+  .command(
+    'site:delete [name]',
+    'Remove nginx config, certs, and hosts entry for a site',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'Hostname override (defaults from site spec)',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        })
+        .option('skip-restart', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip nginx restart',
+        })
+        .option('remove-app', {
+          type: 'boolean',
+          describe: 'Delete the app folder too',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDelete({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        hostname: args.host ? String(args.host) : undefined,
+        yes: args.yes === true,
+        skipRestart: args['skip-restart'] === true,
+        removeApp: args['remove-app'],
+      });
+    }
+  )
+  .command(
+    'site:create [name]',
+    'Create a Nuxt app from a local template and write a site spec',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used for folder + package name)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML (defaults to sites/<slug>.yaml)',
+        })
+        .option('template', {
+          type: 'string',
+          describe: 'Template path (defaults to templates/nuxt-4.3.0)',
+        })
+        .option('target', {
+          type: 'string',
+          describe: 'Target path relative to repo root (defaults to apps/<slug>)',
+        })
+        .option('force', {
+          type: 'boolean',
+          default: false,
+          describe: 'Overwrite existing target/spec if present',
+        })
+        .option('install', {
+          type: 'boolean',
+          describe: 'Run "pnpm --filter <name> install" from repo root after creation',
+        })
+        .option('cd', {
+          type: 'boolean',
+          describe: 'Open a subshell in the new app folder after creation',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const result = await runSiteCreate({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        template: args.template ? String(args.template) : undefined,
+        target: args.target ? String(args.target) : undefined,
+        force: args.force === true,
+      });
+      let shouldInstall = args.install === true;
+      if (args.install === undefined && process.stdin.isTTY) {
+        shouldInstall = await promptYesNo('Install dependencies now?', false);
+      }
+      if (shouldInstall) {
+        const repoRoot = path.resolve(projectRoot, '..', '..');
+        await runChildProcess('pnpm', ['--filter', result.slug, 'install'], repoRoot);
+      }
+
+      let shouldCd = args.cd === true;
+      if (args.cd === undefined && process.stdin.isTTY) {
+        shouldCd = await promptYesNo('Open a shell in the app folder now?', false);
+      }
+      if (shouldCd) {
+        await openShellInDir(result.targetPath);
+      }
+    }
+  )
   .command(
     'nginx:setup',
     'Create/update an Nginx server config, mkcert certs, hosts entry, and restart nginx',
@@ -2480,6 +2598,14 @@ async function promptInput(label: string): Promise<string> {
   return answer.trim();
 }
 
+async function promptYesNo(question: string, defaultYes: boolean): Promise<boolean> {
+  if (!process.stdin.isTTY) return defaultYes;
+  const hint = defaultYes ? 'Y/n' : 'y/N';
+  const answer = await promptInput(`${question} (${hint})`);
+  if (!answer) return defaultYes;
+  return /^y(es)?$/i.test(answer.trim());
+}
+
 const execFileAsync = promisify(execFile);
 
 async function maybeGenerateRouterManifest(projectRootDir: string, project: ProjectPathsConfig) {
@@ -3024,6 +3150,18 @@ function runChildProcess(cmd: string, cmdArgs: string[], cwd: string): Promise<v
     child.on('close', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`${cmd} exited with code ${code}`));
+    });
+  });
+}
+
+function openShellInDir(targetDir: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const shell = process.env.SHELL || 'zsh';
+    const child = spawn(shell, { cwd: targetDir, stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${shell} exited with code ${code}`));
     });
   });
 }

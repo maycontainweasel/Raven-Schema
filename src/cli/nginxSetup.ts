@@ -17,6 +17,17 @@ interface NginxConfig {
   mkcertCommand?: string;
 }
 
+export interface ResolvedNginxConfig {
+  serversPath: string;
+  certsPath: string;
+  hostsPath: string;
+  templatePath: string;
+  defaultListenPort: number;
+  defaultProxyPort: number;
+  restartCommand: string;
+  mkcertCommand: string;
+}
+
 interface NginxSetupArgs {
   name?: string;
   port?: number;
@@ -96,7 +107,7 @@ const DEFAULT_CONFIG: Required<Pick<
   mkcertCommand: 'mkcert',
 };
 
-function resolvePathMaybeHome(targetPath: string, baseDir: string): string {
+export function resolvePathMaybeHome(targetPath: string, baseDir: string): string {
   if (!targetPath) return targetPath;
   if (targetPath.startsWith('~/')) {
     return path.join(os.homedir(), targetPath.slice(2));
@@ -116,6 +127,23 @@ async function loadNginxConfig(projectRoot: string): Promise<NginxConfig> {
     }
     throw error;
   }
+}
+
+export async function resolveNginxConfig(
+  projectRoot: string,
+  overrides: Partial<NginxConfig> = {}
+): Promise<ResolvedNginxConfig> {
+  const config = { ...DEFAULT_CONFIG, ...(await loadNginxConfig(projectRoot)), ...overrides };
+  return {
+    serversPath: resolvePathMaybeHome(config.serversPath, projectRoot),
+    certsPath: resolvePathMaybeHome(config.certsPath, projectRoot),
+    hostsPath: resolvePathMaybeHome(config.hostsPath, projectRoot),
+    templatePath: resolvePathMaybeHome(config.templatePath, projectRoot),
+    defaultListenPort: config.defaultListenPort,
+    defaultProxyPort: config.defaultProxyPort,
+    restartCommand: config.restartCommand,
+    mkcertCommand: config.mkcertCommand,
+  };
 }
 
 async function loadTemplate(projectRoot: string, config: NginxConfig): Promise<string> {
@@ -142,6 +170,10 @@ function deriveFileName(hostname: string): string {
   const trimmed = hostname.trim();
   if (!trimmed) return 'site';
   return trimmed.replace(/[^a-zA-Z0-9_.-]+/g, '-');
+}
+
+export function deriveNginxFileName(hostname: string): string {
+  return deriveFileName(hostname);
 }
 
 function shouldSkipHostLine(line: string): boolean {
