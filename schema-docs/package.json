@@ -1,0 +1,35 @@
+{
+  "name": "schema-docs",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev --port 7872",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "test:capabilities": "vitest run --config vitest.config.ts --reporter=verbose",
+    "test:capabilities:ui": "vitest --config vitest.config.ts --ui"
+  },
+  "dependencies": {
+    "@he-tree/vue": "^2.10.1",
+    "@headlessui/vue": "^1.7.23",
+    "@nuxt/eslint": "1.12.1",
+    "@nuxt/test-utils": "3.21.0",
+    "@trpc/client": "11.4.4",
+    "@trpc/server": "11.4.4",
+    "eslint": "^9.0.0",
+    "nuxt": "4.2.2",
+    "superjson": "^2.2.1",
+    "surrealdb": "2.0.0-alpha.16",
+    "trpc-nuxt": "1.2.0",
+    "typesense": "^1.8.2",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

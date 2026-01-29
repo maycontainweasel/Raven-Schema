@@ -1,0 +1,33 @@
+{
+  "name": "mpd-schema-graph-dsl",
+  "displayName": "MPD Graph DSL",
+  "description": "Lightweight syntax highlighting for the MPD graph DSL (mpdg).",
+  "version": "0.0.4",
+  "publisher": "mpd-local",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mpd-graph-dsl",
+        "aliases": ["MPD Graph DSL", "mpd-graph-dsl"],
+        "extensions": [".mpdg", ".graph", ".graph.txt"],
+        "filenames": ["graph.mpdg", "graph.txt"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mpd-graph-dsl",
+        "scopeName": "source.mpd-graph-dsl",
+        "path": "./syntaxes/graph.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "mpd-graph-dsl",
+        "path": "./snippets/mpdg.json"
+      }
+    ]
+  }
+}

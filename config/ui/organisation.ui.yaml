@@ -1,0 +1,234 @@
+version: 1
+kind: ui
+name: Organisation
+model: organisation
+table: organisation
+namespace: organisations
+
+route:
+  base: /organisations
+  single: /organisations/<slug>
+
+meta:
+  title: "Organisations"
+  subtitle: "Manage organisations, memberships, and metadata"
+
+dialogs:
+  create:
+    template: auto
+    required:
+      - title
+      - slug
+    fields:
+      - key: title
+        label: Title
+        type: text
+        placeholder: Organisation name
+        required: true
+      - key: slug
+        label: Slug
+        type: text
+        placeholder: organisation-slug
+        format: slug
+        autoFrom: title
+        required: true
+      - key: description
+        label: Description
+        type: textarea
+        rows: 4
+      - key: instances
+        label: Instances
+        type: instances
+        placeholder: Select instances
+        multiple: true
+    defaults:
+      instances:
+        - $rootInstance
+  delete:
+    template: auto
+
+overview:
+  type: typesense
+  meta:
+    title: "Organisations Overview"
+    subtitle: "Typesense directory for organisations."
+  actions:
+    - create
+    - refresh
+  table:
+    columns:
+      - title
+      - slug
+      - instances
+      - active
+  typesense:
+    pagination: true
+    refreshMode: upsert
+    queryBy:
+      - title
+      - slug
+      - description
+    sortableFields:
+      - title
+      - slug
+    filters:
+      - instances
+      - active
+
+single:
+  layout: navigation-primary
+  store:
+    key: organisation
+    resolver: slug
+  targets:
+    base:
+      model: organisation
+      endpoint: organisation.update
+  header:
+    label: "Organisation"
+  tabs:
+    - label: General
+      slug: general
+      content:
+        - id: organisation-general-row
+          primary:
+            - id: organisation-general-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: organisation-general
+                  title: "Organisation Details"
+                  subtitle: "Core profile and public details."
+                  content:
+                    - columns:
+                        - items:
+                            - field: title
+                              type: text
+                              label: "Title"
+                            - field: slug
+                              type: text
+                              label: "Slug"
+                            - field: description
+                              type: textarea
+                              label: "Description"
+                              rows: 4
+                        - items:
+                            - field: website
+                              type: text
+                              label: "Website"
+                            - field: email
+                              type: text
+                              label: "Email"
+                            - field: phone
+                              type: text
+                              label: "Phone"
+                            - field: industry
+                              type: text
+                              label: "Industry"
+                            - field: size
+                              type: text
+                              label: "Size"
+                            - field: logo
+                              type: text
+                              label: "Logo URL"
+                    - columns:
+                        - items:
+                            - field: instances
+                              type: instances
+                              label: "Instances"
+                              multiple: true
+            - id: organisation-general-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: organisation-metadata
+                  title: "Metadata"
+                  subtitle: "Record status and timestamps."
+                  save: false
+                  fields:
+                    - field: active
+                      type: select
+                      label: "Active"
+                      options:
+                        - label: Yes
+                          value: true
+                        - label: No
+                          value: false
+                    - field: createdAt
+                      type: text
+                      label: "Created"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: updatedAt
+                      type: text
+                      label: "Updated"
+                      props:
+                        readonly: true
+                        disabled: true
+    - label: Address
+      slug: address
+      content:
+        - id: organisation-address-row
+          primary:
+            - id: organisation-address-col-main
+              widgets:
+                - type: fields-card
+                  id: organisation-address
+                  title: "Address"
+                  subtitle: "Billing or corporate address details."
+                  content:
+                    - columns:
+                        - items:
+                            - field: address.line1
+                              type: text
+                              label: "Address Line 1"
+                            - field: address.line2
+                              type: text
+                              label: "Address Line 2"
+                            - field: address.city
+                              type: text
+                              label: "City"
+                            - field: address.region
+                              type: text
+                              label: "Region"
+                            - field: address.postcode
+                              type: text
+                              label: "Postcode"
+                            - field: address.country
+                              type: text
+                              label: "Country"
+    - label: Members
+      slug: members
+      content:
+        - id: organisation-members-row
+          primary:
+            - id: organisation-members-col-main
+              widgets:
+                - type: fields-card
+                  id: organisation-members
+                  title: "Members"
+                  subtitle: "Attach users to this organisation."
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Membership management will surface OrganisationUsers once endpoints are wired."
+                              class: "text-xs text-muted-foreground"
+    - label: Notes
+      slug: notes
+      content:
+        - id: organisation-notes-row
+          primary:
+            - id: organisation-notes-col-main
+              widgets:
+                - type: fields-card
+                  id: organisation-notes
+                  title: "Notes"
+                  subtitle: "Internal notes and follow-ups."
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Add internal notes or attach documents here later."
+                              class: "text-xs text-muted-foreground"

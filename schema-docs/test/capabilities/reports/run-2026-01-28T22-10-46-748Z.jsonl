@@ -1,0 +1,7 @@
+{"time":"2026-01-28T22:10:46.749Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:10:46.772Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:10:46.796Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:10:46.800Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:10:46.803Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T22:10:46.806Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:10:46.820Z","message":"fn::createUser | payload","data":{"email":"schema-test-t3wt3z@example.com","password":"Pass-t3wt3z","firstName":"SchemaTest t3wt3z","surname":"User t3wt3z","instances":["mpd"],"role":"qa-5y5ae7"}}

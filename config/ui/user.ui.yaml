@@ -1,0 +1,296 @@
+version: 1
+kind: ui
+name: User
+model: user
+table: user
+namespace: users
+
+route:
+  base: /users
+  single: /users/<id>
+
+meta:
+  title: "Users"
+  subtitle: "Manage user records and profiles"
+
+dialogs:
+  create:
+    template: auto
+    required:
+      - instances
+      - firstName
+      - surname
+      - email
+      - password
+      - role
+    fields:
+      - key: instances
+        label: Instances
+        type: instances
+        placeholder: Select instances
+        required: true
+        multiple: true
+      - key: firstName
+        label: First name
+        type: text
+        placeholder: First name
+        required: true
+      - key: surname
+        label: Surname
+        type: text
+        placeholder: Surname
+        required: true
+      - key: email
+        label: Email
+        type: text
+        placeholder: user@example.com
+        required: true
+      - key: password
+        label: Password
+        type: text
+        placeholder: Defaults to email
+        autoFrom: email
+        required: true
+      - key: role
+        label: Role
+        type: select
+        required: true
+        options:
+          - label: Student
+            value: student
+          - label: Instructor
+            value: instructor
+    defaults:
+      instances:
+        - $rootInstance
+  delete:
+    template: auto
+
+single:
+  layout: navigation-primary
+  store:
+    key: user
+    resolver: id
+  targets:
+    base:
+      model: user
+      endpoint: user.update
+    profile:
+      endpoint: user.subtables.userProfile.update
+    postStatus:
+      endpoint: admin.updatePostStatus
+      payloadMap:
+        recordId: $recordId
+        status: $field:post.status
+  header:
+    label: "User"
+    statusTarget: postStatus
+  tabs:
+    - label: General
+      slug: general
+      content:
+        - id: user-general-row
+          primary:
+            - id: user-general-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: user-general
+                  title: "General Information"
+                  subtitle: "Basic account details and role."
+                  content:
+                    - columns:
+                        - items:
+                            - field: firstName
+                              type: text
+                              label: "First name"
+                            - field: surname
+                              type: text
+                              label: "Surname"
+                        - items:
+                            - field: email
+                              type: text
+                              label: "Email"
+                              props:
+                                readonly: true
+                                disabled: true
+                            - field: role
+                              type: listbox
+                              label: "Role"
+                              options:
+                                - label: Admin
+                                  value: admin
+                                - label: Instructor
+                                  value: instructor
+                                - label: Student
+                                  value: student
+                                - label: User
+                                  value: user
+            - id: user-general-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: user-quick-info
+                  title: "Quick Info"
+                  subtitle: "Reference identifiers."
+                  save: false
+                  fields:
+                    - field: uniqueId
+                      type: text
+                      label: "Unique ID"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: customerId
+                      type: text
+                      label: "Customer ID"
+                      props:
+                        readonly: true
+                        disabled: true
+    - label: Profile
+      slug: profile
+      content:
+        - id: user-profile-row
+          primary:
+            - id: user-profile-col
+              widgets:
+                - type: fields-card
+                  id: user-profile
+                  title: "Profile"
+                  subtitle: "Profile and education information."
+                  content:
+                    - columns:
+                        - items:
+                            - field: title
+                              type: listbox
+                              label: "Title"
+                              options:
+                                - label: Mr
+                                  value: Mr
+                                - label: Mrs
+                                  value: Mrs
+                                - label: Miss
+                                  value: Miss
+                                - label: Dr.
+                                  value: Dr.
+                            - field: profile.country
+                              type: combobox
+                              label: "Country"
+                              target: profile
+                              options: []
+                              placeholder: "Select country"
+                            - field: profile.levelOfTraining
+                              type: listbox
+                              label: "Level of training"
+                              target: profile
+                              options: []
+                        - items:
+                            - field: profile.medicalSchool
+                              type: text
+                              label: "Medical school"
+                              target: profile
+                            - field: profile.yearOfStudy
+                              type: listbox
+                              label: "Year of study"
+                              target: profile
+                              options:
+                                - label: 1st Year
+                                  value: 1st Year
+                                - label: 2nd Year
+                                  value: 2nd Year
+                                - label: 3rd Year
+                                  value: 3rd Year
+                                - label: 4th Year
+                                  value: 4th Year
+                                - label: 5th Year
+                                  value: 5th Year
+                                - label: 6th Year
+                                  value: 6th Year
+                            - field: profile.primaryAffiliation
+                              type: text
+                              label: "Primary affiliation"
+                              target: profile
+                    - columns:
+                        - items:
+                            - field: profile.yearOfGraduation
+                              type: listbox
+                              label: "Year of graduation"
+                              target: profile
+                              options: []
+                            - field: profile.address
+                              type: text
+                              label: "Address"
+                              target: profile
+                            - field: profile.city
+                              type: text
+                              label: "City"
+                              target: profile
+                            - field: profile.postalCode
+                              type: text
+                              label: "Postal code"
+                              target: profile
+                    - columns:
+                        - items:
+                            - field: profile.bio
+                              type: textarea
+                              label: "Bio"
+                              rows: 4
+                              target: profile
+                            - field: profile.website
+                              type: text
+                              label: "Website"
+                              target: profile
+    - label: Access
+      slug: access
+      content:
+        - id: user-access-row
+          primary:
+            - id: user-access-col
+              widgets:
+                - type: fields-card
+                  id: user-access
+                  title: "Access & Subscriptions"
+                  subtitle: "Access management UI goes here."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Access manager will be supplied via override."
+                              class: "text-xs text-muted"
+    - label: TRPC
+      slug: trpc
+      content:
+        - id: user-trpc-row
+          primary:
+            - id: user-trpc-col
+              widgets:
+                - type: fields-card
+                  id: user-trpc
+                  title: "TRPC Debugging"
+                  subtitle: "Debug outputs will be rendered here."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Raw record / store state will be shown here."
+                              class: "text-xs text-muted"
+    - label: Brevo
+      slug: brevo
+      content:
+        - id: user-brevo-row
+          primary:
+            - id: user-brevo-col
+              widgets:
+                - type: fields-card
+                  id: user-brevo
+                  title: "Brevo Sync"
+                  subtitle: "Brevo contact status and mapping."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Brevo status component will be provided via override."
+                              class: "text-xs text-muted"

@@ -1,0 +1,15 @@
+{"time":"2026-01-28T21:58:31.392Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T21:58:31.424Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T21:58:31.436Z","message":"Cleanup | done"}
+{"time":"2026-01-28T21:58:31.441Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T21:58:31.448Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T21:58:31.476Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T21:58:31.483Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T21:58:31.494Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T21:58:31.502Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T21:58:31.509Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T21:58:31.513Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T21:58:31.519Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T21:58:31.520Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T21:58:31.522Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T21:58:31.568Z","message":"Create Question","data":{"qid":715826,"question":"[schema-test] What is subtable question sf3p1x?","instances":["mpd"]}}

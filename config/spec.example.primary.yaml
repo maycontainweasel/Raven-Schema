@@ -1,0 +1,221 @@
+version: 1
+kind: table
+name: User # used for reference but also for Table names
+primary: true # Main table from which others can be based
+tableType: primary
+description: Primary user entity representing authenticated people within the system.
+tags:
+  - core
+  - auth
+  
+table:
+  model: "u"
+  type: "NORMAL" 
+  drop: false
+  schemaMode: schemaless
+  permissions: full #expand later
+
+id:
+  exportType: true
+  type: string
+  exportName: __NAME__ID
+  structure: email
+
+# This ID EXCLUDES THE PARENT TABLE NAME, this is the value of recordId.id not recordId
+fields:
+  - email:
+      type: string
+      required: true
+  - password:
+      type: password | string
+      required: true
+  - firstName:
+      type: string
+      required: true
+  - lastName:
+      type: string
+      required: true
+  - role:
+      type: record<role> | string
+      required: false
+      default: ""
+  - mobileNumber:
+      type: string
+      required: false
+      default: ""
+
+edges:
+  has:
+    - table: UserSettings
+      in: u
+      out: uSettings
+    - table: UserProfile
+      in: u
+      out: uProfile
+    - table: Entries
+      in: u
+      out: entry
+    - table: CompletedLesson
+      in: u
+      out: lesson
+    - table: CompletedPage
+      in: u
+      out: lessonPage
+    - table: UserCourseProgress
+      in: u
+      out: uCourseProgress
+  belongs:
+   
+post:
+  enabled: true
+  onCreate:
+    payload: |-
+      {
+        title: string::concat($after.firstName, " ", $after.lastName),
+        slug: string::slug($after.email),
+        status: "draft",
+      }
+
+indexes:
+  - name: UserEmail
+    mode: OVERWRITE
+    columns:
+      - email
+    unique: true
+    comment: "Ensures each user email is unique"
+
+# These are essential view functions
+# functions prepended with view
+
+
+subTables:
+  - name: Profile
+    model: uProfile
+    autoCreate: true
+    options: 
+      id: uProfile:{PARENT_ID}
+      
+  - name: Settings
+    model: uSettings
+    autoCreate: true
+    options: 
+      id: uSettings:{PARENT_ID}
+  
+  - name: Access
+    model: uAccess
+    autoCreate: true
+    options: 
+      id: uAccess:{PARENT_ID}
+
+
+views:
+  - name: AdminSingle
+    mode: OVERWRITE
+    type: normal
+    fields:
+      - "id"
+      - "firstName"
+    as: 
+      - surname: "lastName"
+
+  - name: Public
+    mode: OVERWRITE
+    type: normal
+    fields:
+      - "id"
+      - "firstName"
+      - "email"
+    as: 
+      - surname: "lastName"
+
+  - name: Typesense
+    mode: OVERWRITE
+    type: normal
+    fields:
+      - "id"
+      - "title"
+    as:
+      - rid: 'record::id($this.id)'
+
+
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: email
+      validations:
+        required:
+          - email
+          - password
+          - firstName
+          - lastName
+          - mobileNumber
+
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+    options:
+      validations:
+        required:
+          - rid
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+    options:
+      validations:
+        required:
+          - rid
+      cleanup:
+        - fn::deletePost
+
+router:
+  name: user
+  endpoints:
+    - typesense:
+        target: view
+        value: Typesense
+    - resource:
+        adminSingle:
+          target: view # view | function
+          value: AdminSingle
+        typesense:
+          target: view # view | function
+          value: Typesense
+        card:
+          target: view # view | function
+          value: PublicCard
+    - create:
+        target: crud
+        value: create
+    - update:
+        target: crud
+        value: update
+    - delete:
+        target: crud
+        value: delete
+
+
+delete: 
+  enabled: true
+
+# events: 
+#   - name: 'UserCreateSubTables'
+#     onExisting: OVERWRITE
+#     on: CREATE
+#     query: |
+#       {
+#         fn::createUserSettings($after.id, {});
+#         fn::createUserProfile($after.id, {});
+#       }

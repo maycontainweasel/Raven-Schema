@@ -1,0 +1,17 @@
+{"time":"2026-01-28T22:57:07.099Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:57:07.136Z","message":"initTaxonomies | ok","data":{"result":true}}
+{"time":"2026-01-28T22:57:07.136Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:57:07.148Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:57:07.154Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:57:07.160Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:57:07.166Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T22:57:07.169Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T22:57:07.173Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T22:57:07.176Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T22:57:07.180Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T22:57:07.182Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:57:07.184Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:57:07.185Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:57:07.187Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:57:07.214Z","message":"Create Question","data":{"qid":910112,"question":"[schema-test] What is subtable question i0gpos?","instances":["local"]}}
+{"time":"2026-01-28T22:57:07.217Z","message":"DB function error","data":{"fn":"fn::createQuestion","args":{"payload":{"qid":910112,"question":"[schema-test] What is subtable question i0gpos?","instances":["local"]}},"error":"An error occurred: createQuestion | failed to create q"}}

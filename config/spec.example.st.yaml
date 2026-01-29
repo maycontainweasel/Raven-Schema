@@ -1,0 +1,76 @@
+version: 1
+kind: table
+name: UserProfile
+primary: false
+tableType: subsingle
+description: ''
+tags: []
+
+table:
+  model: "uProfile"
+  type: "NORMAL"
+  drop: false
+  schemaMode: schemaless
+  permissions: full
+
+id:
+  type: string
+  structure: uProfile:{PARENT_ID}
+  exportType: true
+  exportName: __NAME__ID
+
+structure:
+  type: parent
+  parentModel: u
+
+fields:
+  - country:
+      type: string
+      required: false
+
+edges:
+  has: []
+  belongs:
+    - table: UserProfile
+      in: u
+      out: uProfile
+
+post:
+  enabled: false
+
+views: []
+
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: rid
+        type: record<u>
+      - name: payload
+        type: object
+
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record<u>
+      - name: payload
+        type: object
+
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record<u>
+
+
+router:
+  parent: user
+  name: profile
+  endpoints:
+    - update:
+        target: crud
+        value: update

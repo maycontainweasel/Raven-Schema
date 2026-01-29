@@ -1,0 +1,147 @@
+version: 1
+kind: ui
+name: Settings
+model: instance
+table: instance
+namespace: settings
+
+route:
+  base: /settings
+  single: /settings/<key>
+
+meta:
+  title: "Admin Settings"
+  subtitle: "Placeholder admin settings page"
+
+overview:
+  type: typesense
+  meta:
+    title: "Admin Settings"
+    subtitle: "Select a website instance to view settings (placeholder)."
+  actions:
+    - refresh
+  table:
+    columns:
+      - title
+      - instance
+      - status
+      - active
+  typesense:
+    pagination: true
+    refreshMode: upsert
+    queryBy:
+      - title
+      - key
+      - instance
+    sortableFields:
+      - title
+      - key
+    filters:
+      - status
+      - active
+
+single:
+  layout: navigation-primary
+  store:
+    key: instance
+    resolver: key
+  targets:
+    base:
+      model: instance
+      endpoint: instance.update
+    settings:
+      endpoint: instance.settings.update
+      payloadMap:
+        id: $recordId
+        payload: $values
+  header:
+    label: "Admin Settings"
+  tabs:
+    - label: Overview
+      slug: overview
+      content:
+        - id: settings-overview-row
+          primary:
+            - id: settings-overview-col-main
+              widgets:
+                - type: fields-card
+                  id: settings-overview
+                  title: "Admin Settings"
+                  subtitle: "Global settings that influence all instances."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Select a website instance to configure its defaults. Global catalogs are managed in the tabs below."
+                              class: "text-sm text-muted-foreground"
+    - label: Currencies
+      slug: currencies
+      content:
+        - id: settings-currencies-row
+          primary:
+            - id: settings-currencies-col
+              widgets:
+                - type: fields-card
+                  id: settings-currency-catalog
+                  title: "Currency Catalog"
+                  subtitle: "Define all currencies available across the platform."
+                  content:
+                    - columns:
+                        - items:
+                            - field: currencyCatalog
+                              path: settings.currencyCatalog
+                              target: settings
+                              type: text
+                              label: "Currencies"
+                            - type: message
+                              text: "Add currency code, label, and symbol. This catalog is used to drive instance-level currency selection."
+                              class: "text-sm text-muted-foreground"
+                - type: fields-card
+                  id: settings-active-currencies
+                  title: "Default Enabled Currencies"
+                  subtitle: "Set the default active currencies for this instance."
+                  content:
+                    - columns:
+                        - items:
+                            - field: currencies
+                              path: settings.currencies
+                              target: settings
+                              type: listbox
+                              label: "Enabled currencies"
+                              multiple: true
+                              placeholder: "Select currencies"
+    - label: Pricing Periods
+      slug: pricing-periods
+      content:
+        - id: settings-pricing-row
+          primary:
+            - id: settings-pricing-col
+              widgets:
+                - type: fields-card
+                  id: settings-pricing-periods
+                  title: "Pricing Periods"
+                  subtitle: "Default subscription durations available for this instance."
+                  content:
+                    - columns:
+                        - items:
+                            - field: pricingOptions
+                              path: settings.pricingOptions
+                              target: settings
+                              type: listbox
+                              label: "Available periods (months)"
+                              multiple: true
+                              options:
+                                - label: "1 month"
+                                  value: 1
+                                - label: "2 months"
+                                  value: 2
+                                - label: "3 months"
+                                  value: 3
+                                - label: "6 months"
+                                  value: 6
+                                - label: "12 months"
+                                  value: 12
+                            - type: message
+                              text: "These values are stored on instance settings and used as defaults for product pricing."
+                              class: "text-sm text-muted-foreground"

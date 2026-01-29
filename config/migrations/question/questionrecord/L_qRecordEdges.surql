@@ -1,0 +1,4 @@
+DEFINE TABLE OVERWRITE QuestionRecord SCHEMAFULL TYPE RELATION IN q OUT qRecord;
+DEFINE FIELD OVERWRITE in ON TABLE QuestionRecord TYPE record<q>;
+DEFINE FIELD OVERWRITE out ON TABLE QuestionRecord TYPE record<qRecord>;
+DEFINE INDEX OVERWRITE QuestionRecord_unique ON TABLE QuestionRecord FIELDS in, out UNIQUE;

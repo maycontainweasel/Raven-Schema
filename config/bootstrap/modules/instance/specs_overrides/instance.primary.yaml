@@ -1,0 +1,57 @@
+version: 1
+kind: table
+name: Instance
+primary: true
+tableType: primary
+description: Website instance configuration (module overlay)
+table:
+  model: instance
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: InstanceId
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - instance:
+      type: string
+      default: $key
+  - title:
+      type: string
+      required: true
+      default: ""
+  - status:
+      type: enum<"active" | "inactive" | "maintenance">
+      default: active
+  - active:
+      type: boolean
+      default: true
+subTables:
+  - name: InstanceSettings
+    model: instanceSettings
+    autoCreate: true
+    tableType: subsingle
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - instance
+      - title
+      - status
+      - active
+      - settings
+    as:
+      - settings: (select * from only type::record('instanceSettings',
+          record::id($this.id)))
+instance: true
+post: true
+refreshViews: true
+admin:
+  data: local

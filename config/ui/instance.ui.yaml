@@ -1,0 +1,232 @@
+version: 1
+kind: ui
+name: Website
+model: instance
+table: instance
+namespace: instances
+
+route:
+  base: /instances
+  single: /instances/<key>
+
+meta:
+  title: "Websites"
+  subtitle: "Manage PassMed website instances and their configuration"
+
+dialogs:
+  create:
+    template: auto
+    required:
+      - key
+      - title
+      - instance
+    fields:
+      - key: title
+        label: Title
+        type: text
+        placeholder: Website name
+        required: true
+      - key: key
+        label: Key
+        type: text
+        placeholder: e.g. uk
+        format: slug
+        autoFrom: title
+        required: true
+      - key: instance
+        label: Instance Code
+        type: text
+        placeholder: pm, uk, za, au
+        required: true
+      - key: status
+        label: Status
+        type: select
+        options:
+          - label: Active
+            value: active
+          - label: Inactive
+            value: inactive
+          - label: Maintenance
+            value: maintenance
+    defaults:
+      status: active
+      active: true
+  delete:
+    template: auto
+
+overview:
+  type: typesense
+  meta:
+    title: "Websites Overview"
+    subtitle: "Typesense directory for website instances."
+  actions:
+    - create
+    - refresh
+  table:
+    columns:
+      - title
+      - instance
+      - status
+      - active
+  typesense:
+    pagination: true
+    refreshMode: upsert
+    queryBy:
+      - title
+      - key
+      - instance
+    sortableFields:
+      - title
+      - key
+    filters:
+      - status
+      - active
+
+single:
+  layout: navigation-primary
+  store:
+    key: instance
+    resolver: key
+  targets:
+    base:
+      model: instance
+      endpoint: instance.update
+    settings:
+      endpoint: instance.settings.update
+      payloadMap:
+        id: $recordId
+        payload: $values
+  header:
+    label: "Website"
+  tabs:
+    - label: General
+      slug: general
+      content:
+        - id: instance-general-row
+          primary:
+            - id: instance-general-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: instance-general
+                  title: "Instance Details"
+                  subtitle: "Core identity and status."
+                  content:
+                    - columns:
+                        - items:
+                            - field: title
+                              type: text
+                              label: "Title"
+                            - field: key
+                              type: text
+                              label: "Key"
+                              props:
+                                readonly: true
+                                disabled: true
+                            - field: instance
+                              type: text
+                              label: "Instance Code"
+                        - items:
+                            - field: status
+                              type: select
+                              label: "Status"
+                              options:
+                                - label: Active
+                                  value: active
+                                - label: Inactive
+                                  value: inactive
+                                - label: Maintenance
+                                  value: maintenance
+                            - field: active
+                              type: select
+                              label: "Active"
+                              options:
+                                - label: Yes
+                                  value: true
+                                - label: No
+                                  value: false
+            - id: instance-general-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: instance-metadata
+                  title: "Metadata"
+                  subtitle: "Audit and ownership."
+                  save: false
+                  fields:
+                    - field: createdAt
+                      type: text
+                      label: "Created"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: updatedAt
+                      type: text
+                      label: "Updated"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: createdBy
+                      type: text
+                      label: "Created By"
+                      props:
+                        readonly: true
+                        disabled: true
+    - label: Pricing Periods
+      slug: pricing-periods
+      content:
+        - id: instance-pricing-row
+          primary:
+            - id: instance-pricing-col
+              widgets:
+                - type: fields-card
+                  id: instance-pricing-periods
+                  title: "Pricing Periods"
+                  subtitle: "Default subscription durations available for this website."
+                  content:
+                    - columns:
+                        - items:
+                            - field: pricingOptions
+                              path: settings.pricingOptions
+                              target: settings
+                              type: listbox
+                              label: "Available periods (months)"
+                              multiple: true
+                              options:
+                                - label: "1 month"
+                                  value: 1
+                                - label: "2 months"
+                                  value: 2
+                                - label: "3 months"
+                                  value: 3
+                                - label: "6 months"
+                                  value: 6
+                                - label: "12 months"
+                                  value: 12
+                            - type: message
+                              text: "These values are stored on instance settings and used as defaults for product pricing."
+                              class: "text-sm text-muted-foreground"
+    - label: Currencies
+      slug: currencies
+      content:
+        - id: instance-currencies-row
+          primary:
+            - id: instance-currencies-col
+              widgets:
+                - type: fields-card
+                  id: instance-currencies
+                  title: "Active Currencies"
+                  subtitle: "Select which global currencies are enabled for this website."
+                  content:
+                    - columns:
+                        - items:
+                            - field: currencies
+                              path: settings.currencies
+                              target: settings
+                              type: listbox
+                              label: "Enabled currencies"
+                              multiple: true
+                              placeholder: "Select currencies"
+                            - type: message
+                              text: "Define the global currency catalog in Admin Settings to populate this list."
+                              class: "text-sm text-muted-foreground"

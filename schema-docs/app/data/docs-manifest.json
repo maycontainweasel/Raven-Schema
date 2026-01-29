@@ -1,0 +1,608 @@
+{
+  "generatedAt": "2026-01-28T23:27:27.851Z",
+  "source": "config/specs",
+  "instances": {
+    "default": "mpd",
+    "active": [
+      "mpd"
+    ],
+    "all": [
+      "mpd"
+    ]
+  },
+  "tables": {
+    "question": {
+      "key": "question",
+      "name": "Question",
+      "model": "q",
+      "description": "A basic question table",
+      "data": "local",
+      "fields": [
+        {
+          "key": "qid",
+          "type": "number",
+          "required": true,
+          "default": 0
+        },
+        {
+          "key": "qCode",
+          "type": "string",
+          "required": false,
+          "default": ""
+        },
+        {
+          "key": "question",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "explanation",
+          "type": "string",
+          "required": false,
+          "default": ""
+        },
+        {
+          "key": "explanationRef",
+          "type": "string",
+          "required": false,
+          "default": ""
+        },
+        {
+          "key": "source",
+          "type": "string",
+          "required": false,
+          "default": ""
+        },
+        {
+          "key": "instances",
+          "type": "array<string>",
+          "required": false,
+          "default": []
+        },
+        {
+          "key": "testobject",
+          "type": "object",
+          "required": false,
+          "fields": [
+            {
+              "key": "testobjectnumber",
+              "type": "number",
+              "required": true,
+              "default": 0
+            },
+            {
+              "key": "testobjectstring",
+              "type": "string",
+              "required": false,
+              "default": ""
+            },
+            {
+              "key": "testobjectdarray",
+              "type": "array<string>",
+              "required": false,
+              "default": []
+            },
+            {
+              "key": "testobjectobject",
+              "type": "object",
+              "required": false,
+              "fields": [
+                {
+                  "key": "testobjectobjectnumber",
+                  "type": "number",
+                  "required": true,
+                  "default": 0
+                },
+                {
+                  "key": "testobjectobjectstring",
+                  "type": "string",
+                  "required": false,
+                  "default": ""
+                },
+                {
+                  "key": "testobjectobjectarray",
+                  "type": "array<string>",
+                  "required": false,
+                  "default": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "tags",
+          "type": "array<record<term>>",
+          "required": false
+        }
+      ],
+      "capabilities": {
+        "router": true,
+        "crud": {
+          "create": true,
+          "update": true,
+          "delete": true
+        },
+        "typesense": false,
+        "taxonomies": [
+          "qcat",
+          "qtag"
+        ],
+        "edges": false,
+        "relations": false,
+        "subtables": true
+      },
+      "subTables": [
+        {
+          "key": "questionRecord",
+          "name": "QuestionRecord",
+          "tableType": "subsingle",
+          "fields": []
+        },
+        {
+          "key": "questionOption",
+          "name": "QuestionOption",
+          "tableType": "submany",
+          "fields": []
+        }
+      ],
+      "taxonomies": [
+        {
+          "key": "qcat",
+          "hierarchical": true,
+          "storeOnModel": false,
+          "processor": "functions",
+          "payloadField": "categories",
+          "labels": {
+            "singular": "Category",
+            "plural": "Categories"
+          },
+          "taxonomy": {
+            "fields": [
+              {
+                "key": "key",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "label",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "hierarchical",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "permalink",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "description",
+                "type": "Question categories",
+                "required": false
+              }
+            ]
+          },
+          "term": {
+            "fields": [
+              {
+                "key": "key",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "label",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "description",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "parent",
+                "type": "object",
+                "required": false
+              }
+            ]
+          }
+        },
+        {
+          "key": "qtag",
+          "hierarchical": false,
+          "storeOnModel": true,
+          "processor": "functions",
+          "payloadField": "tags",
+          "labels": {
+            "singular": "Tag",
+            "plural": "Tags"
+          },
+          "taxonomy": {
+            "fields": [
+              {
+                "key": "key",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "label",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "hierarchical",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "permalink",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "description",
+                "type": "Question tags",
+                "required": false
+              }
+            ]
+          },
+          "term": {
+            "fields": [
+              {
+                "key": "key",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "label",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "description",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "parent",
+                "type": "object",
+                "required": false
+              }
+            ]
+          }
+        }
+      ],
+      "typesense": {
+        "enabled": false
+      },
+      "docs": {
+        "types": "docs/api/models/question/types.md"
+      },
+      "id": {
+        "type": "string",
+        "structure": "qid",
+        "exportName": "QuestionId",
+        "exportType": true
+      }
+    },
+    "user": {
+      "key": "user",
+      "name": "User",
+      "model": "u",
+      "description": "A basic user table",
+      "data": "local",
+      "fields": [
+        {
+          "key": "email",
+          "type": "string",
+          "required": true,
+          "rawType": "email",
+          "format": "email",
+          "default": ""
+        },
+        {
+          "key": "password",
+          "type": "string",
+          "required": true,
+          "rawType": "password",
+          "format": "password",
+          "assign": true,
+          "default": ""
+        },
+        {
+          "key": "firstName",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "surname",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "uniqueId",
+          "type": "string",
+          "required": false,
+          "rawType": "md5<$email>",
+          "format": "md5",
+          "assign": true,
+          "ignorePayload": true
+        },
+        {
+          "key": "role",
+          "type": "record",
+          "required": true,
+          "rawType": "record<term>",
+          "format": "record"
+        },
+        {
+          "key": "instances",
+          "type": "array<string>",
+          "required": false,
+          "default": "{\n  fn::defaultInstance({ returnArray: true })\n}"
+        }
+      ],
+      "capabilities": {
+        "router": true,
+        "crud": {
+          "create": true,
+          "update": true,
+          "delete": true
+        },
+        "typesense": false,
+        "taxonomies": [
+          "role"
+        ],
+        "edges": false,
+        "relations": false,
+        "subtables": false
+      },
+      "subTables": [],
+      "taxonomies": [
+        {
+          "key": "role",
+          "hierarchical": false,
+          "cardinality": "one",
+          "storeOnModel": true,
+          "required": true,
+          "processor": "functions",
+          "payloadField": "role",
+          "labels": {
+            "singular": "Role",
+            "plural": "Roles"
+          },
+          "taxonomy": {
+            "fields": [
+              {
+                "key": "key",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "label",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "hierarchical",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "permalink",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "description",
+                "type": "User roles",
+                "required": false
+              }
+            ]
+          },
+          "term": {
+            "fields": [
+              {
+                "key": "key",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "label",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "description",
+                "type": "object",
+                "required": false
+              },
+              {
+                "key": "parent",
+                "type": "object",
+                "required": false
+              }
+            ]
+          }
+        }
+      ],
+      "typesense": {
+        "enabled": false
+      },
+      "docs": {
+        "types": "docs/api/models/user/types.md"
+      },
+      "id": {
+        "type": "string",
+        "structure": "email",
+        "exportName": "UserId",
+        "exportType": true
+      }
+    },
+    "post": {
+      "key": "post",
+      "name": "Post",
+      "model": "p",
+      "description": "A Post is the content connected to a record for use in content management systems.",
+      "data": "local",
+      "fields": [
+        {
+          "key": "contentTable",
+          "type": "string",
+          "required": false,
+          "default": "record::tb($id)"
+        },
+        {
+          "key": "contentId",
+          "type": "string",
+          "required": false,
+          "default": "record::id($id)"
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": false,
+          "rawType": "datetime",
+          "format": "datetime",
+          "default": "time::now()"
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": false,
+          "rawType": "datetime",
+          "format": "datetime",
+          "default": "time::now()"
+        },
+        {
+          "key": "publishedAt",
+          "type": "datetimee",
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "title",
+          "type": "string",
+          "required": false,
+          "default": "{\n  $title ?? record::id($id)\n}"
+        },
+        {
+          "key": "permalink",
+          "type": "string",
+          "required": false,
+          "default": "{\n  if($title) {\n      string::slug(<string> $title)\n  } else {\n      string::slug(<string> record::id($id))\n  }\n}"
+        },
+        {
+          "key": "status",
+          "type": "enum<\"draft\" | \"publish\">",
+          "required": false,
+          "default": "draft"
+        }
+      ],
+      "capabilities": {
+        "router": false,
+        "crud": {
+          "create": true,
+          "update": true,
+          "delete": true
+        },
+        "typesense": false,
+        "taxonomies": [],
+        "edges": true,
+        "relations": false,
+        "subtables": false
+      },
+      "subTables": [],
+      "typesense": {
+        "enabled": false
+      },
+      "docs": {
+        "types": "docs/api/models/post/types.md"
+      },
+      "id": {
+        "type": "string",
+        "structure": "fn::PID($id)",
+        "exportName": "__NAME__ID",
+        "exportType": true
+      }
+    },
+    "instance": {
+      "key": "instance",
+      "name": "Instance",
+      "model": "instance",
+      "description": "Website instance configuration (module overlay)",
+      "data": "local",
+      "fields": [
+        {
+          "key": "key",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "instance",
+          "type": "string",
+          "required": false,
+          "default": "$key"
+        },
+        {
+          "key": "title",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "status",
+          "type": "enum<\"active\" | \"inactive\" | \"maintenance\">",
+          "required": false,
+          "default": "active"
+        },
+        {
+          "key": "active",
+          "type": "boolean",
+          "required": false,
+          "default": true
+        }
+      ],
+      "capabilities": {
+        "router": true,
+        "crud": {
+          "create": true,
+          "update": true,
+          "delete": true
+        },
+        "typesense": false,
+        "taxonomies": [],
+        "edges": true,
+        "relations": false,
+        "subtables": true
+      },
+      "subTables": [
+        {
+          "key": "instanceSettings",
+          "name": "InstanceSettings",
+          "tableType": "subsingle",
+          "fields": []
+        }
+      ],
+      "typesense": {
+        "enabled": false
+      },
+      "docs": {
+        "types": "docs/api/models/instance/types.md"
+      },
+      "id": {
+        "type": "string",
+        "structure": "key",
+        "exportName": "InstanceId",
+        "exportType": true
+      }
+    }
+  }
+}

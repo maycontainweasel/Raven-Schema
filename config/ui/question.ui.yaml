@@ -1,0 +1,306 @@
+version: 1
+kind: ui
+name: Question
+model: question
+table: question
+namespace: questions
+
+route:
+  base: /questions
+  single: /questions/<id>
+
+meta:
+  title: "Questions"
+  subtitle: "Manage questions and their metadata"
+
+dialogs:
+  create:
+    required:
+      - qid
+      - question
+      - instances
+      - exams
+    fields:
+      - key: qid
+        label: QID
+        type: number
+        placeholder: Auto-generated
+        required: true
+      - key: question
+        label: Question
+        type: textarea
+        rows: 4
+        placeholder: Enter the question text
+        required: true
+      - key: instances
+        label: Instances
+        type: instances
+        required: true
+        multiple: true
+      - key: exams
+        label: Exams
+        type: text
+        required: true
+        multiple: true
+
+single:
+  layout: navigation-primary
+  store:
+    key: question
+    resolver: id
+  targets:
+    base:
+      model: question
+      endpoint: question.update
+    postStatus:
+      endpoint: admin.updatePostStatus
+      payloadMap:
+        recordId: $recordId
+        status: $field:post.status
+  header:
+    label: "Question"
+    statusTarget: postStatus
+    statusOptions:
+      - label: Draft
+        value: draft
+      - label: Publish
+        value: publish
+      - label: Review
+        value: review
+  tabs:
+    - label: Overview
+      slug: overview
+      content:
+        - id: question-overview-row
+          primary:
+            - id: question-overview-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: question-metadata
+                  title: "Question Metadata"
+                  subtitle: "Status, difficulty, and timing."
+                  fields:
+                    - field: qid
+                      type: number
+                      label: "Question ID"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - key: postStatus
+                      field: post.status
+                      type: select
+                      label: "Status"
+                      target: postStatus
+                      options:
+                        - label: Draft
+                          value: draft
+                        - label: Publish
+                          value: publish
+                        - label: Review
+                          value: review
+                    - field: difficulty
+                      type: select
+                      label: "Difficulty"
+                      options:
+                        - label: Easy
+                          value: easy
+                        - label: Intermediate
+                          value: intermediate
+                        - label: Hard
+                          value: hard
+                    - field: timeEstimate
+                      type: number
+                      label: "Time estimate (sec)"
+            - id: question-overview-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: question-quick-info
+                  title: "Quick Info"
+                  subtitle: "Read-only reference data."
+                  save: false
+                  fields:
+                    - field: code
+                      type: text
+                      label: "Code"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: created_at
+                      type: text
+                      label: "Created"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: updated_at
+                      type: text
+                      label: "Updated"
+                      props:
+                        readonly: true
+                        disabled: true
+    - label: Content
+      slug: content
+      content:
+        - id: question-content-row
+          primary:
+            - id: question-content-col
+              widgets:
+                - type: fields-card
+                  id: question-content
+                  title: "Question Content"
+                  subtitle: "Question stem and explanation."
+                  content:
+                    - columns:
+                        - items:
+                            - field: question
+                              type: wysiwyg
+                              label: "Question"
+                              placeholder: "Write the question stem..."
+                              props:
+                                showHtmlToggle: true
+                                minHeight: "180px"
+                    - columns:
+                        - items:
+                            - field: explanation
+                              type: wysiwyg
+                              label: "Explanation"
+                              placeholder: "Write the explanation..."
+                              props:
+                                showHtmlToggle: true
+                                minHeight: "180px"
+                - type: fields-card
+                  id: question-options
+                  title: "Answer Options"
+                  subtitle: "Manage answer choices (override coming)."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Options manager will be replaced by a custom component."
+                              class: "text-xs text-muted"
+    - label: Exams
+      slug: exams
+      content:
+        - id: question-exams-row
+          primary:
+            - id: question-exams-col
+              widgets:
+                - type: fields-card
+                  id: question-exams
+                  title: "Linked Exams"
+                  subtitle: "Attach or detach exams from this question."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Exam linking UI will be provided via an override component."
+                              class: "text-xs text-muted"
+    - label: Categories & Tags
+      slug: categories
+      content:
+        - id: question-taxonomy-row
+          primary:
+            - id: question-taxonomy-col
+              widgets:
+                - type: fields-card
+                  id: question-categories
+                  title: "Categories"
+                  subtitle: "Manage question categories."
+                  save: false
+                  fields:
+                    - field: qcats
+                      type: taxonomy-manager
+                      label: "Categories"
+                      props:
+                        title: "Manage Categories"
+                        description: "Select or create categories."
+                        buttonLabel: "Manage categories"
+                        summaryLabel: "Selected categories"
+                        endpoints:
+                          getTerms: question.qcat.getTerms
+                          getRecordTerms: question.qcat.getRecordTerms
+                          attach: question.qcat.attach
+                          detach: question.qcat.detach
+                          addTerm: question.qcat.addTerm
+                - type: fields-card
+                  id: question-tags
+                  title: "Tags"
+                  subtitle: "Manage question tags."
+                  save: false
+                  fields:
+                    - field: qtags
+                      type: taxonomy-manager
+                      label: "Tags"
+                      props:
+                        title: "Manage Tags"
+                        description: "Select or create tags."
+                        buttonLabel: "Manage tags"
+                        summaryLabel: "Selected tags"
+                        endpoints:
+                          getTerms: question.qtag.getTerms
+                          getRecordTerms: question.qtag.getRecordTerms
+                          attach: question.qtag.attach
+                          detach: question.qtag.detach
+                          addTerm: question.qtag.addTerm
+                - type: fields-card
+                  id: question-topics
+                  title: "Topics"
+                  subtitle: "Manage question topics."
+                  save: false
+                  fields:
+                    - field: qtopics
+                      type: taxonomy-manager
+                      label: "Topics"
+                      props:
+                        title: "Manage Topics"
+                        description: "Select or create topics."
+                        buttonLabel: "Manage topics"
+                        summaryLabel: "Selected topics"
+                        endpoints:
+                          getTerms: question.qtopic.getTerms
+                          getRecordTerms: question.qtopic.getRecordTerms
+                          attach: question.qtopic.attach
+                          detach: question.qtopic.detach
+                          addTerm: question.qtopic.addTerm
+    - label: Additional
+      slug: additional
+      content:
+        - id: question-additional-row
+          primary:
+            - id: question-additional-col
+              widgets:
+                - type: fields-card
+                  id: question-additional
+                  title: "Additional Details"
+                  subtitle: "References and source data."
+                  fields:
+                    - field: explanationRef
+                      type: text
+                      label: "Explanation reference"
+                    - field: source
+                      type: text
+                      label: "Source"
+                    - field: code
+                      type: text
+                      label: "Code"
+    - label: Analytics
+      slug: analytics
+      content:
+        - id: question-analytics-row
+          primary:
+            - id: question-analytics-col
+              widgets:
+                - type: fields-card
+                  id: question-analytics
+                  title: "Analytics"
+                  subtitle: "Performance overview (placeholder)."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Analytics UI will be added here."
+                              class: "text-xs text-muted"

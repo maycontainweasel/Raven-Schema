@@ -1,0 +1,308 @@
+version: 1
+kind: ui
+name: Order
+model: order
+table: order
+namespace: orders
+
+route:
+  base: /orders
+  single: /orders/<id>
+
+meta:
+  title: "Orders"
+  subtitle: "Track purchases, payments, and fulfilment"
+
+overview:
+  type: typesense
+  meta:
+    title: "Orders Overview"
+    subtitle: "Typesense directory for the Order model."
+  actions:
+    - refresh
+  table:
+    columns:
+      - status
+      - amountTotal
+      - currency
+      - createdAt
+      - u
+      - stripeID
+  typesense:
+    pagination: true
+    refreshMode: upsert
+    queryBy:
+      - stripeID
+      - checkoutSessionID
+      - paymentIntentID
+      - customerID
+      - invoiceID
+      - u
+      - userSnapshot.email
+      - userSnapshot.name
+    sortableFields:
+      - createdAt
+      - amountTotal
+      - status
+    filters:
+      - status
+      - currency
+
+single:
+  layout: navigation-primary
+  store:
+    key: order
+    resolver: id
+  targets:
+    base:
+      model: order
+      endpoint: order.update
+  header:
+    label: "Order"
+    status: false
+  tabs:
+    - label: General
+      slug: general
+      content:
+        - id: order-general-row
+          primary:
+            - id: order-general-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: order-summary
+                  title: "Order Summary"
+                  subtitle: "Status, ownership, and timestamps."
+                  content:
+                    - columns:
+                        - items:
+                            - field: status
+                              type: text
+                              label: "Status"
+                            - field: createdAt
+                              type: text
+                              label: "Created"
+                              props:
+                                readonly: true
+                                disabled: true
+                            - field: updatedAt
+                              type: text
+                              label: "Updated"
+                              props:
+                                readonly: true
+                                disabled: true
+                        - items:
+                            - field: u
+                              type: text
+                              label: "User ID"
+                              props:
+                                readonly: true
+                                disabled: true
+                            - field: userSnapshot.email
+                              type: text
+                              label: "Email"
+                              props:
+                                readonly: true
+                                disabled: true
+                            - field: userSnapshot.name
+                              type: text
+                              label: "Name"
+                              props:
+                                readonly: true
+                                disabled: true
+                - type: fields-card
+                  id: order-totals
+                  title: "Payment Totals"
+                  subtitle: "Amounts captured by Stripe."
+                  content:
+                    - columns:
+                        - items:
+                            - field: amountSubtotal
+                              type: number
+                              label: "Subtotal"
+                            - field: amountTax
+                              type: number
+                              label: "Tax"
+                            - field: amountDiscount
+                              type: number
+                              label: "Discount"
+                        - items:
+                            - field: amountTotal
+                              type: number
+                              label: "Total"
+                            - field: amountRefunded
+                              type: number
+                              label: "Refunded"
+                            - field: currency
+                              type: text
+                              label: "Currency"
+            - id: order-general-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: order-stripe-refs
+                  title: "Stripe References"
+                  subtitle: "Payment identifiers for debugging."
+                  save: false
+                  fields:
+                    - field: stripeID
+                      type: text
+                      label: "Stripe Order ID"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: checkoutSessionID
+                      type: text
+                      label: "Checkout Session"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: paymentIntentID
+                      type: text
+                      label: "Payment Intent"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: chargeID
+                      type: text
+                      label: "Charge ID"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: invoiceID
+                      type: text
+                      label: "Invoice ID"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: paymentMethodID
+                      type: text
+                      label: "Payment Method"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: customerID
+                      type: text
+                      label: "Customer ID"
+                      props:
+                        readonly: true
+                        disabled: true
+                - type: fields-card
+                  id: order-access
+                  title: "Access Window"
+                  subtitle: "Entitlement period for this order."
+                  save: false
+                  fields:
+                    - field: access.from
+                      type: text
+                      label: "Access From"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: access.to
+                      type: text
+                      label: "Access To"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: instances
+                      type: text
+                      label: "Instances"
+                      props:
+                        readonly: true
+                        disabled: true
+
+    - label: Order
+      slug: order
+      content:
+        - id: order-details-row
+          primary:
+            - id: order-details-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: order-items
+                  title: "Line Items"
+                  subtitle: "Products, variants, and exams purchased."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Line-item rendering will be provided via override."
+                              class: "text-xs text-muted"
+                - type: fields-card
+                  id: order-access-details
+                  title: "Access & Entitlements"
+                  subtitle: "Resources unlocked by this purchase."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - field: access.products
+                              type: textarea
+                              label: "Products"
+                              rows: 3
+                              props:
+                                readonly: true
+                                disabled: true
+                            - field: access.exams
+                              type: textarea
+                              label: "Exams"
+                              rows: 3
+                              props:
+                                readonly: true
+                                disabled: true
+            - id: order-details-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: order-user-snapshot
+                  title: "User Snapshot"
+                  subtitle: "Profile data captured at checkout."
+                  save: false
+                  fields:
+                    - field: userSnapshot.email
+                      type: text
+                      label: "Email"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: userSnapshot.name
+                      type: text
+                      label: "Name"
+                      props:
+                        readonly: true
+                        disabled: true
+
+    - label: Timeline
+      slug: timeline
+      content:
+        - id: order-timeline-row
+          primary:
+            - id: order-timeline-col-main
+              widgets:
+                - type: fields-card
+                  id: order-timeline
+                  title: "Timeline"
+                  subtitle: "Events and state transitions for this order."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Timeline rendering will be provided via override."
+                              class: "text-xs text-muted"
+                - type: fields-card
+                  id: order-debug-payload
+                  title: "Stripe Payload"
+                  subtitle: "Raw payload for debugging failed checkouts."
+                  save: false
+                  fields:
+                    - field: stripePayload
+                      type: textarea
+                      label: "Payload"
+                      rows: 8
+                      props:
+                        readonly: true
+                        disabled: true

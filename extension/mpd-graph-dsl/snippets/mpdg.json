@@ -1,0 +1,96 @@
+{
+  "MPDG Table (base)": {
+    "prefix": "mpdg-table",
+    "body": [
+      "${1:Label}, ${2:model} | ${3:Description} {",
+      "  id: ${4:default}",
+      "  ${5:fieldName}!?: ${6:\"\"}",
+      "} [",
+      "  ${7:crud}",
+      "  ${8:router}",
+      "] (",
+      "  ${9:// subtables or edges}",
+      ") {",
+      "  ${10:// extras}",
+      "}"
+    ],
+    "description": "Base MPDG table skeleton (fields, capabilities, connections, extras)"
+  },
+  "MPDG Table (CRUD + Router)": {
+    "prefix": "mpdg-table-crud",
+    "body": [
+      "${1:Label}, ${2:model} | ${3:Description} {",
+      "  id: ${4:default}",
+      "  ${5:fieldName}!?: ${6:\"\"}",
+      "} [",
+      "  crud,",
+      "  router: create, update, delete, views:*",
+      "  ${7:views: Admin[*]}",
+      "] (",
+      "  ${8:// subtables or edges}",
+      ") {",
+      "}"
+    ],
+    "description": "MPDG table with CRUD + router defaults"
+  },
+  "MPDG Subtable (single)": {
+    "prefix": "mpdg-subtable",
+    "body": [
+      "${1:SubTableLabel}, ${2:subModel} | ${3:Description} {",
+      "  id: $parent,",
+      "  ${4:fieldName}?: ${5:\"\"}",
+      "} [",
+      "  ${6:router: update}",
+      "  ${7:mods: refreshViews}",
+      "]"
+    ],
+    "description": "Subtable skeleton (subsingle)"
+  },
+  "MPDG Subtable (many)": {
+    "prefix": "mpdg-subtable-many",
+    "body": [
+      "*${1:SubTableLabel}, ${2:subModel} | ${3:Description} {",
+      "  id: S(parent, $${4:field}),",
+      "  ${5:fieldName}!: ${6:\"\"}",
+      "} [",
+      "  crud,",
+      "  router: create, update, delete, views",
+      "  ${7:views: Record[*]}",
+      "  ${8:mods: refreshViews}",
+      "]"
+    ],
+    "description": "Subtable skeleton (submany)"
+  },
+  "MPDG Edge": {
+    "prefix": "mpdg-edge",
+    "body": [
+      "->${1:EdgeName}->${2:targetModel} {",
+      "  ${3:}",
+      "}"
+    ],
+    "description": "Edge definition"
+  },
+  "MPDG Capabilities: views": {
+    "prefix": "mpdg-views",
+    "body": [
+      "views:",
+      "  Admin[*],",
+      "  Public[*],",
+      "  Typesense::fn[id, title](",
+      "    post: PID|p(ID), [status, createdAt, updatedAt], {},",
+      "  )"
+    ],
+    "description": "Views block with Admin/Public/Typesense"
+  },
+  "MPDG Capabilities: typesense": {
+    "prefix": "mpdg-typesense",
+    "body": [
+      "typesense:",
+      "  Typesense::fn[id, title](",
+      "    id: <RID>",
+      "    title: $title,",
+      "  )"
+    ],
+    "description": "Typesense block stub"
+  }
+}

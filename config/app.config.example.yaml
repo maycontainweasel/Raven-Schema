@@ -1,0 +1,370 @@
+version: 0.1
+
+project:
+  name: passmed-schema
+  description: Baseline configuration for the SurrealDB schema tooling workspace.
+
+environment:
+  defaultDatabase: test
+  migrationTargets:
+    # - ca
+    - test
+
+
+features:
+  schemaMode: schemaless
+  autoApplyMigrations: false
+  emitDocumentation: true
+
+databases:
+  test:
+    active: false
+    url: http://127.0.0.1:9275
+    namespace: schema
+    database: testing1
+    username: root
+    password: root
+    allowScripting: true
+  pm:
+    active: true
+    url: https://api.v2.passmed.mpire.info
+    namespace: mothership
+    database: pm_v1
+    username: root
+    password: root
+    allowScripting: true
+  # au:
+  #   active: true
+  #   url: https://api.passamc.org
+  #   namespace: appns
+  #   database: app_v1
+  #   username: mpire
+  #   password: BurntMyMoustacheIn1986
+  #   allowScripting: true
+  au:
+    active: true
+    url: http://209.38.89.92:2001 # not sure why we need to connect to it directly
+    namespace: appns
+    database: app_v1
+    username: mpire
+    password: BurntMyMoustacheIn1986
+    allowScripting: true
+
+  uk:
+    active: true
+    url: https://api.beta.v2.passmed.uk
+    namespace: pmuk
+    database: pmuk_1
+    username: mpire
+    password: BurntMyMoustacheIn1986
+    allowScripting: true
+  za:
+    active: true
+    url: https://api.passmed.co.za
+    namespace: appns
+    database: app_v1
+    username: mpire
+    password: BurntMyMoustacheIn1986
+    allowScripting: true
+  ca:
+    active: true
+    url: https://api.passmed.ca
+    namespace: appns
+    database: app_v1
+    username: mpire
+    password: BurntMyMoustacheIn1986
+    allowScripting: true
+  us:
+    active: true
+    url: https://api.passmed.com
+    namespace: appns
+    database: app_v1
+    username: mpire
+    password: BurntMyMoustacheIn1986
+    allowScripting: true
+  ph:
+    active: true
+    url: https://api.passmed.ph
+    namespace: appns
+    database: app_v1
+    username: mpire
+    password: BurntMyMoustacheIn1986
+    allowScripting: true
+    
+paths:
+  migrations: ./config/specs
+  surrealOutput: ./surreal/generated
+  docsOutput: ./docs/generated
+  modules: ./config/bootstrap/modules
+  overrides:
+    functions: ./config/overrides/functions
+  projects:
+    - name: schema-review
+      generated:
+        types: ./config/types
+    - name: pmv2-mothership
+      nuxtProjectRoot: ../../pmv2-mothership
+      generated:
+        # Overrides (defaults derived from nuxtProjectRoot):
+        # types: <root>/app/types/schema/generated
+        # trpcRouters: <root>/server/trpc/routers
+        # piniaStores: <root>/app/stores/generated
+        types: ../../pmv2-mothership/app/types/schema/generated
+        trpcRouters: ../../pmv2-mothership/server/trpc/routers
+        piniaStores: ../../pmv2-mothership/app/stores/generated
+      imports:
+        schemaTypes: '@schema/types'
+        requestSchema: '@pmv2/shared'
+        # typesenseCollections: '~~/app/typesense/collections'
+    - name: pmv2-public
+      nuxtProjectRoot: ../../pmv2-public
+      generated:
+        # Overrides (defaults derived from nuxtProjectRoot)
+        types: ../../pmv2-public/app/types/schema/generated
+        trpcRouters: ../../pmv2-public/server/trpc/routers
+        piniaStores: ../../pmv2-public/app/stores/generated
+      imports:
+        schemaTypes: '@schema/types'
+        requestSchema: '@pmv2/shared'
+        # typesenseCollections: '~~/app/typesense/collections'
+    - name: pmv2-dashboard
+      nuxtProjectRoot: ../../pmv2-dashboard
+      generated:
+        # Overrides (defaults derived from nuxtProjectRoot)
+        types: ../../pmv2-dashboard/app/types/schema/generated
+        trpcRouters: ../../pmv2-dashboard/server/trpc/routers
+        piniaStores: ../../pmv2-dashboard/app/stores/generated
+      imports:
+        schemaTypes: '@schema/types'
+        requestSchema: '@pmv2/shared'
+        # typesenseCollections: '~~/app/typesense/collections'
+    - name: pmv2-session
+      nuxtProjectRoot: ../../pmv2-session
+      generated:
+        # Overrides (defaults derived from nuxtProjectRoot)
+        types: ../../pmv2-session/app/types/schema/generated
+        trpcRouters: ../../pmv2-session/server/trpc/routers
+        piniaStores: ../../pmv2-session/app/stores/generated
+      imports:
+        schemaTypes: '@schema/types'
+        requestSchema: '@pmv2/shared'
+        # typesenseCollections: '~~/app/typesense/collections'
+   
+
+
+    # - name: lucky-public
+    #   nuxtProjectRoot: ../../lucky-public
+    #   generated:
+    #     types: ../../lucky-public/app/types/schema/generated
+    #     trpcRouters: ../../lucky-public/server/trpc/routers
+    #     piniaStores: ../../lucky-public/app/stores/generated
+    #   imports:
+    #     schemaTypes: '~~/app/types/schema'
+
+
+trpc:
+  httpEndpoint: /api/trpc
+  generateTestPages: true
+  routerNamespace: admin
+  contextImport: '../context'
+
+documentation:
+  documentation:
+    enabled: true
+    format: markdown
+    includeSurrealExamples: true
+    locations:
+      - ./docs/mpd-framework
+
+  schemaApp:
+    enabled: false
+    location: ./schema-docs
+    settings:
+      name: schema-docs
+      imports:
+        schemaTypes: '~~/app/types/schema/generated'
+        requestSchema: '@schema'
+
+defaults:
+  schemaMode: schemaless
+  postRecordEnabled: true
+  bundlesEnabled: true
+
+events:
+  # split: one file per event (default)
+  # table: one file per table containing all events
+  fileMode: split
+
+schemaKit:
+  # Set false to suppress module update logs
+  logModuleUpdates: true
+  module:
+    # copy: copy schema-kit into each app under /modules/schema-kit
+    # shared: point apps at a single shared module path
+    mode: copy
+    # auto: copy only when hash changes
+    # force: delete + copy every generate (debug-friendly)
+    # off: never copy during generate (manual sync only)
+    sync: auto
+    # Source folder for copy mode (relative to passmed-schema root)
+    source: module
+    # Shared module path for shared mode (relative to passmed-schema root)
+    # sharedPath: packages/schema-kit
+
+databasesExport:
+  # Per-project database export (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/databases.ts
+
+modelsExport:
+  # Per-project models manifest (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/models.ts
+
+requestSchema:
+  output: ../../../packages/pmv2shared/trpc/request-schema.ts
+  # Per-project RequestSchema output (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/request-schema.ts
+  # instances: [pm, au, us]   # optional override list
+  includeInactive: false
+
+# Typesense (collection schema output)
+typesense:
+  enabled: true
+  # Minimum length for collection names (default: 3)
+  collectionMinLength: 3
+  output:
+    - ./config/typesense
+    - ../../../packages/pmv2shared/typesense
+  # Per-project Typesense output (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/typesense
+  # Default Typesense settings. Override per table in graph.mpdg.
+  settings:
+    nestedFields: true
+    synonyms: false
+    searchAsYouType: false
+    perDocumentSynonyms: false
+    perDocumentSearchAsYouType: false
+
+
+
+graph:
+  input: ./config/graph.mpdg
+  output: graph.ts
+  mermaidOutput: graph.mmd
+  spec:
+    mode: live              # staging | live
+    stagingDir: ./config/specs_stage
+    liveDir: ./config/specs
+    conflictPolicy: overwrite       # skip | overwrite | only-new
+    pruneStale: true                # remove specs not present in graph.mpdg (default: true)
+    syncOnGenerate: true            # run graph:spec before schema:generate (default: true)
+
+# Modules (explicit). Names correspond to folders under config/modules.
+modules:
+  - api
+  - post
+  - instance
+  - refreshViews
+  - taxonomies
+
+importFilters:
+  # Table selection (only used when you don’t pass --name)
+  tables:
+    # - exam
+    # - faq          # optional: limits schema:import / generate default set when no --name
+    # - 
+  # tablesExclude:
+  #   - faq
+
+  # Layer selection for schema:import (only used when you don’t pass --layers)
+  # layers:
+  #   include: [functions, events, views, indexes, edges]
+  #   exclude: [views]
+
+  # File-level include/exclude (per layer; match file base name without .surql)
+  # files:
+  #   include:
+  #     functions:
+  #       - F_createUser
+  #   exclude:
+  #     views:
+  #       - V_QuestionTypesense
+  #     functions:
+  #       - F_deletePost
+
+  # Cleanup rules (default should be include: "*" and optional excludes)
+  # cleanup:
+  #   views:
+  #     include: "*"
+  #     exclude:
+  #       - QuestionTypesense
+  #       - QuestionAdmin
+  #   events:
+  #     include: "*"
+  #     exclude:
+  #       - UserCreateSubTables
+  #   indexes:
+  #     include: "*"
+  #     exclude:
+  #       - ExamKey
+  bootstrap:
+    functions:     # optional list of bootstrap function files (relative to config/bootstrap/functions)
+      #- utility/objectAssign.surql
+    # functionsExclude:
+    #   - utility/objectAssign
+    modules:       # optional list of modules to import when no --modules flag
+      # - instance
+      # - post
+    # modulesExclude:
+    #   - post
+    seeds:         # optional list of database keys whose seeds should import
+      #- test
+    # seedsExclude:
+    #   - au
+
+
+# Module Defaults
+instance:
+  active: true
+  fields:
+    instances:
+      type: array<string>
+      default: |-
+        {
+          fn::defaultInstance({ returnArray: true })
+        }
+
+taxonomies:
+  taxonomies:
+    fields:
+      - key:
+          type: string
+          required: true
+      - label:
+          type: string
+          required: true
+      - description:
+          type: string
+          required: false
+      - hierarchical:
+          type: boolean
+          required: false
+          default: false
+      - permalink:
+          type: <permalink<<field:key>>>
+          required: false
+          assign: true
+  terms:
+    fields:
+      - key:
+          type: string
+          required: true
+      - label:
+          type: string
+          required: true
+      - description:
+          type: string
+          required: false
+      - parent:
+          type: record<term>
+          required: false
+          default: ""

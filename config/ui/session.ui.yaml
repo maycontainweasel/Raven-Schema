@@ -1,0 +1,245 @@
+version: 1
+kind: ui
+name: Session
+model: session
+table: session
+namespace: sessions
+
+route:
+  base: /sessions
+  single: /sessions/<id>
+
+meta:
+  title: "Sessions"
+  subtitle: "Review session activity and performance"
+
+single:
+  layout: navigation-primary
+  store:
+    key: session
+    resolver: id
+  targets:
+    base:
+      model: session
+      endpoint: session.update
+  header:
+    label: "Session"
+  tabs:
+    - label: Overview
+      slug: overview
+      content:
+        - id: session-overview-row
+          primary:
+            - id: session-overview-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: session-summary
+                  title: "Session Summary"
+                  subtitle: "Core session metadata"
+                  fields:
+                    - field: title
+                      type: text
+                      label: "Title"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: mode
+                      type: text
+                      label: "Mode"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: state
+                      type: text
+                      label: "State"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: qTotal
+                      type: number
+                      label: "Questions"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: dateCreated
+                      type: text
+                      label: "Started"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: dateLastActive
+                      type: text
+                      label: "Last active"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: dateCompleted
+                      type: text
+                      label: "Completed"
+                      props:
+                        readonly: true
+                        disabled: true
+                - type: fields-card
+                  id: session-performance
+                  title: "Performance"
+                  subtitle: "Aggregated performance (SPR)"
+                  save: false
+                  fields:
+                    - field: record.attempts
+                      type: number
+                      label: "Attempts"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: record.noCorrect
+                      type: number
+                      label: "Correct"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: record.noIncorrect
+                      type: number
+                      label: "Incorrect"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: record.percCorrect
+                      type: number
+                      label: "% Correct"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: record.totalSessionTime
+                      type: number
+                      label: "Total time (sec)"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: record.averageTimePerQ
+                      type: number
+                      label: "Avg time per Q (sec)"
+                      props:
+                        readonly: true
+                        disabled: true
+            - id: session-overview-col-side
+              class: "flex-1"
+              widgets:
+                - type: fields-card
+                  id: session-identifiers
+                  title: "Identifiers"
+                  subtitle: "Reference IDs"
+                  save: false
+                  fields:
+                    - field: uuid
+                      type: text
+                      label: "UUID"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: u
+                      type: text
+                      label: "User"
+                      props:
+                        readonly: true
+                        disabled: true
+        - id: session-overview-charts
+          primary:
+            - id: session-overview-charts-col
+              widgets:
+                - type: fields-card
+                  id: session-overview-charts-widget
+                  title: "Overview Charts"
+                  subtitle: "Chart components will be provided via override."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Session summary charts (progress, accuracy, time) will be rendered by an override component (e.g. Chart.js)."
+                              class: "text-xs text-muted"
+
+    - label: Questions
+      slug: questions
+      content:
+        - id: session-questions-row
+          primary:
+            - id: session-questions-col
+              widgets:
+                - type: fields-card
+                  id: session-questions
+                  title: "Questions"
+                  subtitle: "Session questions list + active question details (override)."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Session questions track + active question panel will be provided via override."
+                              class: "text-xs text-muted"
+
+    - label: Categories
+      slug: categories
+      content:
+        - id: session-categories-row
+          primary:
+            - id: session-categories-col
+              widgets:
+                - type: fields-card
+                  id: session-categories
+                  title: "Session Categories"
+                  subtitle: "Derived category performance (override)."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Category charts and lists will be provided via override (SessionCategoryRecord + qt labels)."
+                              class: "text-xs text-muted"
+
+    - label: Attempts
+      slug: attempts
+      content:
+        - id: session-attempts-row
+          primary:
+            - id: session-attempts-col
+              widgets:
+                - type: fields-card
+                  id: session-attempts
+                  title: "Attempts"
+                  subtitle: "Question attempts stream (override)."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Attempt list + filters will be provided via override."
+                              class: "text-xs text-muted"
+
+    - label: Timeline
+      slug: timeline
+      content:
+        - id: session-timeline-row
+          primary:
+            - id: session-timeline-col
+              widgets:
+                - type: fields-card
+                  id: session-timeline
+                  title: "Timeline"
+                  subtitle: "Session event log (override)."
+                  save: false
+                  content:
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Session event timeline (slog + se) will be provided via override."
+                              class: "text-xs text-muted"
+
+overview:
+  type: typesense
+  table:
+    columns: [title, mode, state, dateCreated, dateLastActive, qTotal, u]
+  typesense:
+    queryBy: [title, mode, state]
+    sortableFields: [dateCreated, dateLastActive, qTotal]
+    defaultSortingField: dateCreated

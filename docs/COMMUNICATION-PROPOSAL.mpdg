@@ -1,0 +1,122 @@
+# Communication Portal — MPDG Proposal (draft)
+# Notes:
+# - Mirrors the earlier CommunicationThread/Message structure but updates labels to "public / dashboard / session".
+# - Keeps thread-level denormalized fields for fast Typesense list queries.
+# - Messages live at the same level as threads (linked via record<commThread>).
+# - Taxonomy table is optional; category/subcategory can remain static in UI for MVP.
+
+CommunicationThread, commThread | Unified communication thread for admin inbox {
+  id: default,
+  subject!: "",
+  category!: "general", <"general" | "help" | "question-feedback">       # topic group
+  subcategory!: "other",
+  tags: [],
+  sourceChannel!: "public", <"public" | "dashboard" | "session">,
+  sourceInstance!: "",
+  sourceContext?: {
+    questionRid: "", <record<q>>
+    moduleRid: "",
+    sessionRid: "", <record<s>>
+    examRid: "", <record<exam>>
+    orderRid: "",
+    url: ""
+  },
+  contactProfile!: {
+    name: "",
+    email: "",
+    phoneNumber: "",
+    userRid: "", <record<u>>
+    instanceUserRid: ""
+  },
+  status!: "new", <"new" | "open" | "pending" | "closed" | "archived">,
+  priority: "normal", <"low" | "normal" | "high">,
+  assignedAdmin?: null, <record<u>>,
+  unreadAdminCount!: 0,
+  firstMessage?: null, <record<commMessage>>,
+  lastMessage?: null, <record<commMessage>>,
+  messageIds!: [],
+  createdAt!: time::now(), <datetime>,
+  updatedAt!: time::now(), <datetime>,
+  lastMessageAt!: time::now(), <datetime>
+} [
+  crud,
+  router,
+  views:
+    AdminList[id, subject, category, subcategory, tags, status, priority, sourceChannel, sourceInstance, contactProfile, unreadAdminCount, lastMessageAt, createdAt, lastMessage]
+    AdminSingle[*]
+    Typesense::fn[
+      id, subject, category, subcategory, tags, status, priority, sourceChannel, sourceInstance,
+      unreadAdminCount, lastMessageAt, createdAt
+    ](
+      preview: (select value body from only $this.lastMessage),
+      contact_name: $this.contactProfile.name,
+      contact_email: $this.contactProfile.email,
+      source_channel: $this.sourceChannel,
+      source_instance: $this.sourceInstance,
+      unread_admin_count: $this.unreadAdminCount,
+      last_message_at: time::unix($this.lastMessageAt),
+      created_at: time::unix($this.createdAt)
+    )
+  typesense:
+    communication::fn[id, subject, category, subcategory, tags, status, priority](
+      id: <RID>
+      preview: (select value body from only $this.lastMessage), <optional>
+      contact_name: $this.contactProfile.name, <optional>
+      contact_email: $this.contactProfile.email, <optional>
+      source_channel: $this.sourceChannel, <facet>
+      source_instance: $this.sourceInstance, <facet>
+      unread_admin_count: $this.unreadAdminCount
+      last_message_at: time::unix($this.lastMessageAt)
+      created_at: time::unix($this.createdAt)
+      tags: $tags, <array<string>> <facet>
+      category: $category, <facet>
+      subcategory: $subcategory, <facet>
+      status: $status, <facet>
+      priority: $priority, <facet>
+    ) {
+      defaultSortingField: last_message_at,
+      queryBy: ["subject", "preview", "contact_name", "contact_email", "subcategory", "category"],
+      queryByWeights: [5, 3, 2, 2, 1, 1],
+    }
+] () {}
+
+CommunicationMessage, commMessage | Message inside a communication thread {
+  id: default,
+  thread!: "", <record<commThread>>,
+  direction!: "inbound", <"inbound" | "outbound" | "system">,
+  authorProfile!: {
+    name: "",
+    email: "",
+    role: "user", <"user" | "admin" | "system">,
+    userRid: "", <record<u>>
+  },
+  body!: "",
+  richBody?: {},
+  tags: [],
+  createdAt!: time::now(), <datetime>,
+  readAt?: null, <datetime>
+} [
+  crud,
+  router,
+  views:
+    Admin[*]
+] () {}
+
+# Optional: taxonomy table for static environment/category labels.
+# If we keep categories hard-coded in UI for MVP, we can omit this.
+CommunicationTaxonomy, commTaxonomy | Communication taxonomy for environments and subcategories {
+  id: $key,
+  key!: "" unique
+  label!: "",
+  type!: "subcategory", <"environment" | "category" | "subcategory">,
+  category: "", <"general" | "help" | "question-feedback">,
+  sourceChannel: "", <"public" | "dashboard" | "session">,
+  parentKey: "",
+  order: 0,
+  active!: true,
+} [
+  crud,
+  router,
+  views:
+    Admin[*]
+] () {}

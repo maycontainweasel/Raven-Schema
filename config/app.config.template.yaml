@@ -1,0 +1,34 @@
+version: 0.1
+
+project:
+  name: "{{PROJECT_NAME}}"
+  description: "{{PROJECT_DESCRIPTION}}"
+
+environment:
+  defaultDatabase: test
+  migrationTargets:
+    - test
+
+features:
+  schemaMode: schemaless
+  autoApplyMigrations: false
+  emitDocumentation: true
+
+databases:
+  test:
+    active: true
+    url: "{{DATABASE_URL}}"
+    namespace: "{{DATABASE_NAMESPACE}}"
+    database: "{{DATABASE_NAME}}"
+    username: "{{DATABASE_USER}}"
+    password: "{{DATABASE_PASSWORD}}"
+    allowScripting: true
+
+paths:
+  migrations: ./config/specs
+  surrealOutput: ./surreal/generated
+  docsOutput: ./docs/generated
+  modules: ./config/bootstrap/modules
+  overrides:
+    functions: ./config/overrides/functions
+  projects: []

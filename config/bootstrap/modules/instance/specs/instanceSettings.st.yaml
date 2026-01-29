@@ -1,0 +1,83 @@
+version: 1
+kind: table
+name: InstanceSettings
+primary: false
+tableType: subsingle
+description: Instance settings configuration
+tags: []
+
+table:
+  model: "instanceSettings"
+  type: "NORMAL"
+  drop: false
+  schemaMode: schemaless
+  permissions: full
+
+id:
+  type: string
+  structure: instanceSettings:{PARENT_ID}
+  exportType: true
+  exportName: __NAME__ID
+
+structure:
+  type: parent
+  parentModel: instance
+
+fields:
+  - currencies:
+      type: array
+      items:
+        type: string
+      required: false
+      default: []
+  - defaultCurrency:
+      type: string
+      required: false
+      default: ''
+
+edges:
+  has: []
+  belongs:
+    - table: InstanceSettings
+      in: instance
+      out: instanceSettings
+
+post:
+  enabled: false  
+
+views: []
+
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: rid
+        type: record<instance>
+      - name: payload
+        type: object
+
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record<instance>
+      - name: payload
+        type: object
+
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record<instance>
+
+
+router:
+  parent: instance
+  name: settings
+  endpoints:
+    - update:
+        target: crud
+        value: update

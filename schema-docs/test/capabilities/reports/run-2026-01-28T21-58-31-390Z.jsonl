@@ -1,0 +1,15 @@
+{"time":"2026-01-28T21:58:31.391Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T21:58:31.428Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T21:58:31.442Z","message":"Cleanup | done"}
+{"time":"2026-01-28T21:58:31.445Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T21:58:31.452Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T21:58:31.454Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T21:58:31.467Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T21:58:31.540Z","message":"fn::createQuestion | payload","data":{"qid":665527,"question":"[schema-test] What is QA question er4gp6?","instances":["mpd"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj er4gp6","testobjectdarray":["opt-er4gp6"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested er4gp6","testobjectobjectarray":["nest-er4gp6"]}}}}
+{"time":"2026-01-28T21:58:31.391Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T21:58:31.419Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T21:58:31.430Z","message":"Cleanup | done"}
+{"time":"2026-01-28T21:58:31.435Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T21:58:31.438Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T21:58:31.441Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T21:58:31.507Z","message":"fn::createUser | payload","data":{"email":"schema-test-42cidy@example.com","password":"Pass-42cidy","firstName":"SchemaTest 42cidy","surname":"User 42cidy","instances":["mpd"],"role":"qa-qfu5nt"}}

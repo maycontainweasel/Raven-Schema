@@ -1,0 +1,34 @@
+{
+  "appName": "docs",
+  "aliases": {
+    "@schema/request-schema": "./modules/schema-kit/runtime/generated/request-schema.ts",
+    "@schema": "./modules/schema-kit/runtime",
+    "@schema/types": "./app/types/schema/generated",
+    "@schema/typesense/collections": "./modules/schema-kit/runtime/generated/typesense/collections.ts",
+    "@schema/db": "./modules/schema-kit/runtime/generated/databases.ts",
+    "@schema/models": "./modules/schema-kit/runtime/generated/models.ts"
+  },
+  "validation": {
+    "strict": true
+  },
+  "features": {
+    "typesense": true,
+    "trpcClient": true,
+    "trpcServer": true,
+    "sentry": {
+      "enabled": false,
+      "client": false,
+      "server": false,
+      "sourceMaps": false
+    },
+    "redis": {
+      "enabled": false
+    },
+    "surrealdb": {
+      "enabled": true
+    },
+    "auth": {
+      "enabled": false
+    }
+  }
+}

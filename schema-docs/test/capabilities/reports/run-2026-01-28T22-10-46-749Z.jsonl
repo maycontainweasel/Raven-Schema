@@ -1,0 +1,23 @@
+{"time":"2026-01-28T22:10:46.749Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:10:46.773Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:10:46.794Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:10:46.797Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:10:46.800Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T22:10:46.803Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:10:46.805Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T22:10:46.848Z","message":"fn::createQuestion | payload","data":{"qid":975228,"question":"[schema-test] What is QA question 2r7haz?","instances":["mpd"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj 2r7haz","testobjectdarray":["opt-2r7haz"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested 2r7haz","testobjectobjectarray":["nest-2r7haz"]}}}}
+{"time":"2026-01-28T22:10:46.749Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:10:46.772Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:10:46.794Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:10:46.804Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:10:46.807Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:10:46.809Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T22:10:46.811Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T22:10:46.815Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T22:10:46.817Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T22:10:46.819Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T22:10:46.821Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:10:46.830Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:10:46.831Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:10:46.835Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:10:46.858Z","message":"Create Question","data":{"qid":743573,"question":"[schema-test] What is subtable question 4o0qqw?","instances":["mpd"]}}

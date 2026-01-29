@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* Tailwind v4 content sources (layer-aware) */
+@source "../../**/*.{vue,js,ts,tsx}";
+@source "../../../../app/**/*.{vue,js,ts,tsx}";
+@source "../../../../layers/**/*.{vue,js,ts,tsx}";
+
+@theme {
+  --breakpoint-m: 320px;
+  --breakpoint-mm: 380px;
+  --breakpoint-mmx: 381px;
+  --breakpoint-ml: 480px;
+  --breakpoint-mlx: 481px;
+  --breakpoint-txs: 550px;
+  --breakpoint-ts: 600px;
+  --breakpoint-t: 767px;
+  --breakpoint-tx: 768px;
+  --breakpoint-txl: 800px;
+  --breakpoint-tm: 991px;
+  --breakpoint-tmx: 992px;
+  --breakpoint-tl: 1024px;
+  --breakpoint-ds: 1024px;
+  --breakpoint-d: 1200px;
+  --breakpoint-dm: 1366px;
+  --breakpoint-dmx: 1440px;
+  --breakpoint-dmxx: 1441px;
+  --breakpoint-dml: 1600px;
+  --breakpoint-dmlx: 1750px;
+  --breakpoint-dl: 1900px;
+  --breakpoint-dxl: 2560px;
+  --breakpoint-dxxl: 3840px;
+}
+
+
+@layer base {
+  body {
+    font-family: "Space Grotesk", "SF Pro Text", "Segoe UI", sans-serif;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--bc) / 0.35) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--bc) / 0.25);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--bc) / 0.4);
+  }
+}

@@ -1,0 +1,381 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MPD Graph DSL",
+  "scopeName": "source.mpd-graph-dsl",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#tableHeader" },
+    { "include": "#fieldReference" },
+    { "include": "#tableFieldsBlock" },
+    { "include": "#capabilitiesBlock" },
+    { "include": "#connectionsBlock" },
+    { "include": "#edgeLine" },
+    { "include": "#subtableHeader" },
+    { "include": "#angleTag" },
+    { "include": "#objectLiteral" },
+    { "include": "#literals" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.graph-dsl",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.line.double-slash.graph-dsl",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "tableHeader": {
+      "patterns": [
+        {
+          "name": "meta.header.table.mpdg",
+          "match": "^\\s*(\\*?[A-Za-z][A-Za-z0-9_\\-]*)\\s*,\\s*([A-Za-z][A-Za-z0-9_\\-]*)(?:\\s*\\|\\s*([^\\{\\[\\(]+))?\\s*$",
+          "captures": {
+            "1": { "name": "entity.name.type.table.mpdg" },
+            "2": { "name": "entity.name.tag.model.mpdg" },
+            "3": { "name": "string.unquoted.description.mpdg" }
+          }
+        }
+      ]
+    },
+    "tableFieldsBlock": {
+      "patterns": [
+        {
+          "name": "meta.block.fields.mpdg",
+          "begin": "^\\s*(\\*?[A-Za-z][A-Za-z0-9_\\-]*)\\s*,\\s*([A-Za-z][A-Za-z0-9_\\-]*)\\s*(?:\\|\\s*([^\\{\\[]+?))?\\s*(\\{)\\s*$",
+          "beginCaptures": {
+            "1": { "name": "entity.name.type.table.mpdg" },
+            "2": { "name": "entity.name.tag.model.mpdg" },
+            "3": { "name": "string.unquoted.description.mpdg" },
+            "4": { "name": "punctuation.section.fields.begin.mpdg" }
+          },
+          "end": "^\\s*(\\})(?=\\s*(?:\\[|\\(|\\{|$))",
+          "endCaptures": {
+            "1": { "name": "punctuation.section.fields.end.mpdg" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#fieldKey" },
+            { "include": "#fieldReference" },
+            { "include": "#angleTag" },
+            { "include": "#objectLiteral" },
+            { "include": "#literals" },
+            { "include": "#operators" }
+          ]
+        }
+      ]
+    },
+    "subtableHeader": {
+      "patterns": [
+        {
+          "name": "meta.header.table.mpdg",
+          "match": "^\\s*(\\*?[A-Za-z][A-Za-z0-9_\\-]*)\\s*,\\s*([A-Za-z][A-Za-z0-9_\\-]*)(?:\\s*\\|\\s*([^\\{\\[]+))?\\s*$",
+          "captures": {
+            "1": { "name": "entity.name.type.table.mpdg" },
+            "2": { "name": "entity.name.tag.model.mpdg" },
+            "3": { "name": "string.unquoted.description.mpdg" }
+          }
+        }
+      ]
+    },
+    "capabilitiesBlock": {
+      "patterns": [
+        {
+          "name": "meta.block.capabilities.mpdg",
+          "begin": "\\[",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.capabilities.begin.mpdg" }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.capabilities.end.mpdg" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#capabilityKeywords" },
+            { "include": "#routerInline" },
+            { "include": "#modsInline" },
+            { "include": "#viewsInline" },
+            { "include": "#typesenseInline" },
+            { "include": "#taxonomiesInline" },
+            { "include": "#literals" },
+            { "include": "#operators" }
+          ]
+        }
+      ]
+    },
+    "connectionsBlock": {
+      "patterns": [
+        {
+          "name": "meta.block.connections.mpdg",
+          "begin": "\\(",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.connections.begin.mpdg" }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.connections.end.mpdg" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#tableFieldsBlock" },
+            { "include": "#subtableHeader" },
+            { "include": "#edgeLine" },
+            { "include": "#fieldReference" },
+            { "include": "#angleTag" },
+            { "include": "#objectLiteral" },
+            { "include": "#capabilitiesBlock" },
+            { "include": "#literals" },
+            { "include": "#operators" }
+          ]
+        }
+      ]
+    },
+    "edgeLine": {
+      "patterns": [
+        {
+          "name": "meta.edge.mpdg",
+          "match": "(<-|->)([A-Za-z][A-Za-z0-9_\\-]*)(<-|->)([A-Za-z][A-Za-z0-9_\\-]*)",
+          "captures": {
+            "1": { "name": "keyword.operator.arrow.mpdg" },
+            "2": { "name": "entity.name.function.edge.mpdg" },
+            "3": { "name": "keyword.operator.arrow.mpdg" },
+            "4": { "name": "entity.name.tag.target.mpdg" }
+          }
+        }
+      ]
+    },
+    "fieldKey": {
+      "patterns": [
+        {
+          "name": "meta.field.key.id.mpdg",
+          "match": "^\\s*(id)(\\s*[!?])?\\s*:",
+          "captures": {
+            "1": { "name": "keyword.other.id.mpdg" },
+            "2": { "name": "keyword.operator.requirement.mpdg" }
+          }
+        },
+        {
+          "name": "meta.field.key.mpdg",
+          "match": "^\\s*([A-Za-z_][A-Za-z0-9_\\-]*)(\\s*[!?])?\\s*:",
+          "captures": {
+            "1": { "name": "variable.other.property.field.mpdg" },
+            "2": { "name": "keyword.operator.requirement.mpdg" }
+          }
+        },
+        {
+          "name": "variable.other.property.object.mpdg",
+          "match": "([A-Za-z_][A-Za-z0-9_\\-]*)\\s*:",
+          "captures": {
+            "1": { "name": "variable.other.property.object.mpdg" }
+          }
+        }
+      ]
+    },
+    "angleTag": {
+      "patterns": [
+        {
+          "name": "meta.tag.angle.mpdg",
+          "begin": "<",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.tag.begin.mpdg" }
+          },
+          "end": ">",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.tag.end.mpdg" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#angleTag" },
+            { "include": "#objectLiteral" },
+            { "include": "#fieldReference" },
+            { "include": "#literals" },
+            { "include": "#operators" },
+            {
+              "name": "keyword.operator.assignment.mpdg",
+              "match": ":"
+            },
+            {
+              "name": "punctuation.separator.comma.mpdg",
+              "match": ","
+            },
+            {
+              "name": "support.type.program.mpdg",
+              "match": "\\b(record|datetime|email|password|uniqueId|md5|permalink|assign|fetch|boolean|string|number|object|array|enum)\\b"
+            },
+            {
+              "name": "variable.other.tag.identifier.mpdg",
+              "match": "[A-Za-z_][A-Za-z0-9_\\-]*"
+            }
+          ]
+        }
+      ]
+    },
+    "objectLiteral": {
+      "patterns": [
+        {
+          "name": "meta.block.object.mpdg",
+          "begin": "\\{",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.object.begin.mpdg" }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.object.end.mpdg" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#fieldKey" },
+            { "include": "#fieldReference" },
+            { "include": "#angleTag" },
+            { "include": "#objectLiteral" },
+            { "include": "#literals" },
+            { "include": "#operators" }
+          ]
+        }
+      ]
+    },
+    "fieldReference": {
+      "patterns": [
+        {
+          "name": "variable.other.property.fieldref.mpdg",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "viewsInline": {
+      "patterns": [
+        {
+          "name": "meta.views.mpdg",
+          "match": "\\b(views)\\s*:",
+          "captures": { "1": { "name": "keyword.other.views.mpdg" } }
+        },
+        {
+          "name": "entity.name.type.view.mpdg",
+          "match": "\\b([A-Z][A-Za-z0-9_]*)\\s*(?=\\[|::)"
+        },
+        {
+          "name": "support.function.program.mpdg",
+          "match": "\\b\\*?ST\\|[A-Za-z_][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "support.function.program.mpdg",
+          "match": "\\bRID\\|[A-Za-z_][A-Za-z0-9_]*(?:\\([^\\)]*\\))?\\b"
+        },
+        {
+          "name": "meta.edge.mpdg",
+          "match": "(<-|->)([A-Za-z][A-Za-z0-9_\\-]*)(<-|->)([A-Za-z][A-Za-z0-9_\\-]*)"
+        },
+        {
+          "name": "meta.tag.fetch.mpdg",
+          "match": "<\\s*fetch\\s*>"
+        },
+        {
+          "name": "variable.other.property.fieldref.mpdg",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "support.constant.view.mpdg",
+          "match": "\\b(admin|public|typesense|record|adminlist|adminsingle|session)\\b"
+        }
+      ]
+    },
+    "typesenseInline": {
+      "patterns": [
+        {
+          "name": "meta.typesense.mpdg",
+          "match": "\\b(typesense)\\s*:",
+          "captures": { "1": { "name": "keyword.other.typesense.mpdg" } }
+        }
+      ]
+    },
+    "taxonomiesInline": {
+      "patterns": [
+        {
+          "name": "meta.taxonomies.mpdg",
+          "match": "\\b(taxonomies)\\s*:",
+          "captures": { "1": { "name": "keyword.other.taxonomies.mpdg" } }
+        },
+        {
+          "name": "entity.name.type.taxonomy.mpdg",
+          "match": "\\b([A-Za-z][A-Za-z0-9_\\-]*\\/[^,\\s]+)\\b"
+        }
+      ]
+    },
+    "modsInline": {
+      "patterns": [
+        {
+          "name": "meta.mods.mpdg",
+          "match": "\\b(mods|modules)\\s*:",
+          "captures": { "1": { "name": "keyword.other.mods.mpdg" } }
+        },
+        {
+          "name": "support.constant.module.mpdg",
+          "match": "\\b(instance|post|refreshViews)\\b"
+        }
+      ]
+    },
+    "routerInline": {
+      "patterns": [
+        {
+          "name": "meta.router.mpdg",
+          "match": "\\b(router)\\s*:",
+          "captures": { "1": { "name": "keyword.other.router.mpdg" } }
+        },
+        {
+          "name": "support.function.router.mpdg",
+          "match": "\\b(create|update|delete|resource|typesense|views)\\b"
+        }
+      ]
+    },
+    "capabilityKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.capability.mpdg",
+          "match": "\\b(crud|router|views|typesense|taxonomies|events|indexes)\\b"
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.mpdg",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.numeric.mpdg",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        },
+        {
+          "name": "string.quoted.double.mpdg",
+          "begin": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.mpdg" }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.mpdg" }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.mpdg",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.pipe.mpdg", "match": "\\|" },
+        { "name": "keyword.operator.arrow.mpdg", "match": "(<-|->)" },
+        { "name": "punctuation.separator.comma.mpdg", "match": "," },
+        { "name": "punctuation.terminator.statement.mpdg", "match": ";" }
+      ]
+    }
+  }
+}

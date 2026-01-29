@@ -1,0 +1,15 @@
+{"time":"2026-01-28T22:50:54.832Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:50:54.943Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:50:54.965Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:50:54.967Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:50:54.968Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:50:54.972Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T22:50:54.973Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T22:50:54.976Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T22:50:54.977Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T22:50:54.979Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T22:50:54.980Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:50:54.981Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:50:54.982Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:50:54.983Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:50:55.035Z","message":"Create Question","data":{"qid":469745,"question":"[schema-test] What is subtable question ltsnte?","instances":["local"]}}

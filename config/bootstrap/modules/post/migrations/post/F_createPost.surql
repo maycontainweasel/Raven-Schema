@@ -1,0 +1,40 @@
+DEFINE FUNCTION OVERWRITE fn::createPost($payload: object) {
+
+	if !$payload {
+		throw "createPost | payload is required";
+	};
+
+	if !$payload.id {
+		throw "createPost | requires id";
+	};
+
+	let $defaultData = {
+		contentTable: record::tb($payload.id),
+		contentId: record::id($payload.id),
+		createdAt: time::now(),
+		updatedAt: time::now(),
+		publishedAt: null,
+		title: $payload.title ?? record::id($payload.id),
+		permalink: if($payload.title) {
+      string::slug(<string> $payload.title)
+  } else {
+      string::slug(<string> record::id($payload.id))
+  },
+		status: "draft",
+	};
+
+	let $payload = fn::objectAssign($defaultData, $payload);
+
+	let $rid = fn::PID($payload.id);
+	let $payload = fn::objectRemove($payload, ["id"]);
+	let $record = upsert $rid content $payload;
+	let $record = if type::is_array($record) { array::first($record) } else { $record };
+
+	return if $record {
+		return $record;
+	} else {
+		throw "createPost | failed to create p";
+	}
+
+};
+

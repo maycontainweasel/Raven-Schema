@@ -1,0 +1,77 @@
+version: 1
+kind: table
+name: QuestionOptionRecord
+primary: false
+tableType: subsingle
+description: Question option performance stats
+table:
+  model: qor
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+structure:
+  type: parent
+  parentModel: qOption
+id:
+  type: string
+  structure: stringID<q, qOption>
+  exportType: true
+  exportName: QuestionOptionRecordId
+fields:
+  - q:
+      type: record<q>
+      required: true
+      default: ""
+      assign: true
+  - qOption:
+      type: record<qOption>
+      required: true
+      default: ""
+      assign: true
+  - attempts:
+      type: number
+      default: 0
+  - noCorrect:
+      type: number
+      default: 0
+  - noIncorrect:
+      type: number
+      default: 0
+  - percCorrect:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: QuestionOptionRecord
+      in: qOption
+      out: qor
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: questionOptionRecord
+  parent: qOption
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true

@@ -1,0 +1,168 @@
+version: 1
+kind: ui
+name: Testimonial
+model: testimonial
+table: testimonial
+namespace: testimonials
+
+route:
+  base: /testimonials
+  single: /testimonials/<id>
+
+meta:
+  title: "Testimonials"
+  subtitle: "Manage customer testimonials"
+
+dialogs:
+  create:
+    template: auto
+    required:
+      - name
+      - quote
+      - instances
+    fields:
+      - key: name
+        label: Name
+        type: text
+        placeholder: Person name
+        required: true
+      - key: role
+        label: Role
+        type: text
+        placeholder: e.g. Student
+      - key: organisation
+        label: Organisation
+        type: text
+        placeholder: Optional organisation
+      - key: quote
+        label: Quote
+        type: textarea
+        rows: 4
+        placeholder: Testimonial quote
+        required: true
+      - key: avatar
+        label: Avatar URL
+        type: text
+        placeholder: https://
+      - key: rating
+        label: Rating
+        type: number
+        placeholder: 0-5
+      - key: order
+        label: Order
+        type: number
+        placeholder: 0
+      - key: active
+        label: Active
+        type: select
+        options:
+          - label: Yes
+            value: true
+          - label: No
+            value: false
+      - key: instances
+        label: Instances
+        type: instances
+        placeholder: Select instances
+        multiple: true
+        required: true
+    defaults:
+      instances:
+        - $rootInstance
+      active: true
+  delete:
+    template: auto
+
+overview:
+  type: typesense
+  meta:
+    title: "Testimonials Overview"
+    subtitle: "Browse and update testimonials."
+  actions:
+    - create
+    - refresh
+  table:
+    columns:
+      - name
+      - organisation
+      - rating
+      - active
+      - instances
+  typesense:
+    pagination: true
+    refreshMode: upsert
+    queryBy:
+      - name
+      - quote
+      - organisation
+    sortableFields:
+      - order
+      - name
+    filters:
+      - instances
+      - active
+
+single:
+  layout: navigation-primary
+  store:
+    key: testimonial
+    resolver: id
+  targets:
+    base:
+      model: testimonial
+      endpoint: testimonial.update
+  header:
+    label: "Testimonial"
+  tabs:
+    - label: Details
+      slug: details
+      content:
+        - id: testimonial-details-row
+          primary:
+            - id: testimonial-details-col
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: testimonial-details
+                  title: "Testimonial Details"
+                  subtitle: "Quote, author, and visibility."
+                  content:
+                    - columns:
+                        - items:
+                            - field: name
+                              type: text
+                              label: "Name"
+                            - field: role
+                              type: text
+                              label: "Role"
+                            - field: organisation
+                              type: text
+                              label: "Organisation"
+                            - field: rating
+                              type: number
+                              label: "Rating"
+                            - field: order
+                              type: number
+                              label: "Order"
+                            - field: active
+                              type: select
+                              label: "Active"
+                              options:
+                                - label: Yes
+                                  value: true
+                                - label: No
+                                  value: false
+                        - items:
+                            - field: quote
+                              type: textarea
+                              rows: 6
+                              label: "Quote"
+                            - field: avatar
+                              type: text
+                              label: "Avatar URL"
+                    - columns:
+                        - items:
+                            - field: instances
+                              type: instances
+                              label: "Instances"
+                              multiple: true

@@ -1,0 +1,119 @@
+version: 1
+kind: table
+name: Post
+primary: true
+tableType: primary
+description: A Post is the content connected to a record for use in content management systems.
+tags:
+  - core
+  - post
+
+table:
+  model: "p"
+  type: "NORMAL"
+  drop: false
+  schemaMode: schemaless
+  permissions: full
+
+id:
+  exportType: true
+  type: string
+  exportName: __NAME__ID
+  structure: fn::PID($id)
+
+# Fields describe the full exam payload stored on the primary table.
+fields:
+  - contentTable:
+      type: string
+      required: false
+      default: record::tb($id)
+  - contentId:
+      type: string
+      required: false
+      default: record::id($id)
+  - createdAt:
+      type: datetime
+      required: false
+      default: time::now()
+  - updatedAt:
+      type: datetime
+      required: false
+      default: time::now()
+  - publishedAt:
+      type: datetimee
+      required: false
+      default: null
+  - title:
+      type: string
+      required: false
+      default: |-
+        {
+          $title ?? record::id($id)
+        }
+  - permalink:
+      type: string
+      required: false
+      default: |-
+        {
+          if($title) {
+              string::slug(<string> $title)
+          } else {
+              string::slug(<string> record::id($id))
+          }
+        }
+  - status:
+      type: enum<"draft" | "publish">
+      required: false
+      default: "draft"
+
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: id
+
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+    options:
+      allowMissing: true
+      validations:
+        required:
+          - rid
+    # hooks:
+    #   postProcess:
+    #     - "fn::refreshRecordViews($rid);"
+
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+    options:
+      allowMissing: true
+      validations:
+        required:
+          - rid 
+        
+edges:
+  has: [
+    {
+      table: "Post",
+      in: "p",
+      out: "ANY",
+    },
+  ]
+  belongs: []
+
+delete:
+  enabled: true

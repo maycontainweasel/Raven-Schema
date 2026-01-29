@@ -1,0 +1,89 @@
+version: 1
+kind: table
+name: InstanceSettings
+primary: false
+tableType: subsingle
+description: Instance settings configuration
+table:
+  model: instanceSettings
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+structure:
+  type: parent
+  parentModel: instance
+id:
+  type: string
+  exportType: true
+  exportName: InstanceSettingsId
+fields:
+  - currencies:
+      type: array<string>
+      default: []
+  - currencyCatalog:
+      type: array<object>
+      default: []
+  - defaultCurrency:
+      type: string
+      default: ""
+  - flag:
+      type: string
+      default: ""
+  - description:
+      type: string
+      default: ""
+  - domains:
+      type: array<string>
+      default: []
+  - primaryDomain:
+      type: string
+      default: ""
+  - locale:
+      type: string
+      default: en-GB
+  - timezone:
+      type: string
+      default: Europe/London
+  - currency:
+      type: string
+      default: GBP
+  - pricingOptions:
+      type: array<number>
+      default: "[1, 2, 3, 6]"
+  - content:
+      type: object
+edges:
+  has: []
+  belongs:
+    - table: InstanceSettings
+      in: instance
+      out: instanceSettings
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: instanceSettings
+  parent: instance
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true

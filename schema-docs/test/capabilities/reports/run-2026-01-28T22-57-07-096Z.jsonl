@@ -1,0 +1,17 @@
+{"time":"2026-01-28T22:57:07.098Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:57:07.135Z","message":"initTaxonomies | ok","data":{"result":true}}
+{"time":"2026-01-28T22:57:07.135Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:57:07.151Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:57:07.158Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:57:07.161Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T22:57:07.166Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:57:07.098Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:57:07.144Z","message":"initTaxonomies | ok","data":{"result":true}}
+{"time":"2026-01-28T22:57:07.144Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:57:07.159Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:57:07.165Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:57:07.168Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T22:57:07.174Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:57:07.179Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T22:57:07.213Z","message":"fn::createQuestion | payload","data":{"qid":358706,"question":"[schema-test] What is QA question k2sw6o?","instances":["local"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj k2sw6o","testobjectdarray":["opt-k2sw6o"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested k2sw6o","testobjectobjectarray":["nest-k2sw6o"]}}}}
+{"time":"2026-01-28T22:57:07.217Z","message":"DB function error","data":{"fn":"fn::createQuestion","args":{"payload":{"qid":358706,"question":"[schema-test] What is QA question k2sw6o?","instances":["local"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj k2sw6o","testobjectdarray":["opt-k2sw6o"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested k2sw6o","testobjectobjectarray":["nest-k2sw6o"]}}}},"error":"An error occurred: createQuestion | failed to create q"}}

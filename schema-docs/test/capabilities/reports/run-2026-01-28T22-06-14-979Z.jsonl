@@ -1,0 +1,22 @@
+{"time":"2026-01-28T22:06:14.980Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:06:15.006Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:06:15.016Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:06:15.162Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:06:15.316Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T22:06:15.318Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:06:15.332Z","message":"fn::createUser | payload","data":{"email":"schema-test-fgawy4@example.com","password":"Pass-fgawy4","firstName":"SchemaTest fgawy4","surname":"User fgawy4","instances":["mpd"],"role":"qa-5wddxo"}}
+{"time":"2026-01-28T22:06:14.981Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:06:15.006Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:06:15.017Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:06:15.049Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:06:15.104Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:06:15.316Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T22:06:15.323Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T22:06:15.330Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T22:06:15.334Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T22:06:15.364Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T22:06:15.375Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:06:15.380Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:06:15.394Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:06:15.406Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:06:15.445Z","message":"Create Question","data":{"qid":505498,"question":"[schema-test] What is subtable question khpi1w?","instances":["mpd"]}}

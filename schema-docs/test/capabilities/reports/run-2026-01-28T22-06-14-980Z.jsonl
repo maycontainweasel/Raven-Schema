@@ -1,0 +1,8 @@
+{"time":"2026-01-28T22:06:14.981Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:06:15.012Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:06:15.104Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:06:15.166Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:06:15.302Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T22:06:15.323Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:06:15.325Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T22:06:15.419Z","message":"fn::createQuestion | payload","data":{"qid":828850,"question":"[schema-test] What is QA question 44th1f?","instances":["mpd"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj 44th1f","testobjectdarray":["opt-44th1f"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested 44th1f","testobjectobjectarray":["nest-44th1f"]}}}}

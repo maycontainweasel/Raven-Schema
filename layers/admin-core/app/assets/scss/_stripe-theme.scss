@@ -1,0 +1,53 @@
+/* app/assets/scss/_stripe-theme.scss
+   Raw baseline tokens (Stripe-like).
+*/
+
+:root {
+  /* Core surfaces */
+  --backgroundColor: #f6f9fc;
+  --cardBackground: #fff;
+  --subcardBackground: #f6f9fc;
+
+  --bg-gray-1: #F7F9FC;
+  --bg-gray-2: #F5F6F8;
+
+  // Removed this from the background
+  //background: radial-gradient(circle at top, rgba(59,130,246,0.16), transparent 60%), radial-gradient(circle at 20% 20%, rgba(14,165,233,0.12), transparent 55%)
+
+  /* Text */
+  --textColor: #425466;
+  --titleColor: #0a2540;
+  --annotationColor: #8c9eb1;
+  --disclaimerTextColor: #707f98;
+
+  /* Borders */
+  --cardBorderColor: #cbd6e0;
+  --cardBorderColorSoft: #e7ecf1;
+
+  /* Brand / links / buttons */
+  --accentColor: #635bff;
+  --linkColor: #635bff;
+  --linkHoverColor: #0a2540;
+
+  --buttonColor: #635bff;
+  --buttonHoverColor: #0a2540;
+  --buttonDisabledColor: #cfd7df;
+  --buttonDisabledOpacity: 0.7;
+
+  /* Inputs */
+  --inputBackground: #f6f9fc;
+  --inputTextColor: #0a2540;
+  --inputPlaceholderColor: #727f96;
+  --inputErrorAccentColor: #ff5996;
+
+  /* Radius */
+  --cardBorderRadius: 8px;
+
+  /* Shadows */
+  --cardShadowXSmall: 0 2px 5px -1px rgba(50,50,93,0.25), 0 1px 3px -1px rgba(0,0,0,0.3);
+  --cardShadowSmall: 0 6px 12px -2px rgba(50,50,93,0.25), 0 3px 7px -3px rgba(0,0,0,0.3);
+  --cardShadowMedium: 0 13px 27px -5px rgba(50,50,93,0.25), 0 8px 16px -8px rgba(0,0,0,0.3);
+
+  /* Focus ring */
+  --focusBoxShadow: 0 0 0 2px #4d90fe, inset 0 0 0 2px hsla(0,0%,100%,0.9);
+}

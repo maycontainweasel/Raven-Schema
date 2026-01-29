@@ -1,0 +1,364 @@
+version: 0.1
+
+project:
+  name: mpd-schema
+  description: Baseline configuration for the SurrealDB schema tooling workspace.
+
+tooling:
+  repoMode: turbo
+
+environment:
+  defaultDatabase: mpd
+  migrationTargets:
+    # - ca
+    - mpd
+
+features:
+  schemaMode: schemaless
+  autoApplyMigrations: false
+  emitDocumentation: true
+
+databases:
+
+  mpd:
+    active: true
+    url: http://127.0.0.1:7587
+    namespace: schema
+    database: mpd1
+    username: root
+    password: root
+    allowScripting: true
+    root: true
+  
+  # mpd2:
+  #   active: true
+  #   url: http://127.0.0.1:7587
+  #   namespace: schema
+  #   database: mpd1
+  #   username: root
+  #   password: root
+  #   allowScripting: true
+  #   root: true
+
+    
+paths:
+  migrations: ./config/specs
+  surrealOutput: ./surreal/generated
+  docsOutput: ./docs/generated
+  modules: ./config/bootstrap/modules
+  overrides:
+    functions: ./config/overrides/functions
+  projects:
+
+    - name: admin
+      nuxtProjectRoot: ../admin
+      active: true
+      layers:
+        - admin-core
+        - generated
+        - api-toolkit
+        - auth
+
+    - name: public
+      nuxtProjectRoot: ../public
+      active: true
+      layers:
+        # - api-toolkit
+        # - auth
+
+    - name: docs
+      nuxtProjectRoot: ./schema-docs
+      active: true
+      layers: 
+        - api-toolkit
+        - auth
+
+ui:
+  specsPath: ./config/ui
+  projects:
+    - admin
+
+trpc:
+  httpEndpoint: /api/trpc
+  generateTestPages: true
+  routerNamespace: admin
+  contextImport: '@schema/server/trpc/context'
+
+
+defaults:
+  schemaMode: schemaless
+  postRecordEnabled: true
+  bundlesEnabled: false # generate a bundle with all the assets
+
+events:
+  fileMode: table # split | table
+
+schemaKit:
+  # Set false to suppress module update logs
+  logModuleUpdates: true
+  features:
+    trpcClient: true
+    trpcServer: true
+    typesense: true
+    auth: false
+    surrealdb:
+      enabled: true
+    redis:
+      enabled: false
+    sentry:
+      enabled: false
+      client: false
+      server: false
+      sourceMaps: false
+  # Per-project overrides (optional)
+  projects:
+    - name: docs
+      features:
+        sentry:
+          enabled: false
+        redis:
+          enabled: false
+    - name: admin
+      features:
+        sentry:
+          enabled: false
+        redis:
+          enabled: false
+  module:
+    # copy: copy schema-kit into each app under /modules/schema-kit
+    # shared: point apps at a single shared module path
+    mode: force # copy
+    # auto: copy only when hash changes
+    # force: delete + copy every generate (debug-friendly)
+    # off: never copy during generate (manual sync only)
+    sync: force
+    # Source folder for copy mode (relative to passmed-schema root)
+    source: module
+    # Shared module path for shared mode (relative to passmed-schema root)
+    # sharedPath: packages/schema-kit
+
+  
+  #### Modes explained:
+
+  # - copy + force → deletes & recopies module into every target on every generate
+  # - copy + auto → copies only if hash changed (current default)
+  # - copy + off → no copying during generate (manual only)
+  # - shared → never copies, Nuxt config points to sharedPath
+
+    # - pnpm run schema-kit:sync
+
+layers:
+  source: ./layers
+  sync: force
+  defaults:
+    - auth
+  auth:
+    runtimeConfig:
+      sessionCookie: sid
+      sessionSecret: ""
+      cookieDomain: ""
+      sessionDuration: 604800 # seconds (7 days)
+      refreshInterval: 720000 # ms (12 minutes)
+      appPaths:
+        - /
+      cookie:
+        httpOnly: true
+        secure: true
+        sameSite: lax
+        path: /
+        maxAge: 604800
+        legacyCookieNames:
+          - token
+          - sessionId
+          - refreshToken
+          - surreal_access
+          - surreal_refresh
+      redirectOnFail: /login
+      redirectOnSuccess: /dashboard
+      guard:
+        enabled: true
+        refresh: true
+        protect:
+          - "*"
+        ignorePaths:
+          - /login
+          - /register
+        redirectOnFail: /login
+        redirectOnSuccess: /dashboard
+        redirectOnLogout: /
+        testPageEnabled: false
+        redirectAliases: {}
+    publicRuntimeConfig:
+      sessionCookie: sid
+      cookieDomain: ""
+
+databasesExport:
+  # Per-project database export (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/databases.ts
+
+modelsExport:
+  # Per-project models manifest (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/models.ts
+
+requestSchema:
+  output: ../../../packages/pmv2shared/trpc/request-schema.ts
+  # Per-project RequestSchema output (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/request-schema.ts
+  # instances: [pm, au, us]   # optional override list
+  includeInactive: false
+
+# Typesense (collection schema output)
+typesense:
+  enabled: true
+  # Minimum length for collection names (default: 3)
+  collectionMinLength: 3
+  output:
+    - ./config/typesense
+    - ../../../packages/pmv2shared/typesense
+  # Per-project Typesense output (bundled into each target app)
+  projectOutput: modules/schema-kit/runtime/generated/typesense
+  # Default Typesense settings. Override per table in graph.mpdg.
+  settings:
+    nestedFields: true
+    synonyms: false
+    searchAsYouType: false
+    perDocumentSynonyms: false
+    perDocumentSearchAsYouType: false
+
+
+
+graph:
+  input: ./config/graph.mpdg
+  output: graph.ts
+  mermaidOutput: graph.mmd
+  spec:
+    mode: live              # staging | live
+    stagingDir: ./config/specs_stage
+    liveDir: ./config/specs
+    conflictPolicy: overwrite       # skip | overwrite | only-new
+    pruneStale: true
+
+# Modules (explicit). Names correspond to folders under config/modules.
+modules:
+  - api
+  - post
+  - instance
+  - refreshViews
+  - taxonomies
+
+importFilters:
+  # Default import mode (true = only changed assets, false = import all).
+  onlyChanged: true
+  # Table selection (only used when you don’t pass --name)
+  tables:
+    # - exam
+    # - faq          # optional: limits schema:import / generate default set when no --name
+    # - 
+  # tablesExclude:
+  #   - faq
+
+  # Layer selection for schema:import (only used when you don’t pass --layers)
+  # layers:
+  #   include: [functions, events, views, indexes, edges]
+  #   exclude: [views]
+
+  # File-level include/exclude (per layer; match file base name without .surql)
+  # files:
+  #   include:
+  #     functions:
+  #       - F_createUser
+  #   exclude:
+  #     views:
+  #       - V_QuestionTypesense
+  #     functions:
+  #       - F_deletePost
+
+  # Cleanup rules (default should be include: "*" and optional excludes)
+  # cleanup:
+  #   views:
+  #     include: "*"
+  #     exclude:
+  #       - QuestionTypesense
+  #       - QuestionAdmin
+  #   events:
+  #     include: "*"
+  #     exclude:
+  #       - UserCreateSubTables
+  #   indexes:
+  #     include: "*"
+  #     exclude:
+  #       - ExamKey
+  bootstrap:
+    functions:     # optional list of bootstrap function files (relative to config/bootstrap/functions)
+      #- utility/objectAssign.surql
+    # functionsExclude:
+    #   - utility/objectAssign
+    modules:       # optional list of modules to import when no --modules flag
+      # - instance
+      # - post
+    # modulesExclude:
+    #   - post
+    seeds:         # optional list of database keys whose seeds should import
+      #- test
+    # seedsExclude:
+    #   - au
+
+
+# Module Defaults
+instance:
+  active: true
+  fields:
+    instances:
+      type: array<string>
+      default: |-
+        {
+          fn::defaultInstance({ returnArray: true })
+        }
+
+taxonomies:
+  taxonomies:
+    fields:
+      - key:
+          type: string
+          required: true
+      - label:
+          type: string
+          required: true
+      - description:
+          type: string
+          required: false
+      - hierarchical:
+          type: boolean
+          required: false
+          default: false
+      - permalink:
+          type: <permalink<<field:key>>>
+          required: false
+          assign: true
+  terms:
+    fields:
+      - key:
+          type: string
+          required: true
+      - label:
+          type: string
+          required: true
+      - description:
+          type: string
+          required: false
+      - parent:
+          type: record<term>
+          required: false
+          default: ""
+
+documentation:
+  documentation:
+    enabled: true
+    format: markdown
+    includeSurrealExamples: true
+    locations:
+      - ./docs/mpd-framework
+
+  schemaApp:
+    enabled: true
+    location: ./schema-docs

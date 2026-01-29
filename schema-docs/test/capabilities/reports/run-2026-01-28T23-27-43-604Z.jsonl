@@ -1,0 +1,34 @@
+{"time":"2026-01-28T23:27:43.604Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T23:27:43.708Z","message":"initTaxonomies | ok","data":{"result":true}}
+{"time":"2026-01-28T23:27:43.708Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T23:27:43.735Z","message":"Cleanup | done"}
+{"time":"2026-01-28T23:27:43.738Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T23:27:43.740Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T23:27:43.745Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T23:27:43.605Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T23:27:43.710Z","message":"initTaxonomies | ok","data":{"result":true}}
+{"time":"2026-01-28T23:27:43.710Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T23:27:43.737Z","message":"Cleanup | done"}
+{"time":"2026-01-28T23:27:43.752Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T23:27:43.758Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T23:27:43.768Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T23:27:43.771Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T23:27:43.886Z","message":"fn::createQuestion | payload","data":{"qid":842928,"question":"[schema-test] What is QA question livrf3?","instances":["mpd"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj livrf3","testobjectdarray":["opt-livrf3"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested livrf3","testobjectobjectarray":["nest-livrf3"]}}}}
+{"time":"2026-01-28T23:27:43.938Z","message":"DB function error","data":{"fn":"fn::createQuestion","args":{"payload":{"qid":842928,"question":"[schema-test] What is QA question livrf3?","instances":["mpd"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj livrf3","testobjectdarray":["opt-livrf3"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested livrf3","testobjectobjectarray":["nest-livrf3"]}}}},"error":"An error occurred: createQuestion | failed to create q"}}
+{"time":"2026-01-28T23:27:43.604Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T23:27:43.658Z","message":"initTaxonomies | ok","data":{"result":true}}
+{"time":"2026-01-28T23:27:43.658Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T23:27:43.666Z","message":"Cleanup | done"}
+{"time":"2026-01-28T23:27:43.670Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T23:27:43.672Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T23:27:43.677Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T23:27:43.685Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T23:27:43.702Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T23:27:43.734Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T23:27:43.771Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T23:27:43.824Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T23:27:43.825Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T23:27:43.826Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T23:27:43.848Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T23:27:43.960Z","message":"Create Question","data":{"qid":604946,"question":"[schema-test] What is subtable question 0oj01k?","instances":["mpd"]}}
+{"time":"2026-01-28T23:27:43.965Z","message":"DB function error","data":{"fn":"fn::createQuestion","args":{"payload":{"qid":604946,"question":"[schema-test] What is subtable question 0oj01k?","instances":["mpd"]}},"error":"An error occurred: createQuestion | failed to create q"}}

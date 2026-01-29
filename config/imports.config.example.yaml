@@ -1,0 +1,20 @@
+bootstrap:
+  functions:
+    defaultOnExisting: OVERWRITE # OVERWRITE | IF NOT EXISTS
+    directories:
+      - tables
+      - utility
+    files: [
+      # deleteRecord.surql
+      # utility/only.surql
+    ]
+  tables:
+    directories: []
+    files: []
+
+auto:
+  functions:
+    defaultOnExisting: OVERWRITE
+    directories:
+      - functions/tables
+    files: []

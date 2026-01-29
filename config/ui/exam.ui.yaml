@@ -1,0 +1,241 @@
+version: 1
+kind: ui
+name: Exam
+model: exam
+table: exam
+namespace: exams
+
+route:
+  base: /exams
+  single: /exams/<key>
+
+meta:
+  title: "Exams"
+  subtitle: "Manage exams and their metadata"
+
+dialogs:
+  create:
+    template: auto
+    required:
+      - key
+      - title
+      - qidIndex
+    fields:
+      - key: title
+        label: Title
+        type: text
+        placeholder: Exam title
+        required: true
+      - key: key
+        label: Key
+        type: text
+        placeholder: e.g. plab1
+        format: slug
+        autoFrom: title
+        required: true
+      - key: qidIndex
+        label: QID Index
+        type: number
+        placeholder: e.g. 100001
+        required: true
+      - key: instances
+        label: Instances
+        type: instances
+        placeholder: Select instances
+        multiple: true
+        message: "Leave blank to remain unallocated."
+    defaults:
+      exams: []
+  delete:
+    template: auto
+
+overview:
+  type: typesense
+  filters:
+    layout:
+      - id: exam-filters-primary
+        class: "flex flex-wrap items-end justify-between gap-4"
+        fields:
+          - key: search
+            class: "flex-1 min-w-[240px] max-w-xl"
+          - key: instances
+            class: "min-w-[220px]"
+            label: ""
+  meta:
+    title: "Exams Overview"
+    subtitle: "Typesense directory for the Exam model."
+  actions:
+    - create
+    - refresh
+  table:
+    columns:
+      - instances
+      - key
+      - title
+  typesense:
+    pagination: true
+    refreshMode: upsert
+    queryBy:
+      - title
+      - key
+      - titleShort
+      - college
+    sortableFields:
+      - title
+      - key
+    filters:
+      - instances
+
+single:
+  layout: navigation-primary
+  store:
+    key: exam
+    resolver: key
+  targets:
+    base:
+      model: exam
+      endpoint: exam.update
+    postStatus:
+      endpoint: admin.updatePostStatus
+      payloadMap:
+        recordId: $recordId
+        status: $field:post.status
+  tabs:
+    - label: General
+      slug: general
+      content:
+        - id: exam-general-row
+          primary:
+            - id: exam-general-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: exam-general
+                  title: "Exam Information"
+                  subtitle: "Manage the core details for this examination."
+                  content:
+                    - columns:
+                        - items:
+                            - field: title
+                              type: text
+                              label: "Title"
+                        - items:
+                            - field: titleShort
+                              type: text
+                              label: "Short title"
+                    - columns:
+                        - items:
+                            - field: qidIndex
+                              type: number
+                              label: "QID Index"
+                            - field: description
+                              type: textarea
+                              label: "Description"
+                              rows: 4
+            - id: exam-general-col-side
+              class: "md:w-[240px] md:flex-none"
+              widgets:
+                - type: fields-card
+                  id: exam-meta
+                  title: "Meta"
+                  subtitle: "Reference values."
+                  save: false
+                  fields:
+                    - field: key
+                      type: text
+                      label: "Exam Key"
+                      props:
+                        readonly: true
+                        disabled: true
+                    - field: sheetId
+                      type: text
+                      label: "Sheet ID"
+                      props:
+                        readonly: true
+                        disabled: true
+    - label: Additional
+      slug: additional
+      content:
+        - id: exam-advanced-row
+          primary:
+            - id: exam-advanced-col-main
+              class: "flex-[2]"
+              widgets:
+                - type: fields-card
+                  id: exam-advanced
+                  title: "Additional Settings"
+                  subtitle: "Configure ordering, indices, sheet, and brand colours."
+                  content:
+                    - columns:
+                        - items:
+                            - field: order
+                              type: number
+                              label: "Order"
+                            - field: qidIndex
+                              type: number
+                              label: "QID Index"
+                        - items:
+                            - field: college
+                              type: text
+                              label: "College / Organisation"
+                            - field: sheetId
+                              type: text
+                              label: "Sheet ID"
+                    - columns:
+                        - items:
+                            - type: message
+                              text: "Theme colours"
+                              class: "text-sm font-semibold"
+                            - type: message
+                              text: "Set the primary/secondary and gradient colours for this exam."
+                              class: "text-xs text-muted"
+                    - columns:
+                        - items:
+                            - key: colourPrimary
+                              field: colours.primary
+                              type: color
+                              label: "Primary Colour"
+                              placeholder: "#00B050"
+                            - key: colourSecondary
+                              field: colours.secondary
+                              type: color
+                              label: "Secondary Colour"
+                              placeholder: "#47C464"
+                        - items:
+                            - key: gradientFirst
+                              field: colours.gradient.first
+                              type: color
+                              label: "Gradient First"
+                              placeholder: "#00B050"
+                            - key: gradientSecond
+                              field: colours.gradient.second
+                              type: color
+                              label: "Gradient Second"
+                              placeholder: "#47C464"
+            - id: exam-advanced-col-side
+              class: "md:w-[240px] md:flex-none"
+              widgets:
+                - type: fields-card
+                  id: exam-advanced-meta
+                  title: "Meta"
+                  subtitle: "Context for this exam."
+                  save: false
+                  fields:
+                    - field: key
+                      type: text
+                      label: "Exam Key"
+                      props:
+                        readonly: true
+                        disabled: true
+    - label: Page Builder
+      slug: page-builder
+      content:
+        - id: exam-page-builder-row
+          primary:
+            - id: exam-page-builder-col
+              widgets:
+                - type: fields-card
+                  id: exam-page-builder
+                  title: "Page Builder"
+                  subtitle: "Exam page builder tooling (placeholder)."
+                  save: false

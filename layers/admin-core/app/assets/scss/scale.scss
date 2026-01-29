@@ -1,0 +1,59 @@
+@use 'sass:math';
+
+@mixin generateFontSizeClasses($levels) {
+
+    $logvalues: false;
+
+    @for $i from -2 through $levels {
+        // Generate the class for each full step
+        .fs-#{$i} {
+            font-size: var(--fs-#{$i});
+        }
+
+        // If not the last index, generate the class for each half step
+        @if $i < $levels {
+            $halfStep: $i + 0.5;
+            $halfStepStr: #{$halfStep * 10}; // Convert 1.5 to 15
+            .fs-#{$halfStepStr} {
+                font-size: var(--fs-#{$halfStepStr});
+            }
+        }
+
+        @if $logvalues {
+            @debug "Modular Typography Scale";
+            @debug $debug-map;
+        }
+    }
+}
+
+// This function creates the literal classes which at this point are being saved in the html tag as global css variables
+// This allows me to use .fs-1 to set the first font-size in the scale, 0 will give the base font size
+// The parameter is how many steps above required
+@include generateFontSizeClasses(10);
+
+// This function is used to call the css variable in the html tag by a given step;
+@function fs($step) {
+    @if $step == -0.5 {
+      @return var(--fs--05); // manually return for -0.5
+    } @else if $step == 0.5 {
+      @return var(--fs-05); // manually return for 0.5
+    } @else {
+      $stepStr: if($step == math.floor($step), $step, $step * 10);
+      @return var(--fs-#{$stepStr});
+    }
+}
+
+// Grid Multiples;
+@function gr($step, $returnUnit: 'rem') {
+    @return calc(var(--lh) * #{$step}#{$returnUnit});
+}
+
+// Export the functions
+// @forward 'scale.scss' show fs, gr;
+
+// Containers
+
+// Bounced down scale font sizes
+
+
+

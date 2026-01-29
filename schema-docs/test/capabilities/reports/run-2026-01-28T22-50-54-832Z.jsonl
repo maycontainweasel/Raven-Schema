@@ -1,0 +1,15 @@
+{"time":"2026-01-28T22:50:54.833Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:50:54.894Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:50:54.904Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:50:54.908Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:50:54.909Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T22:50:54.912Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:50:54.928Z","message":"fn::createUser | payload","data":{"email":"schema-test-ugij71@example.com","password":"Pass-ugij71","firstName":"SchemaTest ugij71","surname":"User ugij71","instances":["local"],"role":"qa-of182f"}}
+{"time":"2026-01-28T22:50:54.833Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:50:54.966Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:50:54.972Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:50:54.977Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:50:54.978Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T22:50:54.983Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:50:54.985Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T22:50:55.020Z","message":"fn::createQuestion | payload","data":{"qid":616968,"question":"[schema-test] What is QA question mpi5kg?","instances":["local"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj mpi5kg","testobjectdarray":["opt-mpi5kg"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested mpi5kg","testobjectobjectarray":["nest-mpi5kg"]}}}}

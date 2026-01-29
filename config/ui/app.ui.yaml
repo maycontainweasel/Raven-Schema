@@ -1,0 +1,106 @@
+version: 1
+kind: ui-app
+app:
+  name: pmv2-admin
+  menu:
+    sections:
+      - id: welcome
+        label: Welcome
+        items:
+          - id: dashboard
+            label: Dashboard
+            icon: dashboard
+            to: /
+          - id: announcements
+            label: Announcements
+            icon: announcement
+            to: /announcements
+          - id: communication
+            label: Communication
+            icon: communication
+            children:
+              - id: communication-threads
+                label: Threads
+                to: /communication
+              - id: communication-forms
+                label: Forms
+                to: /communication/forms
+
+      - id: application
+        label: Application
+        items:
+          - id: exams
+            label: Exams
+            icon: exams
+            to: /exams
+          - id: products
+            label: Products
+            icon: products
+            to: /products
+          - id: questions
+            label: Questions
+            icon: questions
+            to: /questions
+          - id: orders
+            label: Orders
+            icon: orders
+            to: /orders
+          - id: sessions
+            label: Sessions
+            icon: sessions
+            to: /sessions
+          - id: dynamic-content
+            label: Dynamic Content
+            icon: clipboard
+            children:
+              - id: dynamic-faqs
+                label: FAQ
+                to: /faqs
+              - id: dynamic-facts
+                label: Facts
+                to: /facts
+              - id: dynamic-testimonials
+                label: Testimonials
+                to: /testimonials
+          - id: users
+            label: Users
+            icon: users
+            children:
+              - id: users-overview
+                label: Overview
+                to: /users
+              - id: users-import
+                label: Importer
+                to: /users/import
+
+      - id: administration
+        label: Administration
+        items:
+          - id: organisations
+            label: Organisations
+            icon: organisations
+            to: /organisations
+          - id: instances
+            label: Websites
+            icon: instances
+            to: /instances
+
+      - id: utilities
+        label: Utilities
+        items:
+          - id: api
+            label: API Console
+            icon: api
+            to: /api/models
+          - id: test
+            label: Test UI
+            icon: test
+            to: /ui-test
+
+      - id: settings
+        label: Settings
+        items:
+          - id: admin-settings
+            label: Admin Settings
+            icon: settings
+            to: /settings

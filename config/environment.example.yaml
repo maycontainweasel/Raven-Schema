@@ -1,0 +1,64 @@
+# Environment profiles (draft)
+#
+# Goals:
+# - Allow default env selection via config, with CLI override (e.g. --env admin).
+# - Compose multiple sources (global + env-specific) without changing generator/import logic.
+# - Simple include/exclude rules with room for future tag/table filters.
+#
+# NOTE: This file is not wired into code yet; it is a proposed profile spec.
+
+default: public
+
+sources:
+  global: ./config/global
+  public: ./config/public
+  admin: ./config/admin
+
+environments:
+  public:
+    sources: [global, public]
+    include:
+    specs:
+      - "**/*.primary.yaml"
+      - "**/*.st.yaml"
+      - "**/*.st.many.yaml"
+      - "**/*.table.yaml"
+      modules: ["**/*"]
+      bootstrapFunctions: ["**/*.surql"]
+      seeds: ["global.surql", "${db}.surql"]
+    exclude:
+      specs: []
+      modules: []
+      bootstrapFunctions: []
+      seeds: []
+    filters:
+      tables:
+        include: ["*"]
+        exclude: []
+      tags:
+        include: []
+        exclude: []
+
+  admin:
+    sources: [global, public, admin]
+    include:
+    specs:
+      - "**/*.primary.yaml"
+      - "**/*.st.yaml"
+      - "**/*.st.many.yaml"
+      - "**/*.table.yaml"
+      modules: ["**/*"]
+      bootstrapFunctions: ["**/*.surql"]
+      seeds: ["global.surql", "${db}.surql"]
+    exclude:
+      specs: []
+      modules: []
+      bootstrapFunctions: []
+      seeds: []
+    filters:
+      tables:
+        include: ["*"]
+        exclude: []
+      tags:
+        include: []
+        exclude: []

@@ -1,0 +1,112 @@
+User, u | A basic user table {
+  id: $email, 
+  email!: "", <email>
+  password!: "", <password> <assign>
+  firstName!: "",
+  surname!: "",
+  uniqueId?: "", <md5<$email>> <assign>
+} [
+  crud,
+  router,
+  views:
+    Admin[*],
+  post,
+  instance,
+
+  taxonomies:
+    Role/Roles, role | User roles {} {
+      hierarchical: false
+      cardinality: one
+      storeOnModel: true
+      payloadField: role
+      payloadAliases: [roles]
+      required: true
+      processor: functions
+    },
+
+] () {}
+
+Question, q | A basic question table {
+  id: $qid,
+  qid!: 0, 
+  qCode: "",
+  question!: "",
+  explanation: "",
+  explanationRef: "",
+  source: "",
+  instances!: [], <array<string>>,
+  testobject: {
+    testobjectnumber!: 0,
+    testobjectstring: "",
+    testobjectdarray: [], <array<string>>,
+    testobjectobject: {
+      testobjectobjectnumber!: 0,
+      testobjectobjectstring: "",
+      testobjectobjectarray: [], <array<string>>,
+    }
+  }
+} [
+  crud,
+  router,
+  views: 
+    Admin::fn[*],
+
+  taxonomies:
+    Category/Categories, qcat | Question categories {} {
+      hierarchical: true
+      storeOnModel: false
+      payloadField: categories
+      processor: functions
+    },
+    Tag/Tags, qtag | Question tags {} {
+      hierarchical: false
+      storeOnModel: true
+      payloadField: tags
+      processor: functions
+    },
+  
+  instance,
+  post,
+
+] (
+
+  QuestionRecord, qRecord | Question record {
+    id: $parent,
+    q: $parent, <record<q>>
+    attempts: 0, 
+    noCorrect: 0, 
+    noIncorrect: 0, 
+    percCorrect: 0, 
+  } [crud] {}
+
+  *QuestionOption, qOption | Multiple choice options {
+    optionKey: "", <md5<$label>> <assign>
+    id: S($parent, $optionKey),
+    label!: "",
+    correct: false, <boolean>
+    order: 0, 
+  } [crud, router] (
+
+    QuestionOptionRecord, qor | Question option performance stats {
+      id: S($q, $qOption),
+      q!: "", <record<q>> <assign>
+      qOption!: "", <record<qOption>> <assign>
+      attempts: 0, 
+      noCorrect: 0, 
+      noIncorrect: 0, 
+      percCorrect: 0, 
+    } [crud] {}
+
+    *UserQuestionOptionRecord, uqor | User option performance stats {
+      id: S($u, $qOption),
+      u!: "", <record<u>> <assign>
+      qOption!: "", <record<qOption>> <assign>
+      attempts: 0, 
+      correct: 0, 
+      incorrect: 0, 
+      percCorrect: 0, 
+    } [crud] {}
+
+  ) {}
+
+) {}

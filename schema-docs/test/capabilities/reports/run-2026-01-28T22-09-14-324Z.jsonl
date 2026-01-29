@@ -1,0 +1,30 @@
+{"time":"2026-01-28T22:09:14.324Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:09:14.353Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:09:14.363Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:09:14.371Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:09:14.386Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateUser"}}
+{"time":"2026-01-28T22:09:14.389Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:09:14.464Z","message":"fn::createUser | payload","data":{"email":"schema-test-4au212@example.com","password":"Pass-4au212","firstName":"SchemaTest 4au212","surname":"User 4au212","instances":["mpd"],"role":"qa-0aq161"}}
+{"time":"2026-01-28T22:09:14.325Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:09:14.352Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:09:14.364Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:09:14.369Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:09:14.379Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestion"}}
+{"time":"2026-01-28T22:09:14.392Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:09:14.396Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"viewQuestionAdmin"}}
+{"time":"2026-01-28T22:09:14.590Z","message":"fn::createQuestion | payload","data":{"qid":458615,"question":"[schema-test] What is QA question g70d6i?","instances":["mpd"],"testobject":{"testobjectnumber":7,"testobjectstring":"Obj g70d6i","testobjectdarray":["opt-g70d6i"],"testobjectobject":{"testobjectobjectnumber":3,"testobjectobjectstring":"Nested g70d6i","testobjectobjectarray":["nest-g70d6i"]}}}}
+{"time":"2026-01-28T22:09:14.324Z","message":"Schema capability tests starting (instance: mpd, layer: functions)"}
+{"time":"2026-01-28T22:09:14.352Z","message":"Cleanup | removing prior test artifacts","data":{"prefix":"schema-test-","marker":"[schema-test]"}}
+{"time":"2026-01-28T22:09:14.363Z","message":"Cleanup | done"}
+{"time":"2026-01-28T22:09:14.371Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestion"}}
+{"time":"2026-01-28T22:09:14.379Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestion"}}
+{"time":"2026-01-28T22:09:14.388Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOption"}}
+{"time":"2026-01-28T22:09:14.392Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"updateQuestionOption"}}
+{"time":"2026-01-28T22:09:14.406Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOption"}}
+{"time":"2026-01-28T22:09:14.421Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createQuestionOptionRecord"}}
+{"time":"2026-01-28T22:09:14.524Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteQuestionOptionRecord"}}
+{"time":"2026-01-28T22:09:14.561Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:09:14.571Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUserQuestionOptionRecord"}}
+{"time":"2026-01-28T22:09:14.572Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"createUser"}}
+{"time":"2026-01-28T22:09:14.575Z","message":"WARN: Skipping function existence check (insufficient permissions)","data":{"name":"deleteUser"}}
+{"time":"2026-01-28T22:09:14.641Z","message":"Create Question","data":{"qid":402346,"question":"[schema-test] What is subtable question a4qtjl?","instances":["mpd"]}}

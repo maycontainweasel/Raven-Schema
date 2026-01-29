@@ -1,0 +1,8 @@
+serversPath: /opt/homebrew/etc/nginx/servers
+certsPath: /Users/michaelpeters/certs
+hostsPath: /etc/hosts
+templatePath: ./config/nginx.template.conf
+defaultListenPort: 4443
+defaultProxyPort: 3000
+restartCommand: "brew services restart nginx"
+mkcertCommand: "mkcert"
