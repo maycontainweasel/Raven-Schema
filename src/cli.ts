@@ -382,8 +382,7 @@ const argv = yargs(hideBin(process.argv))
           console.warn(`⚠️  No site YAML found for ${project.name}.`);
           continue;
         }
-        const desired = resolveLayerList(bundle.app, project);
-        const next = ensureSchemaCoreLayer(desired);
+        const next = resolveLayerList(bundle.app, project);
         if (!args.force && Array.isArray(specEntry.spec.layers) && specEntry.spec.layers.length > 0) {
           console.log(`ℹ️  Layers already set for ${project.name}; skipping.`);
           continue;

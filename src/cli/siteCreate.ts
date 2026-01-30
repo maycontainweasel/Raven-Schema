@@ -131,7 +131,6 @@ export async function runSiteCreate(options: {
         buildNuxtConfigForNginx(nginxAnswers)
       ) as Record<string, unknown>;
     }
-    spec.layers = ensureSchemaCoreLayer(spec.layers);
     if (options.admin) {
       spec.layers = ensureAdminLayer(spec.layers);
     }

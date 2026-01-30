@@ -143,6 +143,10 @@ config/graph.mpdg
 config/graph.mmd
 config/graph.ts
 
+
+## sites#
+# sites
+
 # Module
 
 module/src/runtime/generated/
