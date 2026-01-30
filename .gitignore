@@ -129,6 +129,7 @@ config/specs/*
 config/types/*
 config/typesense/*
 config/ui/*
+config/sites/*
 
 
 ## Files
@@ -144,8 +145,7 @@ config/graph.mmd
 config/graph.ts
 
 
-## sites#
-# sites
+
 
 # Module
 
