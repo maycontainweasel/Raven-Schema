@@ -51,6 +51,7 @@ const EXCLUDE_NAMES = new Set([
   '.cache',
   'dist',
 ]);
+const DEFAULT_SSL_REDIRECT = true;
 
 export async function runSiteCreate(options: {
   projectRoot: string;
@@ -107,6 +108,12 @@ export async function runSiteCreate(options: {
       slug,
       template,
       target,
+      deploy: {
+        ssl: {
+          email: resolveDefaultSslEmail(),
+          redirect: DEFAULT_SSL_REDIRECT,
+        },
+      },
     };
   }
 
@@ -721,6 +728,14 @@ async function promptNumber(label: string, fallback: number): Promise<number> {
     throw new Error(`Invalid number: ${raw}`);
   }
   return parsed;
+}
+
+function resolveDefaultSslEmail(): string {
+  return (
+    process.env.MPD_SSL_EMAIL ||
+    process.env.DEPLOY_SSL_EMAIL ||
+    ''
+  );
 }
 
 async function promptOptionalNumber(

@@ -220,6 +220,12 @@ export async function runSiteDeployInit(options: {
       startPm2: answers.startPm2,
       setupComplete: true,
     };
+    if (!(nextDeploy as any).ssl) {
+      (nextDeploy as any).ssl = {
+        email: process.env.MPD_SSL_EMAIL || process.env.DEPLOY_SSL_EMAIL || '',
+        redirect: true,
+      };
+    }
     const nextSpec = { ...specEntry.spec, deploy: nextDeploy };
     await writeFile(specEntry.path, YAML.stringify(nextSpec), 'utf-8');
   }

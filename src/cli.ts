@@ -285,10 +285,6 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Redirect HTTP to HTTPS',
         })
-        .option('staging', {
-          type: 'boolean',
-          describe: 'Use Let’s Encrypt staging',
-        })
         .option('yes', {
           type: 'boolean',
           default: false,
@@ -305,7 +301,6 @@ const argv = yargs(hideBin(process.argv))
         domain: args.domain ? String(args.domain) : undefined,
         email: args.email ? String(args.email) : undefined,
         redirect: args.redirect,
-        staging: args.staging,
         yes: args.yes === true,
       });
     }
@@ -401,7 +396,7 @@ const argv = yargs(hideBin(process.argv))
   )
   .command(
     'site:deploy [name]',
-    'Build + sync .output + restart PM2',
+    'Deploy pipeline (init → verify → SSL → build/sync)',
     (yargsBuilder: any) =>
       yargsBuilder
         .positional('name', {
@@ -464,6 +459,34 @@ const argv = yargs(hideBin(process.argv))
         .option('restart-nginx', {
           type: 'boolean',
           describe: 'Restart nginx after deploy',
+        })
+        .option('overwrite-nginx', {
+          type: 'boolean',
+          describe: 'Overwrite nginx config during init step',
+        })
+        .option('overwrite-app', {
+          type: 'boolean',
+          describe: 'Overwrite app directory during init step',
+        })
+        .option('yes', {
+          type: 'boolean',
+          describe: 'Skip confirmation prompts',
+        })
+        .option('skip-verify', {
+          type: 'boolean',
+          describe: 'Skip HTTP verification prompt',
+        })
+        .option('reset', {
+          type: 'boolean',
+          describe: 'Reset deploy state tracking',
+        })
+        .option('reset-remote', {
+          type: 'boolean',
+          describe: 'Remove remote nginx/app/pm2 and reset state',
+        })
+        .option('from', {
+          type: 'string',
+          describe: 'Start from step: init | verify | ssl | deploy',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
@@ -483,6 +506,13 @@ const argv = yargs(hideBin(process.argv))
         noEnvSync: args['no-env-sync'] === true,
         noSync: args['no-sync'] === true,
         noPm2: args['no-pm2'] === true,
+        overwriteNginx: args['overwrite-nginx'],
+        overwriteApp: args['overwrite-app'],
+        yes: args.yes === true,
+        skipVerify: args['skip-verify'] === true,
+        reset: args.reset === true,
+        resetRemote: args['reset-remote'] === true,
+        from: args.from ? String(args.from) : undefined,
       });
     }
   )

@@ -1,5 +1,5 @@
 {
-  "appName": "docs",
+  "appName": "schema-docs",
   "aliases": {
     "@schema/request-schema": "./modules/schema-kit/runtime/generated/request-schema.ts",
     "@schema": "./modules/schema-kit/runtime",

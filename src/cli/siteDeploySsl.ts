@@ -22,7 +22,6 @@ interface DeploySslAnswers {
   domain: string;
   email: string;
   redirect: boolean;
-  staging: boolean;
   nginxSitesEnabled: string;
   restartCommand: string;
 }
@@ -38,7 +37,6 @@ export async function runSiteDeploySsl(options: {
   domain?: string;
   email?: string;
   redirect?: boolean;
-  staging?: boolean;
   yes?: boolean;
 }): Promise<void> {
   const projectRoot = options.projectRoot;
@@ -63,7 +61,7 @@ export async function runSiteDeploySsl(options: {
     throw new Error('certbot is not installed on the remote host.');
   }
 
-  const certbotArgs = buildCertbotArgs(answers.domain, answers.email, answers.redirect, answers.staging);
+  const certbotArgs = buildCertbotArgs(answers.domain, answers.email, answers.redirect);
 
   console.log('🔐 Requesting SSL certificate via certbot...');
   await runSsh(sshTarget, `sudo certbot ${certbotArgs}`);
@@ -76,7 +74,7 @@ export async function runSiteDeploySsl(options: {
   console.log(`🌐 URL: https://${answers.domain}`);
 }
 
-function buildCertbotArgs(domain: string, email: string, redirect: boolean, staging: boolean): string {
+function buildCertbotArgs(domain: string, email: string, redirect: boolean): string {
   const args = [
     '--nginx',
     `-d ${shellEscapePath(domain)}`,
@@ -89,9 +87,6 @@ function buildCertbotArgs(domain: string, email: string, redirect: boolean, stag
     args.push('--redirect');
   } else {
     args.push('--no-redirect');
-  }
-  if (staging) {
-    args.push('--staging');
   }
   return args.join(' ');
 }
@@ -147,7 +142,6 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeploySslAnswers {
   const domain = (deploy as any).domain ?? '';
   const email = ssl.email ?? '';
   const redirect = ssl.redirect ?? false;
-  const staging = ssl.staging ?? false;
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
   return {
@@ -156,7 +150,6 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeploySslAnswers {
     domain,
     email,
     redirect: Boolean(redirect),
-    staging: Boolean(staging),
     nginxSitesEnabled,
     restartCommand,
   };
@@ -169,7 +162,6 @@ async function collectAnswers(
     domain?: string;
     email?: string;
     redirect?: boolean;
-    staging?: boolean;
     yes?: boolean;
   },
   defaults: DeploySslAnswers
@@ -188,7 +180,6 @@ async function collectAnswers(
       domain,
       email,
       redirect: options.redirect ?? defaults.redirect,
-      staging: options.staging ?? defaults.staging,
     };
   }
 
@@ -198,7 +189,6 @@ async function collectAnswers(
   const domain = options.domain ?? (await promptRequiredInput('Domain', defaults.domain));
   const email = options.email ?? (await promptRequiredInput('Email', defaults.email));
   const redirect = options.redirect ?? (await promptYesNo('Redirect HTTP to HTTPS?', defaults.redirect));
-  const staging = options.staging ?? (await promptYesNo('Use Let’s Encrypt staging?', defaults.staging));
 
   return {
     ...defaults,
@@ -207,7 +197,6 @@ async function collectAnswers(
     domain,
     email,
     redirect,
-    staging,
   };
 }
 
