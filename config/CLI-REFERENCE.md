@@ -112,6 +112,13 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `--nginx-config` capture nginx settings without applying
   - `--no-nginx` skip nginx prompts entirely
   - `--admin` include the `admin-core` layer in the site spec
+  - `--setup` run `site:setup --fix` after creation
+
+- `site:setup [name]`  
+  Run project setup checks for a site spec (server scaffolds, runtimeConfig, env files).  
+  Examples:
+  - `pnpm -C apps/schema run site:setup public`
+  - `pnpm -C apps/schema run site:setup -- --spec sites/public.yaml --fix`
 
 - `site:delete [name]`  
   Remove nginx server block, certs, and hosts entry for a site.  

@@ -8,6 +8,7 @@ import YAML from 'yaml';
 import { toKebabCase } from './util';
 import { runNginxSetup, resolveNginxConfig, deriveNginxFileName } from './nginxSetup';
 import { ensureNuxtConfigExtends } from '../lib/siteSpec';
+import { loadLayerPackages, mergePackages } from '../lib/sitePackages';
 import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
 
 interface SiteSpec {
@@ -131,6 +132,7 @@ export async function runSiteCreate(options: {
         buildNuxtConfigForNginx(nginxAnswers)
       ) as Record<string, unknown>;
     }
+    spec.layers = ensureSchemaCoreLayer(spec.layers);
     if (options.admin) {
       spec.layers = ensureAdminLayer(spec.layers);
     }
@@ -173,7 +175,7 @@ export async function runSiteCreate(options: {
 
   await writeGeneratedNuxtConfig(targetPath, spec.nuxtConfig);
   await ensureNuxtRuntimeFile(targetPath);
-  await updatePackageJson(targetPath, repoRoot, slug, spec);
+  await updatePackageJson(targetPath, repoRoot, projectRoot, slug, spec);
   await runSitePkgSyncFromCreate(projectRoot, spec, targetPath);
   await ensureEnvYaml(targetPath, projectRoot, spec.layers);
   await writeEnvFiles(targetPath, spec.env);
@@ -277,6 +279,7 @@ async function ensureTargetDir(targetPath: string, force: boolean): Promise<void
 async function updatePackageJson(
   targetPath: string,
   repoRoot: string,
+  projectRoot: string,
   slug: string,
   spec: SiteSpec
 ): Promise<void> {
@@ -335,8 +338,39 @@ async function updatePackageJson(
   }
 
   const merged = mergeConfig(base, override) as Record<string, unknown>;
-  merged.name = slug;
-  await writeFile(packagePath, `${JSON.stringify(merged, null, 2)}\n`, 'utf-8');
+  const layerPackages = await loadLayerPackages(projectRoot, spec.layers);
+  const requiredPackages = mergePackages(...layerPackages);
+  const withPackages = applyRequiredPackages(merged, requiredPackages);
+  withPackages.name = slug;
+  await writeFile(packagePath, `${JSON.stringify(withPackages, null, 2)}\n`, 'utf-8');
+}
+
+function applyRequiredPackages(
+  base: Record<string, unknown>,
+  packages: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+): Record<string, unknown> {
+  const next = { ...base };
+  if (packages.dependencies) {
+    const existing = isPlainObject(base.dependencies) ? base.dependencies : {};
+    const merged: Record<string, unknown> = { ...existing };
+    for (const [key, value] of Object.entries(packages.dependencies)) {
+      if (!(key in merged)) {
+        merged[key] = value;
+      }
+    }
+    next.dependencies = merged;
+  }
+  if (packages.devDependencies) {
+    const existing = isPlainObject(base.devDependencies) ? base.devDependencies : {};
+    const merged: Record<string, unknown> = { ...existing };
+    for (const [key, value] of Object.entries(packages.devDependencies)) {
+      if (!(key in merged)) {
+        merged[key] = value;
+      }
+    }
+    next.devDependencies = merged;
+  }
+  return next;
 }
 
 async function writeGeneratedNuxtConfig(

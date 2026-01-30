@@ -12,6 +12,7 @@ import { spawn } from 'child_process';
 import { scaffoldTable } from './cli/tableScaffold';
 import { runNginxSetup } from './cli/nginxSetup';
 import { runNginxConfig } from './cli/nginxConfig';
+import { runSitePkgSync } from './cli/sitePkgSync';
 import { loadAppConfig, loadConfigBundle, loadTableMigrations, resolveModuleOverridesDir } from './lib/configLoader';
 import { generateTableFunctions } from './lib/functionGenerator';
 import { generateTableIndexes } from './lib/indexGenerator';
@@ -53,6 +54,7 @@ import { generateModules } from './cli/moduleGenerate';
 import { runSiteCreate } from './cli/siteCreate';
 import { runSiteDelete } from './cli/siteDelete';
 import { runSiteEnvSync } from './cli/siteEnvSync';
+import { runSiteEnvYamlSync } from './cli/siteEnvYamlSync';
 import { runSiteEnvYamlSync } from './cli/siteEnvYamlSync';
 import { runSitePkgSync } from './cli/sitePkgSync';
 import { runSitePkgAdd } from './cli/sitePkgAdd';
@@ -369,6 +371,7 @@ const argv = yargs(hideBin(process.argv))
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
+      const repoRoot = path.resolve(projectRoot, '..', '..');
       const bundle = await loadConfigBundle(projectRoot);
       const positional = args.name || (args._ && args._[1]);
       const projectFilter = parseList(args.project ?? positional);
@@ -840,6 +843,10 @@ const argv = yargs(hideBin(process.argv))
         .option('admin', {
           type: 'boolean',
           describe: 'Include admin-core layer in the generated site spec',
+        })
+        .option('setup', {
+          type: 'boolean',
+          describe: 'Run site setup after creation',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
@@ -869,6 +876,100 @@ const argv = yargs(hideBin(process.argv))
       if (shouldCd) {
         await openShellInDir(result.targetPath);
       }
+
+      let shouldSetup = args.setup === true;
+      if (args.setup === undefined && process.stdin.isTTY) {
+        shouldSetup = await promptYesNo('Run site setup now?', true);
+      }
+      if (shouldSetup) {
+        const repoRoot = path.resolve(projectRoot, '..', '..');
+        const bundle = await loadConfigBundle(projectRoot);
+        const specEntry = await loadSiteSpecForSetup({
+          projectRoot,
+          name: result.slug,
+        });
+        if (specEntry) {
+          const targetAbs = path.isAbsolute(specEntry.spec.target)
+            ? specEntry.spec.target
+            : path.resolve(repoRoot, specEntry.spec.target);
+          const nuxtProjectRoot = path.relative(projectRoot, targetAbs);
+          const existingProject = bundle.app.paths.projects.find((proj) => {
+            if (proj.name === specEntry.spec.slug) return true;
+            if (!proj.nuxtProjectRoot) return false;
+            return path.resolve(projectRoot, proj.nuxtProjectRoot) === targetAbs;
+          });
+          const project: ProjectPathsConfig = existingProject ?? {
+            name: specEntry.spec.slug,
+            nuxtProjectRoot,
+            active: true,
+          };
+          await runSiteSetupFlow({
+            projectRoot,
+            bundle,
+            project,
+            specEntry,
+            fix: true,
+          });
+        }
+      }
+    }
+  )
+  .command(
+    'site:setup [name]',
+    'Run project setup checks for a site spec',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('fix', {
+          type: 'boolean',
+          default: false,
+          describe: 'Create missing server scaffolds where possible',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const repoRoot = path.resolve(projectRoot, '..', '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      const specEntry = await loadSiteSpecForSetup({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+      if (!specEntry) {
+        throw new Error('Site spec not found. Provide a name or --spec.');
+      }
+      const targetAbs = path.isAbsolute(specEntry.spec.target)
+        ? specEntry.spec.target
+        : path.resolve(repoRoot, specEntry.spec.target);
+      const nuxtProjectRoot = path.relative(projectRoot, targetAbs);
+      const existingProject = bundle.app.paths.projects.find((proj) => {
+        if (proj.name === specEntry.spec.slug) return true;
+        if (!proj.nuxtProjectRoot) return false;
+        return path.resolve(projectRoot, proj.nuxtProjectRoot) === targetAbs;
+      });
+      const project: ProjectPathsConfig = existingProject ?? {
+        name: specEntry.spec.slug,
+        nuxtProjectRoot,
+        active: true,
+      };
+      await runSiteSetupFlow({
+        projectRoot,
+        bundle,
+        project,
+        specEntry,
+        fix: args.fix === true,
+      });
     }
   )
   .command(
@@ -3300,6 +3401,257 @@ export type AppRouter = typeof appRouter
   .parse();
 
 export default argv;
+
+type SiteSpecForSetup = {
+  name: string;
+  slug: string;
+  template: string;
+  target: string;
+  nuxtConfig?: Record<string, unknown>;
+  packageJson?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+  deploy?: Record<string, unknown>;
+  layers?: string[];
+};
+
+async function loadSiteSpecForSetup(options: {
+  projectRoot: string;
+  name?: string;
+  specPath?: string;
+}): Promise<{ path: string; spec: SiteSpecForSetup } | null> {
+  const sitesRoot = path.resolve(options.projectRoot, 'sites');
+  let specPath = options.specPath;
+  if (!specPath && options.name) {
+    const slug = toKebabCase(options.name);
+    specPath = path.resolve(sitesRoot, `${slug}.yaml`);
+  }
+  if (!specPath) return null;
+  const resolved = path.isAbsolute(specPath)
+    ? specPath
+    : specPath.replace(/^[./]+/, '').includes(path.sep)
+      ? path.resolve(options.projectRoot, specPath)
+      : path.resolve(sitesRoot, specPath);
+  const specStat = await stat(resolved).catch(() => null);
+  if (!specStat?.isFile()) return null;
+  const content = await readFile(resolved, 'utf-8');
+  const parsed = YAML.parse(content) as Partial<SiteSpecForSetup>;
+  if (!parsed?.name || !parsed.slug || !parsed.template || !parsed.target) {
+    return null;
+  }
+  return {
+    path: resolved,
+    spec: {
+      name: String(parsed.name),
+      slug: String(parsed.slug),
+      template: String(parsed.template),
+      target: String(parsed.target),
+      nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
+      packageJson: parsed.packageJson as Record<string, unknown> | undefined,
+      env: parsed.env as Record<string, unknown> | undefined,
+      deploy: parsed.deploy as Record<string, unknown> | undefined,
+      layers: Array.isArray(parsed.layers) ? parsed.layers.map(String) : undefined,
+    },
+  };
+}
+
+async function runSiteSetupFlow(options: {
+  projectRoot: string;
+  bundle: { app: AppConfig };
+  project: ProjectPathsConfig;
+  specEntry: { path: string; spec: SiteSpecForSetup };
+  fix: boolean;
+}): Promise<void> {
+  const { projectRoot, bundle, project, specEntry, fix } = options;
+  const featureConfig = resolveSchemaKitFeatures(bundle.app, project);
+  const wantsSurreal = featureConfig?.surrealdb?.enabled !== false;
+  const wantsTypesense = featureConfig?.typesense ?? bundle.app.typesense?.enabled !== false;
+  const wantsSentry = featureConfig?.sentry?.enabled === true;
+  const wantsRedis = featureConfig?.redis?.enabled === true;
+
+  const report = await checkProjectSetup({
+    projectRoot,
+    app: bundle.app,
+    project,
+  });
+  if (!report) return;
+
+  console.log(`🔧 Project setup check: ${project.name}`);
+  if (report.missingDeps.length === 0) {
+    console.log('✅ Required dependencies installed.');
+  } else {
+    console.log('⚠️  Missing dependencies:');
+    for (const dep of report.missingDeps) {
+      console.log(`- ${dep}`);
+    }
+    const hint = await buildInstallHint(report, projectRoot, bundle.app.tooling?.repoMode);
+    if (hint) {
+      console.log('💡 Suggested install command:');
+      console.log(hint);
+    }
+    const shouldSyncPackages = fix || await promptToContinue('Sync package.json from layer packages now?');
+    if (shouldSyncPackages) {
+      await runSitePkgSync({
+        projectRoot,
+        name: specEntry.spec.slug,
+        specPath: specEntry.path,
+        appPath: report.appRoot,
+      });
+    }
+  }
+
+  if (report.missingFiles.length > 0) {
+    console.log('⚠️  Missing required files:');
+    for (const file of report.missingFiles) {
+      console.log(`- ${file}`);
+    }
+    const shouldFix = fix || await promptToContinue('Create missing TRPC/Surreal scaffolds now?');
+    if (shouldFix) {
+      const created = await applyProjectSetupFixes(report);
+      if (created.length > 0) {
+        console.log('✅ Created scaffold files:');
+        for (const file of created) {
+          console.log(`- ${file}`);
+        }
+      }
+    }
+  }
+
+  if (report.missingConfig.length > 0) {
+    const relevantMissing = report.missingConfig.filter((marker) => {
+      if (marker === 'surrealdb') return wantsSurreal;
+      if (marker === 'typesense') return wantsTypesense;
+      if (marker === 'sentry') return wantsSentry;
+      if (marker === 'redis') return wantsRedis;
+      return true;
+    });
+    if (relevantMissing.length > 0) {
+      console.log('⚠️  Missing nuxt.config markers:');
+      for (const marker of relevantMissing) {
+        console.log(`- ${marker}`);
+      }
+    }
+  }
+
+  const missingRuntime = report.missingConfig.filter((marker) => {
+    if (marker === 'surrealdb') return wantsSurreal;
+    if (marker === 'typesense') return wantsTypesense;
+    if (marker === 'sentry') return wantsSentry;
+    if (marker === 'redis') return wantsRedis;
+    return true;
+  });
+  const shouldAddRuntime = fix || (missingRuntime.length > 0
+    ? await promptToContinue('Add runtimeConfig blocks now?')
+    : false);
+  if (shouldAddRuntime) {
+    const configPath = await findNuxtConfig(report.appRoot);
+    if (!configPath) {
+      if (specEntry) {
+        const changed = ensureRuntimeConfigBlocks(specEntry.spec, {
+          surrealdb: wantsSurreal,
+          typesense: wantsTypesense,
+          sentry: wantsSentry,
+          redis: wantsRedis,
+        });
+        if (changed) {
+          await writeSiteSpec(specEntry.path, specEntry.spec);
+          console.log('✅ Added runtimeConfig blocks to site YAML.');
+        }
+      } else {
+        console.log('⚠️  nuxt.config not found; unable to add runtimeConfig blocks.');
+      }
+    } else {
+      const configContent = await readFile(configPath, 'utf-8');
+      let updated = configContent;
+      if (wantsSurreal) updated = ensureRuntimeConfigSurrealdb(updated);
+      if (wantsTypesense) updated = ensureRuntimeConfigTypesense(updated);
+      if (wantsSentry) updated = ensureRuntimeConfigSentry(updated);
+      if (wantsRedis) updated = ensureRuntimeConfigRedis(updated);
+      if (updated !== configContent) {
+        await writeFile(configPath, updated, 'utf-8');
+        const added: string[] = [];
+        if (wantsSurreal) added.push('surrealdb');
+        if (wantsTypesense) added.push('typesense');
+        if (wantsSentry) added.push('sentry');
+        if (wantsRedis) added.push('redis');
+        console.log(`✅ Added runtimeConfig blocks (${added.join('/')}).`);
+      }
+    }
+  }
+
+  const appRouterPath = path.join(report.appRoot, 'server', 'trpc', 'routers', '_app.ts');
+  const apiRouterPath = path.join(report.appRoot, 'server', 'trpc', 'routers', 'api.ts');
+  const appRouterContent = await readFile(appRouterPath, 'utf-8').catch(() => null);
+  if (appRouterContent) {
+    const updated = ensureAppRouterDbOnly(appRouterContent);
+    if (updated !== appRouterContent) {
+      await writeFile(appRouterPath, updated, 'utf-8');
+      console.log('✅ Updated app router to include db router.');
+    }
+  }
+  const apiRouterContent = await readFile(apiRouterPath, 'utf-8').catch(() => null);
+  if (apiRouterContent) {
+    const updated = ensureApiRouterExport(apiRouterContent);
+    if (updated !== apiRouterContent) {
+      await writeFile(apiRouterPath, updated, 'utf-8');
+      console.log('✅ Updated api router to export dbRouter.');
+    }
+  }
+
+  if (report.missingEnvFiles.length > 0) {
+    console.log('⚠️  Missing env files:');
+    for (const file of report.missingEnvFiles) {
+      console.log(`- ${file}`);
+    }
+    const shouldSync = fix || await promptToContinue('Generate env.yaml and .env files now?');
+    if (shouldSync) {
+      await runSiteEnvYamlSync({
+        projectRoot,
+        specPath: specEntry.path,
+        updatePackage: true,
+        writeRuntimeConfig: true,
+        writeEnvConfig: true,
+      });
+      console.log('✅ Generated env.yaml and env files.');
+    }
+  }
+
+  if (wantsRedis) {
+    const composeFile = await ensureRedisCompose(report.appRoot);
+    if (composeFile) {
+      console.log(`🐳 Created ${composeFile} for local Redis.`);
+    }
+  }
+  if (wantsTypesense) {
+    const composeFile = await ensureTypesenseCompose(report.appRoot);
+    if (composeFile) {
+      console.log(`🐳 Created ${composeFile} for local Typesense.`);
+    }
+  }
+
+  const cacheDirs = ['.nuxt', '.output'];
+  const removedCaches: string[] = [];
+  for (const dir of cacheDirs) {
+    const fullPath = path.join(report.appRoot, dir);
+    const exists = await stat(fullPath).catch(() => null);
+    if (exists) {
+      await rm(fullPath, { recursive: true, force: true });
+      removedCaches.push(dir);
+    }
+  }
+  if (removedCaches.length > 0) {
+    console.log('🧹 Cleared build caches:');
+    for (const dir of removedCaches) {
+      console.log(`- ${dir}`);
+    }
+  }
+
+  if (report.notes.length > 0) {
+    console.log('ℹ️  Notes:');
+    for (const note of report.notes) {
+      console.log(`- ${note}`);
+    }
+  }
+}
 
 async function promptToContinue(message: string): Promise<boolean> {
   if (!process.stdin.isTTY) {
