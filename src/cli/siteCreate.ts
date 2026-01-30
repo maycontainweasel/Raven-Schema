@@ -564,10 +564,10 @@ function ensureSchemaCoreLayer(layers: string[] | undefined): string[] {
 function ensureAdminLayer(layers: string[] | undefined): string[] {
   const current = Array.isArray(layers) ? layers : [];
   const entries = current.filter(Boolean);
-  if (!entries.includes('admin-core')) {
-    return [...entries, 'admin-core'];
-  }
-  return entries;
+  const next = new Set(entries);
+  next.add('admin-core');
+  next.add('ui-builder');
+  return Array.from(next);
 }
 
 function resolveDevServerPort(config: Record<string, unknown> | undefined): number | null {

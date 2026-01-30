@@ -75,6 +75,7 @@ import {
   applyEnvFileFixes,
   ensureRedisCompose,
   ensureTypesenseCompose,
+  ensureProjectScaffold,
 } from './lib/projectSetup';
 import {
   diffAssets,
@@ -212,6 +213,7 @@ const argv = yargs(hideBin(process.argv))
         .positional('packages', {
           describe: 'Packages to add (e.g. vue-sonner@1.3.0)',
           type: 'string',
+          array: true,
         })
         .option('name', {
           alias: 'n',
@@ -239,19 +241,16 @@ const argv = yargs(hideBin(process.argv))
       const projectRoot = path.resolve(__dirname, '..');
       const rawPackages = Array.isArray(args.packages)
         ? args.packages.map((val: any) => String(val))
-        : [];
-      let name = String(args.name || args.n || '');
-      let packages = rawPackages;
+        : typeof args.packages === 'string'
+          ? [String(args.packages)]
+          : [];
+      const positional = Array.isArray(args._) ? args._.map((val: any) => String(val)) : [];
+      let name = String(args.name || args.n || positional.shift() || '');
+      let packages = rawPackages.length > 0
+        ? rawPackages
+        : positional.slice(0);
       if (!name) {
-        if (packages.length > 0) {
-          name = String(packages.shift() || '');
-        } else if (Array.isArray(args._) && args._.length > 1) {
-          name = String(args._[1] || '');
-          packages = args._.slice(2).map((val: any) => String(val));
-        }
-      }
-      if (packages.length === 0 && Array.isArray(args._) && args._.length > 2) {
-        packages = args._.slice(2).map((val: any) => String(val));
+        throw new Error('Site name is required. Usage: site:pkg:add <site> <packages..>');
       }
       await runSitePkgAdd({
         projectRoot,
@@ -3477,6 +3476,9 @@ async function runSiteSetupFlow(options: {
   fix: boolean;
 }): Promise<void> {
   const { projectRoot, bundle, project, specEntry, fix } = options;
+  const appRoot = project.nuxtProjectRoot
+    ? path.resolve(projectRoot, project.nuxtProjectRoot)
+    : null;
   const featureConfig = resolveSchemaKitFeatures(bundle.app, project);
   const wantsSurreal = featureConfig?.surrealdb?.enabled !== false;
   const wantsTypesense = featureConfig?.typesense ?? bundle.app.typesense?.enabled !== false;
@@ -3504,6 +3506,33 @@ async function runSiteSetupFlow(options: {
     project,
     app: bundle.app,
   });
+  if (fix && appRoot) {
+    await syncProjectLayers({
+      projectRoot,
+      app: bundle.app,
+      project,
+      mode: 'force',
+    });
+    const createdScaffold = await ensureProjectScaffold(appRoot);
+    if (createdScaffold.length > 0) {
+      console.log('✅ Created scaffold files:');
+      for (const file of createdScaffold) {
+        console.log(`- ${file}`);
+      }
+    }
+    const envYamlPath = path.join(appRoot, 'env.yaml');
+    const envYamlExists = await stat(envYamlPath).catch(() => null);
+    if (!envYamlExists?.isFile()) {
+      await runSiteEnvYamlSync({
+        projectRoot,
+        specPath: specEntry.path,
+        updatePackage: true,
+        writeRuntimeConfig: true,
+        writeEnvConfig: true,
+      });
+      console.log('✅ Generated env.yaml and env files.');
+    }
+  }
 
   const report = await checkProjectSetup({
     projectRoot,

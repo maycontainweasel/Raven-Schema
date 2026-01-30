@@ -408,7 +408,7 @@ async function updatePackageJson(appRoot: string, repoRoot: string): Promise<voi
   };
   override.dependencies = {
     ...(isPlainObject(base.dependencies) ? base.dependencies : {}),
-    'dotenv-cli': '^7.4.0',
+    'dotenv-cli': '^10.0.0',
   };
 
   const merged = mergeConfig(base, override) as Record<string, unknown>;

@@ -1,5 +1,5 @@
 // packages/pmv2shared/services/surrealdb.ts
-import type Surreal from 'surrealdb'
+import type { Surreal } from 'surrealdb'
 import { createError } from 'h3'
 import { getSurrealClient } from '@schema/server/plugins/surrealdb.server'
 import { LRS } from '@schema/utils/lrs'

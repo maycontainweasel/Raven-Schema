@@ -25,6 +25,8 @@ const REQUIRED_DEPENDENCIES = [
   'surrealdb',
   'typesense',
   'iron-webcrypto',
+  'pinia',
+  '@pinia/nuxt',
 ];
 
 const DEPENDENCY_VERSIONS: Record<string, string> = {
@@ -35,6 +37,8 @@ const DEPENDENCY_VERSIONS: Record<string, string> = {
   'surrealdb': '^2.0.0-alpha.16',
   'typesense': '^1.8.2',
   'iron-webcrypto': '^1.2.1',
+  'pinia': '^2.3.1',
+  '@pinia/nuxt': '^0.11.2',
   '@sentry/vue': '^10.5.0',
   '@sentry/node': '^10.5.0',
   '@sentry/vite-plugin': '^4.1.1',
@@ -99,9 +103,12 @@ export async function checkProjectSetup(options: {
   const missingConfig: string[] = [];
   if (nuxtConfig) {
     const configContent = await readFile(nuxtConfig, 'utf-8').catch(() => '');
+    const runtimeConfigPath = path.join(appRoot, 'nuxt.config.runtime.ts');
+    const runtimeContent = await readFile(runtimeConfigPath, 'utf-8').catch(() => '');
+    const combined = `${configContent}\n${runtimeContent}`;
     const configMarkers = buildRequiredConfigMarkers(featureConfig);
     for (const marker of configMarkers) {
-      if (!configContent.includes(marker)) {
+      if (!combined.includes(marker)) {
         missingConfig.push(marker);
       }
     }
@@ -198,6 +205,19 @@ export async function applyProjectSetupFixes(report: ProjectSetupReport): Promis
     created.push(rel);
   }
 
+  return created;
+}
+
+export async function ensureProjectScaffold(appRoot: string): Promise<string[]> {
+  const created: string[] = [];
+  for (const [rel, template] of Object.entries(FILE_TEMPLATES)) {
+    const fullPath = path.join(appRoot, rel);
+    const exists = await stat(fullPath).catch(() => null);
+    if (exists?.isFile()) continue;
+    await mkdir(path.dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, template, 'utf-8');
+    created.push(rel);
+  }
   return created;
 }
 
