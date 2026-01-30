@@ -182,6 +182,9 @@ export async function runSiteCreate(options: {
   await updatePackageJson(targetPath, repoRoot, projectRoot, slug, spec);
   await runSitePkgSyncFromCreate(projectRoot, spec, targetPath);
   await ensureEnvYaml(targetPath, projectRoot, spec.layers);
+  await seedEnvYamlDefaults(targetPath, {
+    ...(resolveSiteDefaults(nginxAnswers, spec.nuxtConfig) ?? {}),
+  });
   await writeEnvFiles(targetPath, spec.env);
   await writeEcosystemConfig(targetPath, spec.deploy);
 
@@ -458,6 +461,12 @@ function buildEnvLines(envConfig: Record<string, unknown>): {
 }
 
 function normalizeEnvValue(value: unknown): { local?: string; staging?: string } {
+  if (value === null) {
+    return { local: '', staging: '' };
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return { local: String(value), staging: String(value) };
+  }
   if (typeof value === 'string') {
     if (value.includes('|')) {
       const parts = value.split('|').map((part) => part.trim()).filter(Boolean);
@@ -477,18 +486,19 @@ function normalizeEnvValue(value: unknown): { local?: string; staging?: string }
   }
 
   if (Array.isArray(value)) {
-    const local = value[0] !== undefined ? String(value[0]) : undefined;
-    const staging = value[1] !== undefined ? String(value[1]) : local;
+    const local = value[0] === null ? '' : value[0] !== undefined ? String(value[0]) : undefined;
+    const staging = value[1] === null ? '' : value[1] !== undefined ? String(value[1]) : local;
     return { local, staging };
   }
 
   if (isPlainObject(value)) {
-    const local = value.local !== undefined ? String(value.local) : undefined;
-    const staging = value.staging !== undefined ? String(value.staging) : local;
+    const local = value.local === null ? '' : value.local !== undefined ? String(value.local) : undefined;
+    const staging = value.staging === null ? '' : value.staging !== undefined ? String(value.staging) : local;
     return { local, staging };
   }
 
-  return {};
+  if (value === undefined) return {};
+  return { local: String(value), staging: String(value) };
 }
 
 function looksLocal(value: string): boolean {
@@ -845,6 +855,37 @@ function resolveSiteUrlFromConfig(
     return `https://${host}`;
   }
   return null;
+}
+
+function resolveSiteDefaults(
+  nginxAnswers: NginxAnswers | null,
+  nuxtConfig: Record<string, unknown> | undefined
+): Record<string, unknown> | null {
+  const origin = nginxAnswers
+    ? `https://${nginxAnswers.hostname}:${nginxAnswers.listenPort}`
+    : resolveSiteUrlFromConfig(nuxtConfig);
+  if (!origin) return null;
+  return {
+    NUXT_SITEURL: origin,
+    NUXT_PUBLIC_API_URL: '/',
+  };
+}
+
+async function seedEnvYamlDefaults(
+  targetPath: string,
+  defaults: Record<string, unknown>
+): Promise<void> {
+  if (!defaults || Object.keys(defaults).length === 0) return;
+  const envPath = path.join(targetPath, 'env.yaml');
+  const exists = await stat(envPath).catch(() => null);
+  if (!exists?.isFile()) return;
+  const raw = await readFile(envPath, 'utf-8');
+  const parsed = YAML.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  const current = parsed as Record<string, unknown>;
+  const { merged, added } = mergeEnvDefaults(current, defaults);
+  if (added.length === 0) return;
+  await writeFile(envPath, YAML.stringify(merged), 'utf-8');
 }
 
 async function promptInput(label: string): Promise<string> {

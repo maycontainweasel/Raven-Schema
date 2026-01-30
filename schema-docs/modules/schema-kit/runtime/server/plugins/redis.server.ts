@@ -14,36 +14,50 @@ type Cfg = {
   fileLoggingEnabled?: boolean
 }
 
-type SrcTag = 'env:NUXT_REDIS__*' | 'env:REDIS_*' | 'rc' | 'default'
+type SrcTag = 'env:NUXT_REDIS_*' | 'env:NUXT_REDIS__*' | 'env:REDIS_*' | 'rc' | 'default'
 type Src = { host: SrcTag; port: SrcTag; password: SrcTag; fileLoggingEnabled: SrcTag }
 
 function readConfigWithSources(): { cfg: Cfg; src: Src } {
   const rc: any = typeof useRuntimeConfig === 'function' ? useRuntimeConfig() : {}
   const r = rc?.redis || {}
 
-  // Prefer runtime env (supports both NUXT_REDIS__* and legacy REDIS_*), then rc, then default
-  const nuxtHost = process.env.NUXT_REDIS__HOST
+  // Prefer runtime env (supports NUXT_REDIS_* or legacy NUXT_REDIS__* / REDIS_*), then rc, then default
+  const nuxtHost = process.env.NUXT_REDIS_HOST ?? process.env.NUXT_REDIS__HOST
   const plainHost = process.env.REDIS_HOST
   const host = (nuxtHost || plainHost || r.host || 'localhost') as string
-  const hostSrc: SrcTag = nuxtHost ? 'env:NUXT_REDIS__*' : plainHost ? 'env:REDIS_*' : r.host ? 'rc' : 'default'
+  const hostSrc: SrcTag = nuxtHost
+    ? (process.env.NUXT_REDIS_HOST ? 'env:NUXT_REDIS_*' : 'env:NUXT_REDIS__*')
+    : plainHost
+      ? 'env:REDIS_*'
+      : r.host ? 'rc' : 'default'
 
-  const nuxtPort = process.env.NUXT_REDIS__PORT
+  const nuxtPort = process.env.NUXT_REDIS_PORT ?? process.env.NUXT_REDIS__PORT
   const plainPort = process.env.REDIS_PORT
   const portRaw = (nuxtPort ?? plainPort ?? r.port ?? 6379) as any
   const port = Number(portRaw)
-  const portSrc: SrcTag = nuxtPort ? 'env:NUXT_REDIS__*' : plainPort ? 'env:REDIS_*' : r.port ? 'rc' : 'default'
+  const portSrc: SrcTag = nuxtPort
+    ? (process.env.NUXT_REDIS_PORT ? 'env:NUXT_REDIS_*' : 'env:NUXT_REDIS__*')
+    : plainPort
+      ? 'env:REDIS_*'
+      : r.port ? 'rc' : 'default'
 
-  const nuxtPwd = process.env.NUXT_REDIS__PASSWORD
+  const nuxtPwd = process.env.NUXT_REDIS_PASSWORD ?? process.env.NUXT_REDIS__PASSWORD
   const plainPwd = process.env.REDIS_PASSWORD
   const password = (nuxtPwd ?? plainPwd ?? r.password ?? '') as string
-  const passwordSrc: SrcTag = nuxtPwd ? 'env:NUXT_REDIS__*' : plainPwd ? 'env:REDIS_*' : r.password ? 'rc' : 'default'
+  const passwordSrc: SrcTag = nuxtPwd
+    ? (process.env.NUXT_REDIS_PASSWORD ? 'env:NUXT_REDIS_*' : 'env:NUXT_REDIS__*')
+    : plainPwd
+      ? 'env:REDIS_*'
+      : r.password ? 'rc' : 'default'
 
-  const nuxtFileLog = process.env.NUXT_REDIS__FILE_LOGGING_ENABLED
+  const nuxtFileLog = process.env.NUXT_REDIS_FILE_LOGGING_ENABLED ?? process.env.NUXT_REDIS__FILE_LOGGING_ENABLED
   const fileLoggingEnabled =
     nuxtFileLog !== undefined
       ? nuxtFileLog === 'true'
       : (r.fileLoggingEnabled ?? false)
-  const fileLogSrc: SrcTag = nuxtFileLog !== undefined ? 'env:NUXT_REDIS__*' : r.fileLoggingEnabled !== undefined ? 'rc' : 'default'
+  const fileLogSrc: SrcTag = nuxtFileLog !== undefined
+    ? (process.env.NUXT_REDIS_FILE_LOGGING_ENABLED ? 'env:NUXT_REDIS_*' : 'env:NUXT_REDIS__*')
+    : r.fileLoggingEnabled !== undefined ? 'rc' : 'default'
 
   if (!Number.isFinite(port) || port < 1 || port > 65535) {
     throw new Error(`[redis] REDIS_PORT must be 1-65535, got: ${portRaw}`)

@@ -123,6 +123,12 @@ function buildEnvLines(envConfig: Record<string, unknown>): {
 }
 
 function normalizeEnvValue(value: unknown): { local?: string; staging?: string } {
+  if (value === null) {
+    return { local: '', staging: '' };
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return { local: String(value), staging: String(value) };
+  }
   if (typeof value === 'string') {
     if (value.includes('|')) {
       const parts = value.split('|').map((part) => part.trim()).filter(Boolean);
@@ -142,18 +148,19 @@ function normalizeEnvValue(value: unknown): { local?: string; staging?: string }
   }
 
   if (Array.isArray(value)) {
-    const local = value[0] !== undefined ? String(value[0]) : undefined;
-    const staging = value[1] !== undefined ? String(value[1]) : local;
+    const local = value[0] === null ? '' : value[0] !== undefined ? String(value[0]) : undefined;
+    const staging = value[1] === null ? '' : value[1] !== undefined ? String(value[1]) : local;
     return { local, staging };
   }
 
   if (isPlainObject(value)) {
-    const local = value.local !== undefined ? String(value.local) : undefined;
-    const staging = value.staging !== undefined ? String(value.staging) : local;
+    const local = value.local === null ? '' : value.local !== undefined ? String(value.local) : undefined;
+    const staging = value.staging === null ? '' : value.staging !== undefined ? String(value.staging) : local;
     return { local, staging };
   }
 
-  return {};
+  if (value === undefined) return {};
+  return { local: String(value), staging: String(value) };
 }
 
 function looksLocal(value: string): boolean {

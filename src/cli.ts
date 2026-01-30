@@ -237,10 +237,25 @@ const argv = yargs(hideBin(process.argv))
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
-      const packages = (args._?.slice(2) ?? []).map((val: any) => String(val));
+      const rawPackages = Array.isArray(args.packages)
+        ? args.packages.map((val: any) => String(val))
+        : [];
+      let name = String(args.name || args.n || '');
+      let packages = rawPackages;
+      if (!name) {
+        if (packages.length > 0) {
+          name = String(packages.shift() || '');
+        } else if (Array.isArray(args._) && args._.length > 1) {
+          name = String(args._[1] || '');
+          packages = args._.slice(2).map((val: any) => String(val));
+        }
+      }
+      if (packages.length === 0 && Array.isArray(args._) && args._.length > 2) {
+        packages = args._.slice(2).map((val: any) => String(val));
+      }
       await runSitePkgAdd({
         projectRoot,
-        name: String(args.name || args.n || args._?.[1] || ''),
+        name,
         specPath: args.spec ? String(args.spec) : undefined,
         appPath: args.app ? String(args.app) : undefined,
         packages,
@@ -3468,6 +3483,28 @@ async function runSiteSetupFlow(options: {
   const wantsSentry = featureConfig?.sentry?.enabled === true;
   const wantsRedis = featureConfig?.redis?.enabled === true;
 
+  const logModuleUpdates = bundle.app.schemaKit?.logModuleUpdates !== false;
+  const schemaKitConfig = bundle.app.schemaKit?.module ?? {};
+  const moduleMode = schemaKitConfig.mode ?? 'copy';
+  const moduleSync = schemaKitConfig.sync ?? 'auto';
+  const moduleSource = schemaKitConfig.source ?? 'module';
+  const sharedModulePath = schemaKitConfig.sharedPath;
+  const moduleSourceRoot = path.resolve(projectRoot, moduleSource);
+  await ensureSchemaKitModule({
+    projectRoot,
+    project,
+    moduleSourceRoot,
+    log: logModuleUpdates,
+    mode: moduleMode,
+    sync: moduleSync,
+    sharedModulePath,
+  });
+  await writeSchemaKitConfig({
+    projectRoot,
+    project,
+    app: bundle.app,
+  });
+
   const report = await checkProjectSetup({
     projectRoot,
     app: bundle.app,
@@ -3604,6 +3641,22 @@ async function runSiteSetupFlow(options: {
     }
     const shouldSync = fix || await promptToContinue('Generate env.yaml and .env files now?');
     if (shouldSync) {
+      await runSiteEnvYamlSync({
+        projectRoot,
+        specPath: specEntry.path,
+        updatePackage: true,
+        writeRuntimeConfig: true,
+        writeEnvConfig: true,
+      });
+      console.log('✅ Generated env.yaml and env files.');
+    }
+  }
+
+  const envYamlPath = path.join(report.appRoot, 'env.yaml');
+  const envYamlExists = await stat(envYamlPath).catch(() => null);
+  if (!envYamlExists?.isFile()) {
+    const shouldSyncYaml = fix || await promptToContinue('env.yaml missing. Generate env.yaml now?');
+    if (shouldSyncYaml) {
       await runSiteEnvYamlSync({
         projectRoot,
         specPath: specEntry.path,

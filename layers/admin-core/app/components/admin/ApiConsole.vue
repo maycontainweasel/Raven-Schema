@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import type { ApiConsoleEntry } from '~/stores/apiConsole'
+type ApiConsoleEntry = {
+  id: string
+  timestamp: string
+  type: 'message' | 'response'
+  message?: string
+  state?: 'success' | 'error' | 'info'
+  payload?: unknown
+}
 
 const props = defineProps<{
   entries: ApiConsoleEntry[]

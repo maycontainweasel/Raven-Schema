@@ -266,6 +266,9 @@ function buildEnvOutputs(envSpec: Record<string, unknown>): {
 }
 
 function normalizeEnvValue(value: unknown): { local?: string; staging?: string } {
+  if (value === null) {
+    return { local: '', staging: '' };
+  }
   if (typeof value === 'string') {
     if (value.includes('|')) {
       const parts = value.split('|').map((part) => part.trim()).filter(Boolean);
@@ -285,15 +288,15 @@ function normalizeEnvValue(value: unknown): { local?: string; staging?: string }
   }
 
   if (Array.isArray(value)) {
-    const local = value[0] !== undefined ? String(value[0]) : undefined;
-    const staging = value[1] !== undefined ? String(value[1]) : local;
+    const local = value[0] === null ? '' : value[0] !== undefined ? String(value[0]) : undefined;
+    const staging = value[1] === null ? '' : value[1] !== undefined ? String(value[1]) : local;
     return { local, staging };
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
-    const local = record.local !== undefined ? String(record.local) : undefined;
-    const staging = record.staging !== undefined ? String(record.staging) : local;
+    const local = record.local === null ? '' : record.local !== undefined ? String(record.local) : undefined;
+    const staging = record.staging === null ? '' : record.staging !== undefined ? String(record.staging) : local;
     return { local, staging };
   }
 
@@ -301,7 +304,8 @@ function normalizeEnvValue(value: unknown): { local?: string; staging?: string }
     return { local: String(value), staging: String(value) };
   }
 
-  return {};
+  if (value === undefined) return {};
+  return { local: String(value), staging: String(value) };
 }
 
 function looksLocal(value: string): boolean {
@@ -313,6 +317,7 @@ function isScalar(value: unknown): boolean {
     typeof value === 'string' ||
     typeof value === 'number' ||
     typeof value === 'boolean' ||
+    value === null ||
     Array.isArray(value) ||
     (value && typeof value === 'object' && !Array.isArray(value))
   );

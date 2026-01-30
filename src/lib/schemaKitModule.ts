@@ -65,7 +65,7 @@ export async function ensureSchemaKitModule(options: {
       if (needsUpdate) {
         await writeFile(targetFile, sourceContent, 'utf-8');
         await copyDir(sourceRuntime, targetRuntime);
-        await copyDir(sourceResources, targetRuntime, { overwrite: false });
+        await copyDir(sourceResources, targetRuntime, { overwrite: true });
         await copyDir(sourceOverrides, targetRuntime);
         await writeFile(hashFile, `${currentHash}\n`, 'utf-8');
         if (hasPreservedGenerated) {

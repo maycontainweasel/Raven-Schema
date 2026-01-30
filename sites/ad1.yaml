@@ -1,27 +1,33 @@
-name: pub2
-slug: pub2
+name: ad1
+slug: ad1
 template: templates/nuxt-4.3.0
-target: apps/pub2
+target: apps/ad1
 deploy:
   ssl:
     email: ""
     redirect: true
 nuxtConfig:
   devServer:
-    port: 2345
+    port: 2947
     host: 0.0.0.0
   vite:
     server:
       allowedHosts:
-        - pub2.schema.local
-      origin: https://pub2.schema.local:4443
+        - ad1.schema.local
+      origin: https://ad1.schema.local:4443
       hmr:
         protocol: wss
-        host: pub2.schema.local
+        host: ad1.schema.local
         clientPort: 4443
         path: /__vitews
-        port: 49983
+        port: 43007
   extends:
     - ./layers/schema-core
+    - ./layers/admin-core
 layers:
   - schema-core
+  - admin-core
+packages:
+  dependencies:
+    pinia: latest
+    "@pinia/nuxt": latest

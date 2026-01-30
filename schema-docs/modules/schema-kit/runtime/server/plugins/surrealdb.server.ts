@@ -1,4 +1,4 @@
-import Surreal from 'surrealdb'
+import { Surreal } from 'surrealdb'
 import { eventHandler } from 'h3'
 
 declare global {
@@ -49,10 +49,11 @@ function createSurrealDBServerPlugin(appName: string) {
     if (globalThis.surrealDb) return
 
     const cfg = readConfig()
-    if (!cfg.url) console.error('surrealdb: NUXT_SURREALDB_URL is not set')
+    if (!cfg.url) {
+      throw new Error('surrealdb: NUXT_SURREALDB_URL is not set')
+    }
     if (!cfg.namespace || !cfg.database || !cfg.user || !cfg.pass) {
-      console.warn('[surrealdb] Missing connection config; plugin did not initialise.')
-      return
+      throw new Error('[surrealdb] Missing connection config; plugin did not initialise.')
     }
 
     // Early proxy sanity

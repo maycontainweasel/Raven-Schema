@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { useAdminNav } from '~/composables/useAdminNav'
-import type { AdminNavItem } from '~/types/admin-nav'
+type AdminNavItem = {
+  id: string
+  label: string
+  to?: string
+  icon?: string
+  badge?: string
+  defaultOpen?: boolean
+  children?: AdminNavItem[]
+}
 
 const props = defineProps<{ collapsed: boolean }>()
 

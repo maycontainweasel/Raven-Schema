@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
 import { TRPCError } from '@trpc/server'
-import Surreal from 'surrealdb'
+import { Surreal } from 'surrealdb'
 import { readSession } from '@schema/server/auth/session'
 import { getSurrealClient } from '@schema/server/plugins/surrealdb.server'
 import { LR, LRS } from '@schema/utils/lrs'
