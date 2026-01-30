@@ -4,16 +4,18 @@ template: templates/nuxt-4.3.0
 target: apps/admin
 nuxtConfig:
   devServer:
-    port: 1300
+    port: 2500
     host: 0.0.0.0
   vite:
     server:
       allowedHosts:
-        - admin.schema.dev
-      origin: https://admin.schema.dev:4443
+        - y
+      origin: https://y:4443
       hmr:
         protocol: wss
-        host: admin.schema.dev
+        host: y
         clientPort: 4443
         path: /__vitews
-        port: 42363
+        port: 44931
+layers:
+  - schema-core
