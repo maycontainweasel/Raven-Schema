@@ -25,13 +25,61 @@ export async function runSitePkgSync(options: {
   const basePkg = await readPackageJson(path.join(appRoot, 'package.json'));
   const layerPackages = await loadLayerPackages(projectRoot, spec.layers);
   const sitePackages = await loadSitePackages(projectRoot, spec);
-  const mergedPackages = mergePackages(...layerPackages, sitePackages);
+  const featurePackages = await loadSchemaKitFeaturePackages(appRoot);
+  const mergedPackages = mergePackages(...layerPackages, sitePackages, featurePackages);
 
   const nextBase = templatePkg ? mergeBasePackage(templatePkg, basePkg) : basePkg;
   const next = applyPackages(nextBase, mergedPackages);
   await writeFile(path.join(appRoot, 'package.json'), `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
 
   console.log(`✅ Packages synced for ${spec.slug}`);
+}
+
+async function loadSchemaKitFeaturePackages(appRoot: string): Promise<{
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}> {
+  const configPath = path.join(appRoot, 'schema-kit.config.json');
+  const exists = await readFile(configPath, 'utf-8').catch(() => null);
+  if (!exists) return {};
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(exists);
+  } catch {
+    return {};
+  }
+  const features = parsed?.features ?? {};
+  const deps: Record<string, string> = {};
+  const devDeps: Record<string, string> = {};
+
+  const sentry = features.sentry;
+  const sentryEnabled = typeof sentry === 'boolean'
+    ? sentry
+    : sentry?.enabled !== false;
+  if (sentryEnabled) {
+    deps['@sentry/vue'] = '^10.5.0';
+    deps['@sentry/node'] = '^10.5.0';
+    const wantsSourceMaps = typeof sentry === 'object'
+      ? sentry.sourceMaps !== false
+      : true;
+    if (wantsSourceMaps) {
+      devDeps['@sentry/vite-plugin'] = '^4.1.1';
+    }
+  }
+
+  const redis = features.redis;
+  const redisEnabled = typeof redis === 'boolean'
+    ? redis
+    : redis?.enabled === true;
+  if (redisEnabled) {
+    deps['ioredis'] = '^5.7.0';
+  }
+
+  if (Object.keys(deps).length === 0) return {};
+  return {
+    dependencies: deps,
+    devDependencies: Object.keys(devDeps).length > 0 ? devDeps : undefined,
+  };
 }
 
 async function readPackageJson(filePath: string): Promise<Record<string, unknown>> {

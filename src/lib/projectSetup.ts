@@ -1,5 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from 'fs/promises';
 import path from 'path';
+import YAML from 'yaml';
 
 import type { AppConfig, ProjectPathsConfig } from '../types';
 import { loadSiteSpec } from './siteSpec';
@@ -104,6 +105,66 @@ export async function checkProjectSetup(options: {
         missingConfig.push(marker);
       }
     }
+  }
+
+  const envSpec = await readEnvYaml(appRoot);
+  if (envSpec && missingConfig.length > 0) {
+    const presentKeys = new Set(Object.keys(envSpec));
+    const hasAnyKey = (keys: string[]) => keys.some((key) => presentKeys.has(key));
+    const shouldKeep = (marker: string) => {
+      if (marker === 'runtimeConfig') {
+        return Object.keys(envSpec).length === 0;
+      }
+      if (marker === 'surrealdb') {
+        return !hasAnyKey([
+          'NUXT_SURREALDB_URL',
+          'NUXT_SURREALDB_USER',
+          'NUXT_SURREALDB_PASS',
+          'NUXT_SURREALDB_NAMESPACE',
+          'NUXT_SURREALDB_DATABASE',
+        ]);
+      }
+      if (marker === 'typesense') {
+        return !hasAnyKey([
+          'NUXT_TYPESENSE_HOST',
+          'NUXT_PUBLIC_TYPESENSE_HOST',
+          'NUXT_TYPESENSE_API_KEY',
+          'NUXT_PUBLIC_TYPESENSE_API_KEY',
+          'NUXT_TYPESENSE_PORT',
+          'NUXT_PUBLIC_TYPESENSE_PORT',
+          'NUXT_TYPESENSE_ENABLE_CORS',
+          'NUXT_PUBLIC_TYPESENSE_ENABLE_CORS',
+        ]);
+      }
+      if (marker === 'sentry') {
+        return !hasAnyKey([
+          'NUXT_SENTRY_DSN',
+          'NUXT_SENTRY_ENV',
+          'NUXT_PUBLIC_SENTRY_DSN',
+          'NUXT_PUBLIC_SENTRY_ENV',
+          'SENTRY_AUTH_TOKEN',
+          'SENTRY_ORG',
+          'SENTRY_PROJECT',
+          'SENTRY_RELEASE',
+        ]);
+      }
+      if (marker === 'redis') {
+        return !hasAnyKey([
+          'NUXT_REDIS_HOST',
+          'NUXT_REDIS_PORT',
+          'NUXT_REDIS_PASSWORD',
+          'NUXT_REDIS_FILE_LOGGING_ENABLED',
+          'NUXT_REDIS__HOST',
+          'NUXT_REDIS__PORT',
+          'NUXT_REDIS__PASSWORD',
+          'NUXT_REDIS__FILE_LOGGING_ENABLED',
+        ]);
+      }
+      return true;
+    };
+    const filtered = missingConfig.filter(shouldKeep);
+    missingConfig.length = 0;
+    missingConfig.push(...filtered);
   }
 
   const missingEnvFiles = await findMissingFiles(appRoot, REQUIRED_ENV_FILES);
@@ -524,6 +585,18 @@ async function findMissingFiles(root: string, files: string[]): Promise<string[]
   return missing;
 }
 
+async function readEnvYaml(appRoot: string): Promise<Record<string, unknown> | null> {
+  const envPath = path.join(appRoot, 'env.yaml');
+  const exists = await stat(envPath).catch(() => null);
+  if (!exists?.isFile()) return null;
+  const content = await readFile(envPath, 'utf-8');
+  const parsed = YAML.parse(content);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  return parsed as Record<string, unknown>;
+}
+
 async function hasAnyEnvFile(root: string): Promise<boolean> {
   const candidates = ['.env', '.env.local'];
   for (const name of candidates) {
@@ -761,9 +834,9 @@ function renderEnvTemplate(
     ...(includeRedis
       ? [
           `# Redis${label}`,
-          `NUXT_REDIS__HOST=`,
-          `NUXT_REDIS__PORT=`,
-          `NUXT_REDIS__PASSWORD=`,
+          `NUXT_REDIS_HOST=`,
+          `NUXT_REDIS_PORT=`,
+          `NUXT_REDIS_PASSWORD=`,
           '',
         ]
       : []),
@@ -867,7 +940,7 @@ async function ensureEnvSections(
   }
 
   if (includeRedis) {
-    const keys = ['NUXT_REDIS__HOST', 'NUXT_REDIS__PORT', 'NUXT_REDIS__PASSWORD'];
+    const keys = ['NUXT_REDIS_HOST', 'NUXT_REDIS_PORT', 'NUXT_REDIS_PASSWORD'];
     const toAdd = keys.filter((key) => !hasKey(key));
     if (toAdd.length) {
       missingBlocks.push(

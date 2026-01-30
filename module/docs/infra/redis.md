@@ -35,8 +35,8 @@ docker compose -f docker-compose.redis.yml down
 ## Connection defaults (local)
 
 ```bash
-NUXT_REDIS__HOST=127.0.0.1
-NUXT_REDIS__PORT=6379
-NUXT_REDIS__PASSWORD=
-NUXT_REDIS__FILE_LOGGING_ENABLED=false
+NUXT_REDIS_HOST=127.0.0.1
+NUXT_REDIS_PORT=6379
+NUXT_REDIS_PASSWORD=
+NUXT_REDIS_FILE_LOGGING_ENABLED=false
 ```

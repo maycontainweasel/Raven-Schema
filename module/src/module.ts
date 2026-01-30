@@ -337,7 +337,7 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
         if (!requireRuntimeValue('redis.host') || !requireRuntimeValue('redis.port')) {
           errors.push('Redis enabled but runtimeConfig.redis.host/port are missing.')
           errors.push(
-            'Env: NUXT_REDIS__HOST, NUXT_REDIS__PORT (optional: NUXT_REDIS__PASSWORD, NUXT_REDIS__FILE_LOGGING_ENABLED)',
+            'Env: NUXT_REDIS_HOST, NUXT_REDIS_PORT (optional: NUXT_REDIS_PASSWORD, NUXT_REDIS_FILE_LOGGING_ENABLED)',
           )
         }
       }

@@ -158,6 +158,10 @@ export async function runSiteCreate(options: {
     },
   });
 
+  if (spec.layers?.includes('admin-core')) {
+    await writeAdminAppShell(targetPath);
+  }
+
   if (nginxAnswers && !nginxAnswers.skipNginxApply) {
     await runNginxSetup(
       {
@@ -274,6 +278,19 @@ async function ensureTargetDir(targetPath: string, force: boolean): Promise<void
   }
   await rm(targetPath, { recursive: true, force: true });
   await mkdir(targetPath, { recursive: true });
+}
+
+async function writeAdminAppShell(targetPath: string): Promise<void> {
+  const appPath = path.join(targetPath, 'app');
+  await mkdir(appPath, { recursive: true });
+  const appVue = path.join(appPath, 'app.vue');
+  const contents = `<template>
+  <NuxtLayout>
+    <NuxtPage />
+  </NuxtLayout>
+</template>
+`;
+  await writeFile(appVue, contents, 'utf-8');
 }
 
 async function updatePackageJson(

@@ -34,13 +34,17 @@ export async function runSiteEnvYamlSync(options: EnvSyncOptions): Promise<void>
     ? resolveEnvPath(options.envPath, appRoot, projectRoot)
     : path.join(appRoot, 'env.yaml');
 
-  const envSpecRaw = await readEnvYaml(envPath).catch(() => ({}));
+  const { envSpecRaw, customBlock, customKeys, hadFile, hasMarker } = await readEnvYamlWithCustom(envPath);
   const layerDefaults = spec?.layers && spec.layers.length > 0
     ? await loadLayerEnvDefaults(projectRoot, spec.layers)
     : {};
   const { merged: envSpec, added } = mergeEnvDefaults(envSpecRaw, layerDefaults);
-  if (added.length > 0 || Object.keys(envSpecRaw).length === 0) {
-    await writeFile(envPath, YAML.stringify(envSpec), 'utf-8');
+  for (const key of customKeys) {
+    delete (envSpec as Record<string, unknown>)[key];
+  }
+  if (added.length > 0 || Object.keys(envSpecRaw).length === 0 || !hadFile || !hasMarker) {
+    const output = buildEnvYamlOutput(envSpec, customBlock, hadFile);
+    await writeFile(envPath, output, 'utf-8');
   }
   const { localLines, stagingLines, envConfig, runtimeConfig } = buildEnvOutputs(envSpec);
 
@@ -151,17 +155,76 @@ async function readSiteSpec(specPath: string): Promise<SiteSpec | null> {
   };
 }
 
-async function readEnvYaml(envPath: string): Promise<Record<string, unknown>> {
+const CUSTOM_ENV_MARKER = '# --- schema:custom ---';
+
+async function readEnvYamlWithCustom(envPath: string): Promise<{
+  envSpecRaw: Record<string, unknown>;
+  customBlock: string | null;
+  customKeys: Set<string>;
+  hadFile: boolean;
+  hasMarker: boolean;
+}> {
   const exists = await stat(envPath).catch(() => null);
   if (!exists?.isFile()) {
-    return {};
+    return {
+      envSpecRaw: {},
+      customBlock: null,
+      customKeys: new Set(),
+      hadFile: false,
+      hasMarker: false,
+    };
   }
   const content = await readFile(envPath, 'utf-8');
   const parsed = YAML.parse(content);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`env.yaml must be a YAML mapping: ${envPath}`);
   }
-  return parsed as Record<string, unknown>;
+  const markerIndex = content.indexOf(CUSTOM_ENV_MARKER);
+  if (markerIndex === -1) {
+    return {
+      envSpecRaw: parsed as Record<string, unknown>,
+      customBlock: null,
+      customKeys: new Set(),
+      hadFile: true,
+      hasMarker: false,
+    };
+  }
+  const afterMarker = content.slice(markerIndex + CUSTOM_ENV_MARKER.length);
+  const customBlock = afterMarker.replace(/^\r?\n/, '');
+  let customParsed: Record<string, unknown> = {};
+  try {
+    const candidate = YAML.parse(customBlock);
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      customParsed = candidate as Record<string, unknown>;
+    }
+  } catch {
+    customParsed = {};
+  }
+  return {
+    envSpecRaw: parsed as Record<string, unknown>,
+    customBlock,
+    customKeys: new Set(Object.keys(customParsed)),
+    hadFile: true,
+    hasMarker: true,
+  };
+}
+
+function buildEnvYamlOutput(
+  envSpec: Record<string, unknown>,
+  customBlock: string | null,
+  hadFile: boolean
+): string {
+  const header = YAML.stringify(envSpec).trimEnd();
+  let output = header ? `${header}\n` : '';
+  if (customBlock !== null || !hadFile) {
+    output += `${CUSTOM_ENV_MARKER}\n`;
+    if (customBlock) {
+      output += customBlock.replace(/^\r?\n/, '');
+      if (!output.endsWith('\n')) output += '\n';
+    }
+  }
+  if (!output.endsWith('\n')) output += '\n';
+  return output;
 }
 
 function buildEnvOutputs(envSpec: Record<string, unknown>): {
@@ -265,17 +328,29 @@ function formatEnvLine(key: string, value: string): string {
 function mapEnvKeyToRuntimePath(key: string): string[] | null {
   if (key.startsWith('NUXT_PUBLIC_')) {
     const rest = key.slice('NUXT_PUBLIC_'.length);
-    return ['public', ...splitRuntimeSegments(rest)];
+    return ['public', ...splitRuntimeSegmentsWithGroup(rest)];
   }
   if (key.startsWith('NUXT_APP_')) {
     const rest = key.slice('NUXT_APP_'.length);
-    return ['app', ...splitRuntimeSegments(rest)];
+    return ['app', ...splitRuntimeSegmentsWithGroup(rest)];
   }
   if (key.startsWith('NUXT_')) {
     const rest = key.slice('NUXT_'.length);
-    return splitRuntimeSegments(rest);
+    return splitRuntimeSegmentsWithGroup(rest);
   }
   return null;
+}
+
+const GROUPED_RUNTIME_KEYS = new Set(['SURREALDB', 'TYPESENSE', 'REDIS', 'SENTRY']);
+
+function splitRuntimeSegmentsWithGroup(raw: string): string[] {
+  const parts = raw.split('_').filter(Boolean);
+  if (parts.length > 1 && GROUPED_RUNTIME_KEYS.has(parts[0])) {
+    const group = toCamelCase([parts[0]]);
+    const rest = toCamelCase(parts.slice(1));
+    return rest ? [group, rest] : [group];
+  }
+  return splitRuntimeSegments(raw);
 }
 
 function splitRuntimeSegments(raw: string): string[] {
