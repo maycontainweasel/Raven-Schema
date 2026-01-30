@@ -8,6 +8,7 @@ import YAML from 'yaml';
 import { toKebabCase } from './util';
 import { runNginxSetup, resolveNginxConfig, deriveNginxFileName } from './nginxSetup';
 import { ensureNuxtConfigExtends } from '../lib/siteSpec';
+import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
 
 interface SiteSpec {
   name: string;
@@ -168,6 +169,7 @@ export async function runSiteCreate(options: {
   await ensureNuxtRuntimeFile(targetPath);
   await updatePackageJson(targetPath, repoRoot, slug, spec);
   await runSitePkgSyncFromCreate(projectRoot, spec, targetPath);
+  await ensureEnvYaml(targetPath, projectRoot, spec.layers);
   await writeEnvFiles(targetPath, spec.env);
   await writeEcosystemConfig(targetPath, spec.deploy);
 
@@ -361,6 +363,21 @@ async function writeEnvFiles(
   if (stagingLines.length > 0) {
     await writeFile(path.join(targetPath, '.env.staging'), `${stagingLines.join('\n')}\n`, 'utf-8');
   }
+}
+
+async function ensureEnvYaml(
+  targetPath: string,
+  projectRoot: string,
+  layers: string[] | undefined
+): Promise<void> {
+  const envPath = path.join(targetPath, 'env.yaml');
+  const exists = await stat(envPath).catch(() => null);
+  if (exists?.isFile()) return;
+  const defaults = layers && layers.length > 0
+    ? await loadLayerEnvDefaults(projectRoot, layers)
+    : {};
+  const { merged } = mergeEnvDefaults({}, defaults);
+  await writeFile(envPath, YAML.stringify(merged), 'utf-8');
 }
 
 function buildEnvLines(envConfig: Record<string, unknown>): {

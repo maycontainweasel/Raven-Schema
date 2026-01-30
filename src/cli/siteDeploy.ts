@@ -91,14 +91,20 @@ export async function runSiteDeploy(options: {
     : answers;
 
   if (!options.noEnvSync) {
-    await runSiteEnvYamlSync({
-      projectRoot,
-      name: slug,
-      appPath: appRoot,
-      updatePackage: true,
-      writeRuntimeConfig: true,
-      writeEnvConfig: true,
-    });
+    const envPath = path.join(appRoot, 'env.yaml');
+    const envExists = await stat(envPath).catch(() => null);
+    if (envExists?.isFile()) {
+      await runSiteEnvYamlSync({
+        projectRoot,
+        name: slug,
+        appPath: appRoot,
+        updatePackage: true,
+        writeRuntimeConfig: true,
+        writeEnvConfig: true,
+      });
+    } else {
+      console.log('ℹ️  env.yaml not found; skipping env sync.');
+    }
   }
 
   if (!options.noBuild) {

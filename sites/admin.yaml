@@ -2,24 +2,16 @@ name: admin
 slug: admin
 template: templates/nuxt-4.3.0
 target: apps/admin
-nuxtConfig:
-  devServer:
-    port: 2500
-    host: 0.0.0.0
-  vite:
-    server:
-      allowedHosts:
-        - admin.schema.dev
-      origin: https://admin.schema.dev:4443
-      hmr:
-        protocol: wss
-        host: admin.schema.dev
-        clientPort: 4443
-        path: /__vitews
-        port: 45023
-  extends:
-    - ./layers/schema-core
-    - ./layers/admin-core
-layers:
-  - schema-core
-  - admin-core
+deploy:
+  host: mpire.live
+  domain: admin.mpire.live
+  port: 2500
+  appDir: /home/mpire/admin
+  pm2Name: admin
+  pm2Command: pm2
+  nginxSitesEnabled: /etc/nginx/sites-enabled
+  restartCommand: systemctl reload nginx
+  overwriteNginx: true
+  overwriteApp: true
+  startPm2: true
+  setupComplete: true

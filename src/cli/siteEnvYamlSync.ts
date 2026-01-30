@@ -3,12 +3,14 @@ import { readFile, writeFile, stat } from 'fs/promises';
 import YAML from 'yaml';
 
 import { toKebabCase } from './util';
+import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
 
 interface SiteSpec {
   name: string;
   slug: string;
   template: string;
   target: string;
+  layers?: string[];
 }
 
 interface EnvSyncOptions {
@@ -27,12 +29,19 @@ export async function runSiteEnvYamlSync(options: EnvSyncOptions): Promise<void>
   const repoRoot = path.resolve(projectRoot, '..', '..');
   const sitesRoot = path.resolve(projectRoot, 'sites');
 
-  const appRoot = await resolveAppRoot(options, sitesRoot, projectRoot, repoRoot);
+  const { appRoot, spec } = await resolveAppRoot(options, sitesRoot, projectRoot, repoRoot);
   const envPath = options.envPath
     ? resolveEnvPath(options.envPath, appRoot, projectRoot)
     : path.join(appRoot, 'env.yaml');
 
-  const envSpec = await readEnvYaml(envPath);
+  const envSpecRaw = await readEnvYaml(envPath).catch(() => ({}));
+  const layerDefaults = spec?.layers && spec.layers.length > 0
+    ? await loadLayerEnvDefaults(projectRoot, spec.layers)
+    : {};
+  const { merged: envSpec, added } = mergeEnvDefaults(envSpecRaw, layerDefaults);
+  if (added.length > 0 || Object.keys(envSpecRaw).length === 0) {
+    await writeFile(envPath, YAML.stringify(envSpec), 'utf-8');
+  }
   const { localLines, stagingLines, envConfig, runtimeConfig } = buildEnvOutputs(envSpec);
 
   await writeEnvFile(path.join(appRoot, '.env'), localLines);
@@ -62,20 +71,26 @@ async function resolveAppRoot(
   sitesRoot: string,
   projectRoot: string,
   repoRoot: string
-): Promise<string> {
+): Promise<{ appRoot: string; spec: SiteSpec | null }> {
   if (options.appPath) {
-    return path.isAbsolute(options.appPath)
+    return {
+      appRoot: path.isAbsolute(options.appPath)
       ? options.appPath
-      : path.resolve(repoRoot, options.appPath);
+      : path.resolve(repoRoot, options.appPath),
+      spec: null,
+    };
   }
   const specPath = resolveSpecPath(options, sitesRoot, projectRoot);
   const spec = await readSiteSpec(specPath);
   if (!spec) {
     throw new Error(`Site spec not found or invalid: ${specPath}`);
   }
-  return path.isAbsolute(spec.target)
+  return {
+    appRoot: path.isAbsolute(spec.target)
     ? spec.target
-    : path.resolve(repoRoot, spec.target);
+    : path.resolve(repoRoot, spec.target),
+    spec,
+  };
 }
 
 function resolveSpecPath(
@@ -130,13 +145,16 @@ async function readSiteSpec(specPath: string): Promise<SiteSpec | null> {
     slug: String(parsed.slug),
     template: String(parsed.template),
     target: String(parsed.target),
+    layers: Array.isArray((parsed as any).layers)
+      ? (parsed as any).layers.map((entry: any) => String(entry).trim()).filter(Boolean)
+      : undefined,
   };
 }
 
 async function readEnvYaml(envPath: string): Promise<Record<string, unknown>> {
   const exists = await stat(envPath).catch(() => null);
   if (!exists?.isFile()) {
-    throw new Error(`env.yaml not found: ${envPath}`);
+    return {};
   }
   const content = await readFile(envPath, 'utf-8');
   const parsed = YAML.parse(content);
