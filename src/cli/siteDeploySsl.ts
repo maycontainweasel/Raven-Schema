@@ -144,7 +144,7 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeploySslAnswers {
   const ssl = (deploy as any).ssl ?? {};
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
-  const domain = (deploy as any).domain ?? `${slug || 'site'}.mpire.live`;
+  const domain = (deploy as any).domain ?? '';
   const email = ssl.email ?? '';
   const redirect = ssl.redirect ?? false;
   const staging = ssl.staging ?? false;
@@ -193,7 +193,8 @@ async function collectAnswers(
   }
 
   const host = options.host ?? (await promptRequiredInput('SSH host', defaults.host));
-  const user = options.user ?? ((await promptInput(`SSH user (${defaults.user ?? 'current'})`)) || defaults.user);
+  const userPrompt = await promptInput(`SSH user (${defaults.user ?? 'current'})`);
+  const user = options.user ?? (userPrompt && userPrompt.trim() ? userPrompt : defaults.user);
   const domain = options.domain ?? (await promptRequiredInput('Domain', defaults.domain));
   const email = options.email ?? (await promptRequiredInput('Email', defaults.email));
   const redirect = options.redirect ?? (await promptYesNo('Redirect HTTP to HTTPS?', defaults.redirect));

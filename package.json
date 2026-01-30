@@ -34,6 +34,8 @@
     "site:env:sync": "tsx src/cli.ts site:env:sync",
     "site:env": "tsx src/cli.ts site:env",
     "site:env:sync:yaml": "tsx src/cli.ts site:env:sync:yaml",
+    "site:pkg:sync": "tsx src/cli.ts site:pkg:sync",
+    "site:pkg:add": "tsx src/cli.ts site:pkg:add",
     "site:deploy:init": "tsx src/cli.ts site:deploy:init",
     "site:deploy:setup": "tsx src/cli.ts site:deploy:setup",
     "site:deploy:ssl": "tsx src/cli.ts site:deploy:ssl",

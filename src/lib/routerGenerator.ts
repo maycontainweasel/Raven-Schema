@@ -2476,8 +2476,9 @@ function buildParentSubtableRouters(
   for (const child of subtables) {
     const childModel = child.table?.model;
     if (!childModel) continue;
-    const childKey = routerKeyByTable.get(child) ?? sanitizeCamel(child.name || childModel);
-    const childLabel = sanitizePascal(child.name || childModel);
+    const childName = child.name || childModel;
+    const childKey = routerKeyByTable.get(child) ?? sanitizeCamel(childName);
+    const childLabel = sanitizePascal(childName);
     const prefix = `${tableNamePascal}${childLabel}Subtable`;
     const routerIdentifier = `${prefix}Router`;
     const tableType = child.tableType === 'submany' ? 'submany' : 'subsingle';

@@ -1,7 +1,7 @@
 import path from 'path';
 import readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
-import { readFile, stat } from 'fs/promises';
+import { readFile, stat, writeFile } from 'fs/promises';
 import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import YAML from 'yaml';
@@ -15,6 +15,11 @@ interface SiteSpec {
   target: string;
   env?: Record<string, unknown>;
   deploy?: Record<string, unknown>;
+}
+
+interface SiteSpecEntry {
+  spec: SiteSpec;
+  path: string;
 }
 
 interface DeployAnswers {
@@ -75,11 +80,15 @@ export async function runSiteDeployInit(options: {
   const repoRoot = path.resolve(projectRoot, '..', '..');
   const sitesRoot = path.resolve(projectRoot, 'sites');
 
-  const spec = await loadSiteSpec(options, sitesRoot, projectRoot);
+  const specEntry = await loadSiteSpec(options, sitesRoot, projectRoot);
+  const spec = specEntry?.spec ?? null;
   const slug = spec?.slug ?? toKebabCase(options.name ?? '');
 
   const defaults = deriveDefaults(spec, slug);
   let answers = await collectAnswers(options, defaults);
+  if (!answers.appDir || !answers.appDir.trim()) {
+    throw new Error('App dir is required for deploy setup.');
+  }
 
   const sshTarget = answers.user ? `${answers.user}@${answers.host}` : answers.host;
   const resolvedAppDir = await resolveRemoteAppDir(sshTarget, answers.appDir);
@@ -193,6 +202,27 @@ export async function runSiteDeployInit(options: {
 
   console.log(`✅ Deploy init complete.`);
   console.log(`🌐 URL: http://${answers.domain}`);
+
+  if (specEntry) {
+    const nextDeploy = {
+      ...(specEntry.spec.deploy ?? {}),
+      host: answers.host,
+      user: answers.user ?? undefined,
+      domain: answers.domain,
+      port: answers.port,
+      appDir: answers.appDir,
+      pm2Name: answers.pm2Name,
+      pm2Command: answers.pm2Command,
+      nginxSitesEnabled: answers.nginxSitesEnabled,
+      restartCommand: answers.restartCommand,
+      overwriteNginx: answers.overwriteNginx,
+      overwriteApp: answers.overwriteApp,
+      startPm2: answers.startPm2,
+      setupComplete: true,
+    };
+    const nextSpec = { ...specEntry.spec, deploy: nextDeploy };
+    await writeFile(specEntry.path, YAML.stringify(nextSpec), 'utf-8');
+  }
 }
 
 function renderNodeStarter(options: {
@@ -252,7 +282,7 @@ async function loadSiteSpec(
   options: { name?: string; specPath?: string },
   sitesRoot: string,
   projectRoot: string
-): Promise<SiteSpec | null> {
+): Promise<SiteSpecEntry | null> {
   let specPath: string | null = null;
   if (options.specPath) {
     specPath = resolveProvidedSpecPath(options.specPath, projectRoot, sitesRoot);
@@ -269,12 +299,15 @@ async function loadSiteSpec(
     return null;
   }
   return {
-    name: String(parsed.name),
-    slug: String(parsed.slug),
-    template: String(parsed.template),
-    target: String(parsed.target),
-    deploy: parsed.deploy as Record<string, unknown> | undefined,
-    env: parsed.env as Record<string, unknown> | undefined,
+    path: specPath,
+    spec: {
+      name: String(parsed.name),
+      slug: String(parsed.slug),
+      template: String(parsed.template),
+      target: String(parsed.target),
+      deploy: parsed.deploy as Record<string, unknown> | undefined,
+      env: parsed.env as Record<string, unknown> | undefined,
+    },
   };
 }
 
@@ -298,8 +331,14 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const user = (deploy as any).user ?? null;
   const domain = (deploy as any).domain ?? '';
   const port = Number((deploy as any).port ?? 4041);
-  const appDir = normalizeRemotePath((deploy as any).appDir ?? `~/${slug || 'site'}`);
-  const pm2Name = (deploy as any).pm2Name ?? (slug || 'site');
+  const defaultSlug = slug || 'site';
+  const appDirValue = (deploy as any).appDir;
+  const appDir = normalizeRemotePath(
+    typeof appDirValue === 'string' && appDirValue.trim()
+      ? appDirValue
+      : `~/${defaultSlug}`
+  );
+  const pm2Name = (deploy as any).pm2Name ?? defaultSlug;
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
@@ -381,9 +420,9 @@ async function collectAnswers(
 
   const host =
     options.host ?? (await promptRequiredInput('SSH host', defaults.host));
+  const userPrompt = await promptInput(`SSH user (${defaults.user ?? 'current'})`);
   const user =
-    options.user ??
-    ((await promptInput(`SSH user (${defaults.user ?? 'current'})`)) || defaults.user);
+    options.user ?? (userPrompt && userPrompt.trim() ? userPrompt : defaults.user);
   const domain =
     options.domain ?? (await promptRequiredInput('Domain', defaults.domain));
   const port = options.port ?? (await promptNumber(`Upstream port (${defaults.port})`, defaults.port));

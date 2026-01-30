@@ -139,6 +139,14 @@ Notes:
 | `pnpm run schema:assets:sync --database <name>` | Replace the target DB `app:schemaAssets` with the local manifest (top-level keys). |
 | `pnpm run schema:indexes:rebuild [name]` | Rebuild indexes for a database. Use `--table` to scope by table, or omit for all indexes. |
 
+## Site package management
+
+- `site:pkg:sync [name]`  
+  Merge layer packages + site packages into `package.json`.
+
+- `site:pkg:add [name] <packages..>`  
+  Add packages to site packages (dependencies by default) and sync `package.json`.
+
 > Keep this table in sync whenever new CLI commands are introduced or existing ones change.
 
 Examples:

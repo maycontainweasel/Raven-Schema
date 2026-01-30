@@ -54,6 +54,8 @@ import { runSiteCreate } from './cli/siteCreate';
 import { runSiteDelete } from './cli/siteDelete';
 import { runSiteEnvSync } from './cli/siteEnvSync';
 import { runSiteEnvYamlSync } from './cli/siteEnvYamlSync';
+import { runSitePkgSync } from './cli/sitePkgSync';
+import { runSitePkgAdd } from './cli/sitePkgAdd';
 import { runSiteDeployInit } from './cli/siteDeployInit';
 import { runSiteDeploySsl } from './cli/siteDeploySsl';
 import { runSiteDeploy } from './cli/siteDeploy';
@@ -111,7 +113,7 @@ const argv = yargs(hideBin(process.argv))
         })
         .option('host', {
           type: 'string',
-          describe: 'SSH host (default from deploy.host or mpire.live)',
+          describe: 'SSH host (default from deploy.host)',
         })
         .option('user', {
           type: 'string',
@@ -119,7 +121,7 @@ const argv = yargs(hideBin(process.argv))
         })
         .option('domain', {
           type: 'string',
-          describe: 'Domain to serve (default <slug>.mpire.live)',
+          describe: 'Domain to serve (default from deploy.domain)',
         })
         .option('port', {
           type: 'number',
@@ -165,6 +167,87 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:pkg:sync [name]',
+    'Sync package.json from layers + site packages',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('app', {
+          type: 'string',
+          describe: 'Path to app folder (overrides site spec target)',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSitePkgSync({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        appPath: args.app ? String(args.app) : undefined,
+      });
+    }
+  )
+  .command(
+    'site:pkg:add [name] <packages..>',
+    'Add packages to site packages and sync package.json',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .positional('packages', {
+          describe: 'Packages to add (e.g. vue-sonner@1.3.0)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('app', {
+          type: 'string',
+          describe: 'Path to app folder (overrides site spec target)',
+        })
+        .option('dev', {
+          type: 'boolean',
+          default: false,
+          describe: 'Add to devDependencies',
+        })
+        .option('no-install', {
+          type: 'boolean',
+          describe: 'Skip pnpm install after updating package.json',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const packages = (args._?.slice(2) ?? []).map((val: any) => String(val));
+      await runSitePkgAdd({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        appPath: args.app ? String(args.app) : undefined,
+        packages,
+        dev: args.dev === true,
+        noInstall: args['no-install'] === true,
+      });
+    }
+  )
+  .command(
     'site:deploy:ssl [name]',
     'Enable SSL via certbot for a deployed site',
     (yargsBuilder: any) =>
@@ -184,7 +267,7 @@ const argv = yargs(hideBin(process.argv))
         })
         .option('host', {
           type: 'string',
-          describe: 'SSH host (default from deploy.host or mpire.live)',
+          describe: 'SSH host (default from deploy.host)',
         })
         .option('user', {
           type: 'string',
@@ -192,7 +275,7 @@ const argv = yargs(hideBin(process.argv))
         })
         .option('domain', {
           type: 'string',
-          describe: 'Domain to secure (default <slug>.mpire.live)',
+          describe: 'Domain to secure (default from deploy.domain)',
         })
         .option('email', {
           type: 'string',
@@ -423,7 +506,7 @@ const argv = yargs(hideBin(process.argv))
         })
         .option('host', {
           type: 'string',
-          describe: 'SSH host (default from deploy.host or mpire.live)',
+          describe: 'SSH host (default from deploy.host)',
         })
         .option('user', {
           type: 'string',
@@ -431,7 +514,7 @@ const argv = yargs(hideBin(process.argv))
         })
         .option('domain', {
           type: 'string',
-          describe: 'Domain to serve (default <slug>.mpire.live)',
+          describe: 'Domain to serve (default from deploy.domain)',
         })
         .option('port', {
           type: 'number',
@@ -724,6 +807,10 @@ const argv = yargs(hideBin(process.argv))
         .option('cd', {
           type: 'boolean',
           describe: 'Open a subshell in the new app folder after creation',
+        })
+        .option('admin', {
+          type: 'boolean',
+          describe: 'Include admin-core layer in the generated site spec',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
@@ -735,6 +822,7 @@ const argv = yargs(hideBin(process.argv))
         target: args.target ? String(args.target) : undefined,
         force: args.force === true,
         nginxMode: resolveNginxMode(args),
+        admin: args.admin === true,
       });
       let shouldInstall = args.install === true;
       if (args.install === undefined && process.stdin.isTTY) {
@@ -3515,8 +3603,9 @@ async function findMigrationFile(dir: string, fileNames: string[]): Promise<stri
 
 function buildRouterTemplate(table: TableMigrationConfig, reference: string) {
   const slugSource = reference.replace(/\./g, ' ');
-  const routerName = table.router?.name ?? toKebabCase(slugSource || (table.name ?? 'router'));
-  const pascalRef = toPascalCase(slugSource || (table.name ?? routerName));
+  const routerBase = slugSource || table.name || 'router';
+  const routerName = table.router?.name ?? toKebabCase(routerBase);
+  const pascalRef = toPascalCase(slugSource || table.name || routerName);
   const resourceFunction = `${pascalRef}Default`;
 
   const requiredFields = getRequiredFieldNames(table);

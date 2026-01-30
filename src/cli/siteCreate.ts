@@ -7,6 +7,7 @@ import YAML from 'yaml';
 
 import { toKebabCase } from './util';
 import { runNginxSetup, resolveNginxConfig, deriveNginxFileName } from './nginxSetup';
+import { ensureNuxtConfigExtends } from '../lib/siteSpec';
 
 interface SiteSpec {
   name: string;
@@ -58,6 +59,7 @@ export async function runSiteCreate(options: {
   target?: string;
   force?: boolean;
   nginxMode?: 'apply' | 'config' | 'skip';
+  admin?: boolean;
 }): Promise<SiteCreateResult> {
   const projectRoot = options.projectRoot;
   const repoRoot = path.resolve(projectRoot, '..', '..');
@@ -122,6 +124,13 @@ export async function runSiteCreate(options: {
       ) as Record<string, unknown>;
     }
     spec.layers = ensureSchemaCoreLayer(spec.layers);
+    if (options.admin) {
+      spec.layers = ensureAdminLayer(spec.layers);
+    }
+    if (Array.isArray(spec.layers) && spec.layers.length > 0) {
+      const layerRefs = spec.layers.map((name) => `./layers/${name}`);
+      ensureNuxtConfigExtends(spec, layerRefs);
+    }
     await writeSiteSpec(specPath, spec);
   }
 
@@ -158,6 +167,7 @@ export async function runSiteCreate(options: {
   await writeGeneratedNuxtConfig(targetPath, spec.nuxtConfig);
   await ensureNuxtRuntimeFile(targetPath);
   await updatePackageJson(targetPath, repoRoot, slug, spec);
+  await runSitePkgSyncFromCreate(projectRoot, spec, targetPath);
   await writeEnvFiles(targetPath, spec.env);
   await writeEcosystemConfig(targetPath, spec.deploy);
 
@@ -291,12 +301,12 @@ async function updatePackageJson(
     };
   }
 
-  if (!hasScriptOverride(override, 'install')) {
+  if (!hasScriptOverride(override, 'inst')) {
     const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
     override.scripts = {
       ...(isPlainObject(base.scripts) ? base.scripts : {}),
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
-      install: `pnpm -C ${relRoot} --filter ${slug} install`,
+      inst: `pnpm -C ${relRoot} --filter ${slug} install`,
     };
   }
   if (!hasScriptOverride(override, 'add')) {
@@ -423,6 +433,23 @@ async function writeEcosystemConfig(
   await writeFile(path.join(targetPath, 'ecosystem.config.cjs'), output, 'utf-8');
 }
 
+async function runSitePkgSyncFromCreate(
+  projectRoot: string,
+  spec: SiteSpec,
+  targetPath: string
+): Promise<void> {
+  try {
+    const { runSitePkgSync } = await import('./sitePkgSync');
+    await runSitePkgSync({
+      projectRoot,
+      name: spec.slug,
+      appPath: targetPath,
+    });
+  } catch (error) {
+    console.warn('⚠️  Failed to sync packages after site:create.', error);
+  }
+}
+
 function normalizeConfigValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => normalizeConfigValue(item)).filter((item) => item !== undefined);
@@ -446,6 +473,15 @@ function ensureSchemaCoreLayer(layers: string[] | undefined): string[] {
   const entries = current.filter(Boolean);
   if (!entries.includes('schema-core')) {
     return [...entries, 'schema-core'];
+  }
+  return entries;
+}
+
+function ensureAdminLayer(layers: string[] | undefined): string[] {
+  const current = Array.isArray(layers) ? layers : [];
+  const entries = current.filter(Boolean);
+  if (!entries.includes('admin-core')) {
+    return [...entries, 'admin-core'];
   }
   return entries;
 }

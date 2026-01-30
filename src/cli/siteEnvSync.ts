@@ -181,14 +181,15 @@ async function updatePackageJson(
     'dotenv-cli': '^7.4.0',
   };
 
-  if (!hasScriptOverride(override, 'install')) {
+  if (!hasScriptOverride(override, 'inst')) {
     const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
     override.scripts = {
       ...(isPlainObject(base.scripts) ? base.scripts : {}),
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
-      install: `pnpm -C ${relRoot} --filter ${spec.slug} install`,
+      inst: `pnpm -C ${relRoot} --filter ${spec.slug} install`,
     };
   }
+
   if (!hasScriptOverride(override, 'add')) {
     const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
     override.scripts = {

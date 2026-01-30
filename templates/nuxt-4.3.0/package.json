@@ -8,6 +8,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "deploy": "pnpm -C ../schema run site:deploy -- $npm_package_name",
+    "inst": "pnpm -C ../.. --filter $npm_package_name install",
     "preview": "nuxt preview",
     "start": "NITRO_HOST=0.0.0.0 NITRO_PORT=3123 node .output/server/index.mjs",
     "postinstall": "nuxt prepare"

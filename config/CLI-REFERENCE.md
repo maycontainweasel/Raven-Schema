@@ -111,6 +111,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `--nginx` run nginx setup
   - `--nginx-config` capture nginx settings without applying
   - `--no-nginx` skip nginx prompts entirely
+  - `--admin` include the `admin-core` layer in the site spec
 
 - `site:delete [name]`  
   Remove nginx server block, certs, and hosts entry for a site.  
@@ -151,7 +152,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:deploy:setup my-site`
 
 - `site:deploy [name]`  
-  Build, sync `.output` to the remote `output/` folder, sync `ecosystem.config.cjs`, and reload PM2.  
+  Build, sync `.output` to the remote `output/` folder, sync `ecosystem.config.cjs`, and reload PM2 (runs setup first if needed).  
   Example:
   - `pnpm -C apps/schema run site:deploy my-site`
 

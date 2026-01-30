@@ -6,6 +6,7 @@ import YAML from 'yaml';
 
 import { toKebabCase } from './util';
 import { runSiteEnvYamlSync } from './siteEnvYamlSync';
+import { runSiteDeployInit } from './siteDeployInit';
 
 interface SiteSpec {
   name: string;
@@ -50,9 +51,29 @@ export async function runSiteDeploy(options: {
   const repoRoot = path.resolve(projectRoot, '..', '..');
   const sitesRoot = path.resolve(projectRoot, 'sites');
 
-  const spec = await loadSiteSpec(options, sitesRoot, projectRoot);
+  let spec = await loadSiteSpec(options, sitesRoot, projectRoot);
   if (!spec) {
     throw new Error('Site spec not found. Provide a name or --spec.');
+  }
+
+  if (!isSetupComplete(spec)) {
+    if (!process.stdin.isTTY) {
+      throw new Error('Deploy setup is incomplete. Run site:deploy:setup first.');
+    }
+    await runSiteDeployInit({
+      projectRoot,
+      name: spec.slug,
+      specPath: options.specPath,
+      host: options.host,
+      user: options.user,
+      domain: options.domain,
+      port: options.port,
+      appDir: options.appDir,
+    });
+    spec = await loadSiteSpec(options, sitesRoot, projectRoot);
+    if (!spec) {
+      throw new Error('Site spec not found after deploy setup.');
+    }
   }
 
   const slug = spec.slug;
@@ -124,10 +145,15 @@ export async function runSiteDeploy(options: {
 
   if (!options.noPm2) {
     console.log('🚀 Starting/reloading PM2...');
-    await runSsh(
-      sshTarget,
-      `cd ${shellEscapePath(resolvedAnswers.appDir)} && ${buildPm2Command(resolvedAnswers.pm2Command, 'startOrReload ecosystem.config.cjs --update-env')}`
-    );
+    const pm2Available = await remoteCommandExists(sshTarget, resolvedAnswers.pm2Command);
+    if (!pm2Available) {
+      console.warn(`⚠️  ${resolvedAnswers.pm2Command} not found on the remote host. Skipping PM2 start.`);
+    } else {
+      await runSsh(
+        sshTarget,
+        `cd ${shellEscapePath(resolvedAnswers.appDir)} && ${buildPm2Command(resolvedAnswers.pm2Command, 'startOrReload ecosystem.config.cjs --update-env')}`
+      );
+    }
   }
 
   if (resolvedAnswers.restartNginx) {
@@ -144,9 +170,12 @@ function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAn
   const deploy = spec.deploy ?? {};
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
-  const domain = (deploy as any).domain ?? `${slug}.mpire.live`;
+  const domain = (deploy as any).domain ?? '';
   const port = Number((deploy as any).port ?? 4041);
-  const appDir = normalizeRemotePath((deploy as any).appDir ?? `~/${slug}`);
+  const appDirValue = (deploy as any).appDir;
+  const appDir = normalizeRemotePath(
+    typeof appDirValue === 'string' && appDirValue.trim() ? appDirValue : `~/${slug}`
+  );
   const pm2Name = (deploy as any).pm2Name ?? slug;
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
@@ -195,6 +224,10 @@ function resolveAnswers(options: {
     rsyncDelete: options.rsyncDelete ?? defaults.rsyncDelete,
     restartNginx: options.restartNginx ?? defaults.restartNginx,
   };
+}
+
+function isSetupComplete(spec: SiteSpec): boolean {
+  return Boolean(spec.deploy && (spec.deploy as any).setupComplete);
 }
 
 async function loadSiteSpec(
@@ -290,6 +323,12 @@ async function runSshCapture(target: string, command: string): Promise<string> {
   return stdout;
 }
 
+async function remoteCommandExists(target: string, command: string): Promise<boolean> {
+  const cmd = buildCommandExistsCheck(command);
+  const output = await runSshCapture(target, cmd);
+  return output.trim() === 'yes';
+}
+
 async function resolveRemoteHome(target: string): Promise<string> {
   const output = await runSshCapture(target, 'printf %s "$HOME"');
   return output.trim();
@@ -372,6 +411,18 @@ function buildPm2Command(command: string, args: string): string {
     `elif [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && ${command} ${args};`,
     `else ${command} ${args}; fi`,
   ].join(' ');
+}
+
+function buildCommandExistsCheck(command: string): string {
+  if (isPathLikeCommand(command)) {
+    return `test -x ${shellEscapePath(command)} && echo yes || echo no`;
+  }
+  const cmd = command.split(/\s+/)[0];
+  return [
+    `command -v ${cmd} >/dev/null 2>&1 && echo yes`,
+    `[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && command -v ${cmd} >/dev/null 2>&1 && echo yes`,
+    `echo no`,
+  ].join(' || ');
 }
 
 function isPathLikeCommand(command: string): boolean {
