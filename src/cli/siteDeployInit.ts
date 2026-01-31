@@ -28,6 +28,7 @@ interface DeployAnswers {
   domain: string;
   port: number;
   appDir: string;
+  remoteName: string;
   pm2Name: string;
   pm2Command: string;
   nginxSitesEnabled: string;
@@ -218,6 +219,7 @@ export async function runSiteDeployInit(options: {
       overwriteNginx: answers.overwriteNginx,
       overwriteApp: answers.overwriteApp,
       startPm2: answers.startPm2,
+      remoteName: answers.remoteName ?? (specEntry.spec.deploy as any)?.remoteName ?? answers.pm2Name,
       setupComplete: true,
     };
     if (!(nextDeploy as any).ssl) {
@@ -265,6 +267,13 @@ function buildEcosystemConfig(answers: DeployAnswers, deploy?: Record<string, un
   if (deployEcosystem && typeof deployEcosystem === 'object') {
     return `module.exports = ${JSON.stringify(deployEcosystem, null, 2)};\n`;
   }
+  const extraEnv = deploy && (deploy as any).pm2Env;
+  const mergedEnv = {
+    HOST: '0.0.0.0',
+    PORT: answers.port,
+    NODE_ENV: 'production',
+    ...(extraEnv && typeof extraEnv === 'object' ? extraEnv : {}),
+  };
   const config = {
     apps: [
       {
@@ -273,11 +282,7 @@ function buildEcosystemConfig(answers: DeployAnswers, deploy?: Record<string, un
         cwd: answers.appDir,
         script: 'output/server/index.mjs',
         node_args: '',
-        env: {
-          HOST: '0.0.0.0',
-          PORT: answers.port,
-          NODE_ENV: 'production',
-        },
+        env: mergedEnv,
       },
     ],
   };
@@ -333,6 +338,7 @@ function resolveProvidedSpecPath(
 
 function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const deploy = spec?.deploy ?? {};
+  const remoteName = String((deploy as any).remoteName ?? slug || 'site');
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
   const domain = (deploy as any).domain ?? '';
@@ -342,9 +348,9 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const appDir = normalizeRemotePath(
     typeof appDirValue === 'string' && appDirValue.trim()
       ? appDirValue
-      : `~/${defaultSlug}`
+      : `~/${remoteName || defaultSlug}`
   );
-  const pm2Name = (deploy as any).pm2Name ?? defaultSlug;
+  const pm2Name = (deploy as any).pm2Name ?? remoteName;
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
@@ -357,6 +363,7 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
     domain,
     port: Number.isFinite(port) && port > 0 ? port : 4041,
     appDir,
+     remoteName,
     pm2Name,
     pm2Command,
     nginxSitesEnabled,
@@ -390,18 +397,19 @@ async function collectAnswers(
     const appDir = options.appDir
       ? normalizeRemotePath(options.appDir)
       : defaults.appDir;
-    return {
-      ...defaults,
-      host,
-      user: options.user ?? defaults.user,
-      domain,
-      port: options.port ?? defaults.port,
-      appDir,
-      overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
-      overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
-      startPm2: options.startPm2 ?? defaults.startPm2,
-    };
-  }
+  return {
+    ...defaults,
+    host,
+    user: options.user ?? defaults.user,
+    domain,
+    port: options.port ?? defaults.port,
+    appDir,
+    remoteName: defaults.remoteName,
+    overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
+    overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
+    startPm2: options.startPm2 ?? defaults.startPm2,
+  };
+}
   if (!process.stdin.isTTY) {
     const host = options.host ?? defaults.host;
     const domain = options.domain ?? defaults.domain;

@@ -25,6 +25,7 @@ interface DeployAnswers {
   domain: string;
   port: number;
   appDir: string;
+  remoteName: string;
   pm2Name: string;
   pm2Command: string;
   nginxSitesEnabled: string;
@@ -247,15 +248,16 @@ export async function runSiteDeploy(options: {
 
 function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAnswers {
   const deploy = spec.deploy ?? {};
+  const remoteName = String((deploy as any).remoteName ?? slug);
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
   const domain = (deploy as any).domain ?? '';
   const port = Number((deploy as any).port ?? 4041);
   const appDirValue = (deploy as any).appDir;
   const appDir = normalizeRemotePath(
-    typeof appDirValue === 'string' && appDirValue.trim() ? appDirValue : `~/${slug}`
+    typeof appDirValue === 'string' && appDirValue.trim() ? appDirValue : `~/${remoteName || slug}`
   );
-  const pm2Name = (deploy as any).pm2Name ?? slug;
+  const pm2Name = (deploy as any).pm2Name ?? remoteName;
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
@@ -269,6 +271,7 @@ function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAn
     domain,
     port: Number.isFinite(port) && port > 0 ? port : 4041,
     appDir,
+    remoteName,
     pm2Name,
     pm2Command,
     nginxSitesEnabled,
@@ -301,6 +304,7 @@ function resolveAnswers(options: {
     domain,
     port: options.port ?? defaults.port,
     appDir: options.appDir ? normalizeRemotePath(options.appDir) : defaults.appDir,
+    remoteName: defaults.remoteName,
     buildCommand: options.buildCommand ?? defaults.buildCommand,
     rsyncDelete: options.rsyncDelete ?? defaults.rsyncDelete,
     restartNginx: options.restartNginx ?? defaults.restartNginx,
@@ -368,6 +372,13 @@ function buildEcosystemConfig(
   if (ecosystem && typeof ecosystem === 'object') {
     return `module.exports = ${JSON.stringify(ecosystem, null, 2)};\n`;
   }
+  const extraEnv = deploy && (deploy as any).pm2Env;
+  const mergedEnv = {
+    HOST: '0.0.0.0',
+    PORT: answers.port,
+    NODE_ENV: 'production',
+    ...(extraEnv && typeof extraEnv === 'object' ? extraEnv : {}),
+  };
   const config = {
     apps: [
       {
@@ -376,11 +387,7 @@ function buildEcosystemConfig(
         cwd: answers.appDir,
         script: 'output/server/index.mjs',
         node_args: '',
-        env: {
-          HOST: '0.0.0.0',
-          PORT: answers.port,
-          NODE_ENV: 'production',
-        },
+        env: mergedEnv,
       },
     ],
   };
