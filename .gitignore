@@ -149,6 +149,8 @@ config/graph.ts
 # Module
 
 module/src/runtime/generated/
+module/src/runtime/controllers/
+module/src/runtime/index.ts
 module/src/runtime/controllers/generated/
 module/src/runtime/controllers/controller-manifest.json
 
@@ -168,6 +170,9 @@ schema-docs/test/capabilities/reports/
 schema-docs/app/data/router-manifest.json
 schema-docs/app/data/docs-manifest.json
 schema-docs/app/types/schema/generated/
+schema-docs/docs/controllers/
+schema-docs/modules/schema-kit/
+schema-docs/server/trpc/routers/
 schema-docs/modules/schema-kit/runtime/generated/
 schema-docs/modules/schema-kit/.schema-kit.hash
 
