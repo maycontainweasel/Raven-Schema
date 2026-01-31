@@ -1,0 +1,25 @@
+{
+  "base": {
+    "fontSize": 16,
+    "ratio": 1.2,
+    "gridRatio": 1.4,
+    "spaceSync": true,
+    "spaceMode": "grid",
+    "spaceBase": 1,
+    "spaceRatio": 1.25
+  },
+  "breakpoints": {
+    "768": {
+      "fontSize": 15,
+      "ratio": 1.2,
+      "gridRatio": 1.45,
+      "spaceSync": true
+    },
+    "1200": {
+      "fontSize": 16,
+      "ratio": 1.25,
+      "gridRatio": 1.55,
+      "spaceSync": true
+    }
+  }
+}
