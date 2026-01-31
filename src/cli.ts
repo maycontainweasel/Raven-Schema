@@ -65,7 +65,7 @@ import { runSiteAdopt } from './cli/siteAdopt';
 import { runSiteMigrate } from './cli/siteMigrate';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
-import { writeSchemaKitConfig, resolveSchemaKitFeatures } from './lib/schemaKitConfig';
+import { writeSchemaKitConfig, resolveSchemaKitFeatures, applySchemaKitDefaults } from './lib/schemaKitConfig';
 import { ensureSchemaKitModule } from './lib/schemaKitModule';
 import { syncProjectLayers } from './lib/layerSync';
 import { writeAuthLayerConfig } from './lib/layerConfigWriter';
@@ -3477,6 +3477,11 @@ type SiteSpecForSetup = {
   env?: Record<string, unknown>;
   deploy?: Record<string, unknown>;
   layers?: string[];
+  capabilities?: Record<string, unknown>;
+  schemaKit?: {
+    capabilities?: Record<string, unknown>;
+    features?: Record<string, unknown>;
+  };
 };
 
 async function loadSiteSpecForSetup(options: {
@@ -3503,20 +3508,22 @@ async function loadSiteSpecForSetup(options: {
   if (!parsed?.name || !parsed.slug || !parsed.template || !parsed.target) {
     return null;
   }
-  return {
-    path: resolved,
-    spec: {
-      name: String(parsed.name),
-      slug: String(parsed.slug),
-      template: String(parsed.template),
-      target: String(parsed.target),
-      nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
-      packageJson: parsed.packageJson as Record<string, unknown> | undefined,
-      env: parsed.env as Record<string, unknown> | undefined,
-      deploy: parsed.deploy as Record<string, unknown> | undefined,
-      layers: Array.isArray(parsed.layers) ? parsed.layers.map(String) : undefined,
-    },
-  };
+      return {
+        path: resolved,
+        spec: {
+          name: String(parsed.name),
+          slug: String(parsed.slug),
+          template: String(parsed.template),
+          target: String(parsed.target),
+          nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
+          packageJson: parsed.packageJson as Record<string, unknown> | undefined,
+          env: parsed.env as Record<string, unknown> | undefined,
+          deploy: parsed.deploy as Record<string, unknown> | undefined,
+          layers: Array.isArray(parsed.layers) ? parsed.layers.map(String) : undefined,
+          capabilities: parsed.capabilities as Record<string, unknown> | undefined,
+          schemaKit: parsed.schemaKit as Record<string, unknown> | undefined,
+        },
+      };
 }
 
 async function runSiteSetupFlow(options: {
@@ -3530,7 +3537,17 @@ async function runSiteSetupFlow(options: {
   const appRoot = project.nuxtProjectRoot
     ? path.resolve(projectRoot, project.nuxtProjectRoot)
     : null;
-  const featureConfig = resolveSchemaKitFeatures(bundle.app, project);
+  const featureConfig = applySchemaKitDefaults(
+    bundle.app,
+    project,
+    resolveSchemaKitFeatures(
+      bundle.app,
+      project,
+      (specEntry.spec.schemaKit?.capabilities ??
+        specEntry.spec.schemaKit?.features ??
+        specEntry.spec.capabilities) as any
+    )
+  );
   const wantsSurreal = featureConfig?.surrealdb?.enabled !== false;
   const wantsTypesense = featureConfig?.typesense ?? bundle.app.typesense?.enabled !== false;
   const wantsSentry = featureConfig?.sentry?.enabled === true;
@@ -3590,6 +3607,9 @@ async function runSiteSetupFlow(options: {
     projectRoot,
     app: bundle.app,
     project,
+    specFeatures: (specEntry.spec.schemaKit?.capabilities ??
+      specEntry.spec.schemaKit?.features ??
+      specEntry.spec.capabilities) as any,
   });
   if (!report) return;
 

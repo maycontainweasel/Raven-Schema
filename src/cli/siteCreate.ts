@@ -136,6 +136,12 @@ export async function runSiteCreate(options: {
     if (options.admin) {
       spec.layers = ensureAdminLayer(spec.layers);
     }
+    spec.schemaKit = spec.schemaKit ?? {};
+    spec.schemaKit.capabilities = {
+      ...((spec.schemaKit.capabilities as Record<string, unknown> | undefined) ?? {}),
+      ...((spec.capabilities as Record<string, unknown> | undefined) ?? {}),
+    };
+    delete (spec as any).capabilities;
     if (Array.isArray(spec.layers) && spec.layers.length > 0) {
       const layerRefs = spec.layers.map((name) => `./layers/${name}`);
       ensureNuxtConfigExtends(spec, layerRefs);

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type { AppConfig, ProjectPathsConfig, SchemaKitFeatures, SchemaKitSentryFeature, SchemaKitRedisFeature, SchemaKitSurrealFeature, SchemaKitAuthFeature } from '../types';
+import { loadSiteSpec } from './siteSpec';
 
 export interface SchemaKitConfig {
   appName?: string;
@@ -88,7 +89,13 @@ export async function writeSchemaKitConfig(options: {
     aliases[modelsImport] = rel;
   }
 
-  const featureConfig = resolveSchemaKitFeatures(app, project);
+  const specEntry = await loadSiteSpec(projectRoot, project);
+  const siteFeatures =
+    specEntry?.spec?.schemaKit?.capabilities ??
+    specEntry?.spec?.schemaKit?.features ??
+    specEntry?.spec?.capabilities;
+  const featureConfig = resolveSchemaKitFeatures(app, project, siteFeatures);
+  const resolvedFeatures = applySchemaKitDefaults(app, project, featureConfig);
   const config: SchemaKitConfig = {
     appName: project.name,
     aliases,
@@ -96,13 +103,13 @@ export async function writeSchemaKitConfig(options: {
       strict: app.schemaKit?.validation?.strict !== false,
     },
     features: {
-      typesense: featureConfig?.typesense ?? app.typesense?.enabled !== false,
-      trpcClient: featureConfig?.trpcClient ?? true,
-      trpcServer: featureConfig?.trpcServer ?? true,
-      sentry: normalizeSentryFeature(featureConfig?.sentry),
-      redis: normalizeRedisFeature(featureConfig?.redis),
-      surrealdb: normalizeSurrealFeature(featureConfig?.surrealdb),
-      auth: normalizeAuthFeature(featureConfig?.auth),
+      typesense: resolvedFeatures?.typesense,
+      trpcClient: resolvedFeatures?.trpcClient,
+      trpcServer: resolvedFeatures?.trpcServer,
+      sentry: normalizeSentryFeature(resolvedFeatures?.sentry),
+      redis: normalizeRedisFeature(resolvedFeatures?.redis),
+      surrealdb: normalizeSurrealFeature(resolvedFeatures?.surrealdb),
+      auth: normalizeAuthFeature(resolvedFeatures?.auth),
     },
   };
 
@@ -130,27 +137,59 @@ function resolveImportPath(projectRoot: string, appRoot: string, value: string):
   return path.resolve(projectRoot, value);
 }
 
-export function resolveSchemaKitFeatures(app: AppConfig, project: ProjectPathsConfig): SchemaKitFeatures | undefined {
+export function resolveSchemaKitFeatures(
+  app: AppConfig,
+  project: ProjectPathsConfig,
+  siteFeatures?: SchemaKitFeatures
+): SchemaKitFeatures | undefined {
   const base = app.schemaKit?.features;
   const overrides = app.schemaKit?.projects?.find((entry) => entry.name === project.name)?.features;
-  if (!base && !overrides) return undefined;
+  if (!base && !overrides && !siteFeatures) return undefined;
   return {
     ...base,
     ...overrides,
-    sentry: mergeFeature(base?.sentry, overrides?.sentry),
-    redis: mergeFeature(base?.redis, overrides?.redis),
-    surrealdb: mergeFeature(base?.surrealdb, overrides?.surrealdb),
+    ...siteFeatures,
+    sentry: mergeFeature(base?.sentry, overrides?.sentry, siteFeatures?.sentry),
+    redis: mergeFeature(base?.redis, overrides?.redis, siteFeatures?.redis),
+    surrealdb: mergeFeature(base?.surrealdb, overrides?.surrealdb, siteFeatures?.surrealdb),
+  };
+}
+
+export function applySchemaKitDefaults(
+  app: AppConfig,
+  project: ProjectPathsConfig,
+  features?: SchemaKitFeatures
+): SchemaKitFeatures {
+  const isAdmin = isAdminProject(app, project);
+  const defaults: SchemaKitFeatures = {
+    surrealdb: { enabled: true },
+    typesense: isAdmin,
+    sentry: false,
+    redis: false,
+    auth: false,
+    trpcClient: true,
+    trpcServer: true,
+  };
+  return {
+    ...defaults,
+    ...(features ?? {}),
+    sentry: mergeFeature(defaults.sentry, features?.sentry),
+    redis: mergeFeature(defaults.redis, features?.redis),
+    surrealdb: mergeFeature(defaults.surrealdb, features?.surrealdb),
+    auth: mergeFeature(defaults.auth, features?.auth),
   };
 }
 
 function mergeFeature<T extends { enabled?: boolean }>(
   base?: T | boolean,
-  override?: T | boolean
+  override?: T | boolean,
+  site?: T | boolean
 ): T | undefined {
   const baseObj = normalizeToggle(base);
   const overrideObj = normalizeToggle(override);
-  if (!baseObj && !overrideObj) return undefined;
-  return { ...(baseObj ?? {}), ...(overrideObj ?? {}) } as T;
+  const siteObj = normalizeToggle(site);
+  if (!baseObj && !overrideObj && !siteObj) return undefined;
+  return { ...(baseObj ?? {}), ...(overrideObj ?? {}), ...(siteObj ?? {}) } as T;
 }
 
 function normalizeToggle<T extends { enabled?: boolean }>(value?: T | boolean): T | undefined {
@@ -173,4 +212,11 @@ function normalizeSurrealFeature(value?: SchemaKitSurrealFeature | boolean): Sch
 
 function normalizeAuthFeature(value?: SchemaKitAuthFeature | boolean): SchemaKitAuthFeature | undefined {
   return normalizeToggle(value);
+}
+
+function isAdminProject(app: AppConfig, project: ProjectPathsConfig): boolean {
+  const adminProjects = app?.ui?.projects ?? [];
+  if (project?.name && adminProjects.includes(project.name)) return true;
+  if (project?.name && /admin/i.test(project.name)) return true;
+  return false;
 }

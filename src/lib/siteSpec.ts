@@ -2,7 +2,7 @@ import path from 'path';
 import { readFile, writeFile, stat } from 'fs/promises';
 import YAML from 'yaml';
 
-import type { ProjectPathsConfig } from '../types';
+import type { ProjectPathsConfig, SchemaKitFeatures } from '../types';
 
 export interface SiteSpecRecord {
   name: string;
@@ -11,6 +11,11 @@ export interface SiteSpecRecord {
   target: string;
   nuxtConfig?: Record<string, unknown>;
   layers?: string[];
+  capabilities?: SchemaKitFeatures;
+  schemaKit?: {
+    capabilities?: SchemaKitFeatures;
+    features?: SchemaKitFeatures;
+  };
 }
 
 export async function loadSiteSpec(
@@ -223,6 +228,19 @@ async function readSpecFile(filePath: string): Promise<SiteSpecRecord | null> {
     nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
     layers: Array.isArray(parsed.layers)
       ? parsed.layers.map((entry) => String(entry).trim()).filter(Boolean)
+      : undefined,
+    capabilities: isPlainObject(parsed.capabilities)
+      ? (parsed.capabilities as SchemaKitFeatures)
+      : undefined,
+    schemaKit: isPlainObject(parsed.schemaKit)
+      ? {
+          capabilities: isPlainObject((parsed.schemaKit as any).capabilities)
+            ? ((parsed.schemaKit as any).capabilities as SchemaKitFeatures)
+            : undefined,
+          features: isPlainObject((parsed.schemaKit as any).features)
+            ? ((parsed.schemaKit as any).features as SchemaKitFeatures)
+            : undefined,
+        }
       : undefined,
   };
 }

@@ -2,7 +2,8 @@ import { mkdir, readFile, stat, writeFile } from 'fs/promises';
 import path from 'path';
 import YAML from 'yaml';
 
-import type { AppConfig, ProjectPathsConfig } from '../types';
+import type { AppConfig, ProjectPathsConfig, SchemaKitFeatures } from '../types';
+import { applySchemaKitDefaults } from './schemaKitConfig';
 import { loadSiteSpec } from './siteSpec';
 
 export interface ProjectSetupReport {
@@ -63,12 +64,17 @@ export async function checkProjectSetup(options: {
   projectRoot: string;
   app: AppConfig;
   project: ProjectPathsConfig;
+  specFeatures?: SchemaKitFeatures;
 }): Promise<ProjectSetupReport | null> {
-  const { projectRoot, project, app } = options;
+  const { projectRoot, project, app, specFeatures } = options;
   if (!project.nuxtProjectRoot) return null;
 
   const appRoot = path.resolve(projectRoot, project.nuxtProjectRoot);
-  const featureConfig = resolveSchemaKitFeatures(app, project);
+  const featureConfig = applySchemaKitDefaults(
+    app,
+    project,
+    resolveSchemaKitFeatures(app, project, specFeatures)
+  );
   const requiredFiles = buildRequiredFiles(app, project);
   const packageJsonPath = path.join(appRoot, 'package.json');
   const pkg = await readJson(packageJsonPath).catch(() => null);
@@ -635,24 +641,30 @@ function normalizeToggle(value: FeatureToggle): { enabled?: boolean } | undefine
   return value;
 }
 
-function resolveSchemaKitFeatures(app: AppConfig, project: ProjectPathsConfig) {
+function resolveSchemaKitFeatures(
+  app: AppConfig,
+  project: ProjectPathsConfig,
+  siteFeatures?: SchemaKitFeatures
+) {
   const base = app.schemaKit?.features;
   const override = app.schemaKit?.projects?.find((entry) => entry.name === project.name)?.features;
-  if (!base && !override) return undefined;
+  if (!base && !override && !siteFeatures) return undefined;
   return {
     ...base,
     ...override,
-    sentry: mergeFeature(base?.sentry, override?.sentry),
-    redis: mergeFeature(base?.redis, override?.redis),
-    surrealdb: mergeFeature(base?.surrealdb, override?.surrealdb),
+    ...siteFeatures,
+    sentry: mergeFeature(base?.sentry, override?.sentry, siteFeatures?.sentry),
+    redis: mergeFeature(base?.redis, override?.redis, siteFeatures?.redis),
+    surrealdb: mergeFeature(base?.surrealdb, override?.surrealdb, siteFeatures?.surrealdb),
   };
 }
 
-function mergeFeature(base?: FeatureToggle, override?: FeatureToggle) {
+function mergeFeature(base?: FeatureToggle, override?: FeatureToggle, site?: FeatureToggle) {
   const baseObj = normalizeToggle(base);
   const overrideObj = normalizeToggle(override);
-  if (!baseObj && !overrideObj) return undefined;
-  return { ...(baseObj ?? {}), ...(overrideObj ?? {}) };
+  const siteObj = normalizeToggle(site);
+  if (!baseObj && !overrideObj && !siteObj) return undefined;
+  return { ...(baseObj ?? {}), ...(overrideObj ?? {}), ...(siteObj ?? {}) };
 }
 
 function buildRequiredDependencies(
