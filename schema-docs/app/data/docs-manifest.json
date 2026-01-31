@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T10:20:17.377Z",
+  "generatedAt": "2026-01-30T14:38:50.630Z",
   "source": "config/specs",
   "instances": {
     "default": "mpd",
@@ -11,6 +11,77 @@
     ]
   },
   "tables": {
+    "fruit": {
+      "key": "fruit",
+      "name": "Fruit",
+      "model": "fruit",
+      "description": "A basic fruit table",
+      "data": "local",
+      "fields": [
+        {
+          "key": "fruitid",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "color",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "taste",
+          "type": "string",
+          "required": true,
+          "default": ""
+        },
+        {
+          "key": "price",
+          "type": "number",
+          "required": true,
+          "default": 0
+        },
+        {
+          "key": "quantity",
+          "type": "number",
+          "required": true,
+          "default": 0
+        }
+      ],
+      "capabilities": {
+        "router": true,
+        "crud": {
+          "create": true,
+          "update": true,
+          "delete": true
+        },
+        "typesense": false,
+        "taxonomies": [],
+        "edges": false,
+        "relations": false,
+        "subtables": false
+      },
+      "subTables": [],
+      "typesense": {
+        "enabled": false
+      },
+      "docs": {
+        "types": "docs/api/models/fruit/types.md"
+      },
+      "id": {
+        "type": "string",
+        "structure": "fruitid",
+        "exportName": "FruitId",
+        "exportType": true
+      }
+    },
     "question": {
       "key": "question",
       "name": "Question",

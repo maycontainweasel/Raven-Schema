@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T10:20:17.268Z",
+  "generatedAt": "2026-01-30T14:38:50.287Z",
   "source": "schema-docs/server/trpc/routers/generated",
   "models": {
     "admin": {
@@ -182,6 +182,105 @@
           "fields": null,
           "router": "apiAttemptRouter",
           "file": "apiAttempt.ts"
+        }
+      ]
+    },
+    "fruit": {
+      "router": "fruitRouter",
+      "file": "fruit.ts",
+      "endpoints": [
+        {
+          "path": "fruit.create",
+          "name": "create",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "FruitCreateInput",
+            "raw": "RequestSchema(FruitCreateInput)"
+          },
+          "fields": {
+            "id": {
+              "key": "id",
+              "type": "object",
+              "required": false,
+              "fields": {
+                "tb": {
+                  "key": "tb",
+                  "type": "literal",
+                  "required": true
+                },
+                "id": {
+                  "key": "id",
+                  "type": "ref",
+                  "required": true
+                }
+              }
+            },
+            "fruitid": {
+              "key": "fruitid",
+              "type": "string",
+              "required": true
+            },
+            "name": {
+              "key": "name",
+              "type": "string",
+              "required": true
+            },
+            "color": {
+              "key": "color",
+              "type": "string",
+              "required": true
+            },
+            "taste": {
+              "key": "taste",
+              "type": "string",
+              "required": true
+            },
+            "price": {
+              "key": "price",
+              "type": "number",
+              "required": true
+            },
+            "quantity": {
+              "key": "quantity",
+              "type": "number",
+              "required": true
+            }
+          },
+          "router": "fruitRouter",
+          "file": "fruit.ts"
+        },
+        {
+          "path": "fruit.update",
+          "name": "update",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "FruitUpdateInput",
+            "raw": "RequestSchema(FruitUpdateInput)"
+          },
+          "fields": null,
+          "router": "fruitRouter",
+          "file": "fruit.ts"
+        },
+        {
+          "path": "fruit.delete",
+          "name": "delete",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "FruitDeleteInput",
+            "raw": "RequestSchema(FruitDeleteInput)"
+          },
+          "fields": {
+            "id": {
+              "key": "id",
+              "type": "union",
+              "required": true
+            }
+          },
+          "router": "fruitRouter",
+          "file": "fruit.ts"
         }
       ]
     },
@@ -2442,6 +2541,97 @@
       ],
       "children": [],
       "file": "apiAttempt.ts"
+    },
+    "fruitRouter": {
+      "name": "fruitRouter",
+      "endpoints": [
+        {
+          "name": "create",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "FruitCreateInput",
+            "raw": "RequestSchema(FruitCreateInput)"
+          },
+          "fields": {
+            "id": {
+              "key": "id",
+              "type": "object",
+              "required": false,
+              "fields": {
+                "tb": {
+                  "key": "tb",
+                  "type": "literal",
+                  "required": true
+                },
+                "id": {
+                  "key": "id",
+                  "type": "ref",
+                  "required": true
+                }
+              }
+            },
+            "fruitid": {
+              "key": "fruitid",
+              "type": "string",
+              "required": true
+            },
+            "name": {
+              "key": "name",
+              "type": "string",
+              "required": true
+            },
+            "color": {
+              "key": "color",
+              "type": "string",
+              "required": true
+            },
+            "taste": {
+              "key": "taste",
+              "type": "string",
+              "required": true
+            },
+            "price": {
+              "key": "price",
+              "type": "number",
+              "required": true
+            },
+            "quantity": {
+              "key": "quantity",
+              "type": "number",
+              "required": true
+            }
+          }
+        },
+        {
+          "name": "update",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "FruitUpdateInput",
+            "raw": "RequestSchema(FruitUpdateInput)"
+          },
+          "fields": null
+        },
+        {
+          "name": "delete",
+          "method": "mutation",
+          "input": {
+            "wrapper": "RequestSchema",
+            "schema": "FruitDeleteInput",
+            "raw": "RequestSchema(FruitDeleteInput)"
+          },
+          "fields": {
+            "id": {
+              "key": "id",
+              "type": "union",
+              "required": true
+            }
+          }
+        }
+      ],
+      "children": [],
+      "file": "fruit.ts"
     },
     "QuestionQcatRouter": {
       "name": "QuestionQcatRouter",

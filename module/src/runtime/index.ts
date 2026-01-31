@@ -3,6 +3,8 @@ export { useCRUD } from './composables/useCRUD';
 export { useTypesense } from './composables/useTypesense';
 export { useTypesenseSearch } from './composables/useTypesenseSearch';
 export { useTypesenseDirectory } from './composables/useTypesenseDirectory';
+export { createFruitController } from './controllers/fruit';
+export type { FruitController } from './controllers/fruit';
 export { createInstanceController } from './controllers/instance';
 export type { InstanceController } from './controllers/instance';
 export { createPostController } from './controllers/post';

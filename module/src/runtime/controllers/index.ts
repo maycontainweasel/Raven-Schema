@@ -1,3 +1,4 @@
+import { createFruitController } from './fruit'
 import { createInstanceController } from './instance'
 import { createPostController } from './post'
 import { createQuestionController } from './question'
@@ -7,6 +8,7 @@ import { createQuestionRecordController } from './questionRecord'
 import { createInstanceSettingsController } from './settings'
 import { createUserController } from './user'
 import { createUserQuestionOptionRecordController } from './userQuestionOptionRecord'
+import type { FruitController } from './fruit'
 import type { InstanceController } from './instance'
 import type { PostController } from './post'
 import type { QuestionController } from './question'
@@ -18,6 +20,7 @@ import type { UserController } from './user'
 import type { UserQuestionOptionRecordController } from './userQuestionOptionRecord'
 
 export type ControllersMap = {
+  fruit: FruitController;
   instance: InstanceController;
   post: PostController;
   question: QuestionController;
@@ -31,6 +34,7 @@ export type ControllersMap = {
 
 export function createControllers(): ControllersMap {
   return {
+  fruit: createFruitController(),
   instance: createInstanceController(),
   post: createPostController(),
   question: createQuestionController(),

@@ -1,5 +1,9 @@
 [
   {
+    "key": "fruit",
+    "typeName": "FruitController"
+  },
+  {
     "key": "instance",
     "typeName": "InstanceController"
   },

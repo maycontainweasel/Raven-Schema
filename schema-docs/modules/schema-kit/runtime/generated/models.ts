@@ -6,6 +6,7 @@ export type ModelEntry = {
 };
 
 export const models = {
+  "fruit": { table: "fruit", data: "local" },
   "question": { table: "q", data: "local" },
   "user": { table: "u", data: "local" },
   "instance": { table: "instance", data: "local" }

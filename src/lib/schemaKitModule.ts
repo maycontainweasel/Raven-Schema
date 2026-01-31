@@ -6,7 +6,7 @@ import type { ProjectPathsConfig } from '../types';
 import { loadSiteSpec, writeSiteSpec, ensureNuxtConfigModule, ensureNuxtConfigTranspile } from './siteSpec';
 
 const MODULE_FILE_NAME = 'index.ts';
-const MODULE_REF = '~/modules/schema-kit';
+const MODULE_REF = '~~/modules/schema-kit';
 
 export async function ensureSchemaKitModule(options: {
   projectRoot: string;

@@ -91,6 +91,35 @@ const { $process } = useCRUD()
 const record = await $process('apiAttempt.list', {}, { instance: 'test' })
 ```
 
+### fruit
+- CRUD: create, update, delete
+
+Endpoints:
+- `fruit.create` (mutation)
+  - fields: id (optional), fruitid (required), name (required), color (required), taste (required), price (required), quantity (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('fruit.create', {
+  "fruitid": "",
+  "name": "",
+  "color": "",
+  "taste": "",
+  "price": 0,
+  "quantity": 0
+}, { instance: 'test' })
+```
+- `fruit.update` (mutation)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('fruit.update', {}, { instance: 'test' })
+```
+- `fruit.delete` (mutation)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('fruit.delete', {}, { instance: 'test' })
+```
+
 ### question
 - CRUD: create, update, delete
 - Views/Resources: resource

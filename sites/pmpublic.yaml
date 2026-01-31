@@ -1,0 +1,20 @@
+name: pmpublic
+slug: pmpublic
+template: templates/nuxt-4.3.0
+target: apps/pmpublic
+deploy:
+  ssl:
+    email: ""
+    redirect: true
+  host: mpire.live
+  domain: pmpublic.mpire.live
+  port: 5078
+  appDir: /home/mpire
+  pm2Name: pmpublic
+  pm2Command: pm2
+  nginxSitesEnabled: /etc/nginx/sites-enabled
+  restartCommand: systemctl reload nginx
+  overwriteNginx: true
+  overwriteApp: true
+  startPm2: true
+  setupComplete: true

@@ -1,4 +1,5 @@
 export * from './core';
+export * from './tables/fruit';
 export * from './tables/question';
 export * from './tables/questionoption';
 export * from './tables/questionrecord';
