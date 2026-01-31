@@ -62,6 +62,7 @@ import { runSiteDeployInit } from './cli/siteDeployInit';
 import { runSiteDeploySsl } from './cli/siteDeploySsl';
 import { runSiteDeploy } from './cli/siteDeploy';
 import { runSiteAdopt } from './cli/siteAdopt';
+import { runSiteMigrate } from './cli/siteMigrate';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures } from './lib/schemaKitConfig';
@@ -318,6 +319,56 @@ const argv = yargs(hideBin(process.argv))
         email: args.email ? String(args.email) : undefined,
         redirect: args.redirect,
         yes: args.yes === true,
+      });
+    }
+  )
+  .command(
+    'site:migrate <from> <to>',
+    'Migrate assets from an existing Nuxt app into a new scaffold',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('from', {
+          describe: 'Source app (name or path)',
+          type: 'string',
+        })
+        .positional('to', {
+          describe: 'Target app (name or path)',
+          type: 'string',
+        })
+        .option('from', {
+          type: 'string',
+          describe: 'Source app (name or path)',
+        })
+        .option('to', {
+          type: 'string',
+          describe: 'Target app (name or path)',
+        })
+        .option('move', {
+          type: 'boolean',
+          describe: 'Move files instead of copying',
+        })
+        .option('overwrite', {
+          type: 'boolean',
+          describe: 'Overwrite existing files without prompting',
+        })
+        .option('yes', {
+          type: 'boolean',
+          describe: 'Skip prompts (defaults to skipping conflicts)',
+        })
+        .option('skip-server', {
+          type: 'boolean',
+          describe: 'Skip copying server/ directory',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteMigrate({
+        projectRoot,
+        from: args.from ? String(args.from) : String(args._?.[1] || ''),
+        to: args.to ? String(args.to) : String(args._?.[2] || ''),
+        move: args.move === true,
+        overwrite: args.overwrite === true,
+        yes: args.yes === true,
+        skipServer: args['skip-server'] === true,
       });
     }
   )
