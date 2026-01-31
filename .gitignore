@@ -152,8 +152,8 @@ module/src/runtime/generated/
 module/src/runtime/controllers/generated/
 module/src/runtime/controllers/controller-manifest.json
 
-# module/docs/controllers/**/*
-# module/src/runtime/generated/**/*
+module/docs/controllers/**/*
+module/src/runtime/generated/**/*
 
 # schema docs
 
@@ -171,8 +171,8 @@ schema-docs/app/types/schema/generated/
 schema-docs/modules/schema-kit/runtime/generated/
 schema-docs/modules/schema-kit/.schema-kit.hash
 
-# schema-docs/docs/api/models/**/*
-# schema-docs/docs/api/controllers/**/*
+schema-docs/docs/api/models/**/*
+schema-docs/docs/api/controllers/**/*
 
 # Generated docs output (schema app)
 docs/generated/
