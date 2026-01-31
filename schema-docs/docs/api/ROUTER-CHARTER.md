@@ -91,16 +91,16 @@ const { $process } = useCRUD()
 const record = await $process('apiAttempt.list', {}, { instance: 'test' })
 ```
 
-### fruit
+### car
 - CRUD: create, update, delete
 
 Endpoints:
-- `fruit.create` (mutation)
-  - fields: id (optional), fruitid (required), name (required), color (required), taste (required), price (required), quantity (required)
+- `car.create` (mutation)
+  - fields: id (optional), carid (required), name (required), color (required), taste (required), price (required), quantity (required)
   ```ts
 const { $process } = useCRUD()
-const record = await $process('fruit.create', {
-  "fruitid": "",
+const record = await $process('car.create', {
+  "carid": "",
   "name": "",
   "color": "",
   "taste": "",
@@ -108,16 +108,16 @@ const record = await $process('fruit.create', {
   "quantity": 0
 }, { instance: 'test' })
 ```
-- `fruit.update` (mutation)
+- `car.update` (mutation)
   ```ts
 const { $process } = useCRUD()
-const record = await $process('fruit.update', {}, { instance: 'test' })
+const record = await $process('car.update', {}, { instance: 'test' })
 ```
-- `fruit.delete` (mutation)
+- `car.delete` (mutation)
   - fields: id (required)
   ```ts
 const { $process } = useCRUD()
-const record = await $process('fruit.delete', {}, { instance: 'test' })
+const record = await $process('car.delete', {}, { instance: 'test' })
 ```
 
 ### question

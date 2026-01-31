@@ -1,7 +1,7 @@
 [
   {
-    "key": "fruit",
-    "typeName": "FruitController"
+    "key": "car",
+    "typeName": "CarController"
   },
   {
     "key": "instance",

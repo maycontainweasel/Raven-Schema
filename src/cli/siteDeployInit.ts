@@ -338,7 +338,7 @@ function resolveProvidedSpecPath(
 
 function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const deploy = spec?.deploy ?? {};
-  const remoteName = String((deploy as any).remoteName ?? slug || 'site');
+  const remoteName = String((deploy as any).remoteName ?? (slug || 'site'));
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
   const domain = (deploy as any).domain ?? '';

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T14:38:50.287Z",
+  "generatedAt": "2026-01-31T04:27:32.643Z",
   "source": "schema-docs/server/trpc/routers/generated",
   "models": {
     "admin": {
@@ -185,18 +185,18 @@
         }
       ]
     },
-    "fruit": {
-      "router": "fruitRouter",
-      "file": "fruit.ts",
+    "car": {
+      "router": "carRouter",
+      "file": "car.ts",
       "endpoints": [
         {
-          "path": "fruit.create",
+          "path": "car.create",
           "name": "create",
           "method": "mutation",
           "input": {
             "wrapper": "RequestSchema",
-            "schema": "FruitCreateInput",
-            "raw": "RequestSchema(FruitCreateInput)"
+            "schema": "CarCreateInput",
+            "raw": "RequestSchema(CarCreateInput)"
           },
           "fields": {
             "id": {
@@ -216,8 +216,8 @@
                 }
               }
             },
-            "fruitid": {
-              "key": "fruitid",
+            "carid": {
+              "key": "carid",
               "type": "string",
               "required": true
             },
@@ -247,30 +247,30 @@
               "required": true
             }
           },
-          "router": "fruitRouter",
-          "file": "fruit.ts"
+          "router": "carRouter",
+          "file": "car.ts"
         },
         {
-          "path": "fruit.update",
+          "path": "car.update",
           "name": "update",
           "method": "mutation",
           "input": {
             "wrapper": "RequestSchema",
-            "schema": "FruitUpdateInput",
-            "raw": "RequestSchema(FruitUpdateInput)"
+            "schema": "CarUpdateInput",
+            "raw": "RequestSchema(CarUpdateInput)"
           },
           "fields": null,
-          "router": "fruitRouter",
-          "file": "fruit.ts"
+          "router": "carRouter",
+          "file": "car.ts"
         },
         {
-          "path": "fruit.delete",
+          "path": "car.delete",
           "name": "delete",
           "method": "mutation",
           "input": {
             "wrapper": "RequestSchema",
-            "schema": "FruitDeleteInput",
-            "raw": "RequestSchema(FruitDeleteInput)"
+            "schema": "CarDeleteInput",
+            "raw": "RequestSchema(CarDeleteInput)"
           },
           "fields": {
             "id": {
@@ -279,8 +279,8 @@
               "required": true
             }
           },
-          "router": "fruitRouter",
-          "file": "fruit.ts"
+          "router": "carRouter",
+          "file": "car.ts"
         }
       ]
     },
@@ -2542,16 +2542,16 @@
       "children": [],
       "file": "apiAttempt.ts"
     },
-    "fruitRouter": {
-      "name": "fruitRouter",
+    "carRouter": {
+      "name": "carRouter",
       "endpoints": [
         {
           "name": "create",
           "method": "mutation",
           "input": {
             "wrapper": "RequestSchema",
-            "schema": "FruitCreateInput",
-            "raw": "RequestSchema(FruitCreateInput)"
+            "schema": "CarCreateInput",
+            "raw": "RequestSchema(CarCreateInput)"
           },
           "fields": {
             "id": {
@@ -2571,8 +2571,8 @@
                 }
               }
             },
-            "fruitid": {
-              "key": "fruitid",
+            "carid": {
+              "key": "carid",
               "type": "string",
               "required": true
             },
@@ -2608,8 +2608,8 @@
           "method": "mutation",
           "input": {
             "wrapper": "RequestSchema",
-            "schema": "FruitUpdateInput",
-            "raw": "RequestSchema(FruitUpdateInput)"
+            "schema": "CarUpdateInput",
+            "raw": "RequestSchema(CarUpdateInput)"
           },
           "fields": null
         },
@@ -2618,8 +2618,8 @@
           "method": "mutation",
           "input": {
             "wrapper": "RequestSchema",
-            "schema": "FruitDeleteInput",
-            "raw": "RequestSchema(FruitDeleteInput)"
+            "schema": "CarDeleteInput",
+            "raw": "RequestSchema(CarDeleteInput)"
           },
           "fields": {
             "id": {
@@ -2631,7 +2631,7 @@
         }
       ],
       "children": [],
-      "file": "fruit.ts"
+      "file": "car.ts"
     },
     "QuestionQcatRouter": {
       "name": "QuestionQcatRouter",

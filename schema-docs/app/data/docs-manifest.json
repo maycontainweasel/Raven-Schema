@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T14:38:50.630Z",
+  "generatedAt": "2026-01-31T04:27:32.791Z",
   "source": "config/specs",
   "instances": {
     "default": "mpd",
@@ -11,15 +11,15 @@
     ]
   },
   "tables": {
-    "fruit": {
-      "key": "fruit",
-      "name": "Fruit",
-      "model": "fruit",
-      "description": "A basic fruit table",
+    "car": {
+      "key": "car",
+      "name": "Car",
+      "model": "car",
+      "description": "A basic car table",
       "data": "local",
       "fields": [
         {
-          "key": "fruitid",
+          "key": "carid",
           "type": "string",
           "required": true,
           "default": ""
@@ -73,12 +73,12 @@
         "enabled": false
       },
       "docs": {
-        "types": "docs/api/models/fruit/types.md"
+        "types": "docs/api/models/car/types.md"
       },
       "id": {
         "type": "string",
-        "structure": "fruitid",
-        "exportName": "FruitId",
+        "structure": "carid",
+        "exportName": "CarId",
         "exportType": true
       }
     },

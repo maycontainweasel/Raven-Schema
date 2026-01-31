@@ -1,6 +1,6 @@
 import { adminRouter } from '../admin';
 import { apiAttemptRouter } from './apiAttempt';
-import { fruitRouter } from './fruit';
+import { carRouter } from './car';
 import { questionRouter } from './question';
 import { questionOptionRouter } from './questionoption';
 import { questionRecordRouter } from './questionrecord';
@@ -12,7 +12,7 @@ import { instanceRouter } from './instance';
 export const generatedRouters = {
   "admin": adminRouter,
   "apiAttempt": apiAttemptRouter,
-  "fruit": fruitRouter,
+  "car": carRouter,
   "question": questionRouter,
   "questionOption": questionOptionRouter,
   "questionRecord": questionRecordRouter,
@@ -24,7 +24,7 @@ export const generatedRouters = {
 
 export { adminRouter };
 export { apiAttemptRouter };
-export { fruitRouter };
+export { carRouter };
 export { questionRouter };
 export { questionOptionRouter };
 export { questionRecordRouter };
