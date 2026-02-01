@@ -620,6 +620,7 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
   if (!resolvedAnswers.appDir || !resolvedAnswers.appDir.trim()) {
     throw new Error('Remote app directory is required for reset.');
   }
+  await assertSafeResetPath(sshTarget, resolvedAnswers.appDir);
   console.log('🧹 Resetting remote deploy resources...');
   const pm2Available = await remoteCommandExists(sshTarget, resolvedAnswers.pm2Command);
   if (pm2Available) {
@@ -639,6 +640,23 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
   await runSsh(sshTarget, 'sudo nginx -t');
   await runSsh(sshTarget, `sudo ${resolvedAnswers.restartCommand}`);
   console.log('✅ Remote reset complete.');
+}
+
+async function assertSafeResetPath(target: string, appDir: string): Promise<void> {
+  const trimmed = appDir.trim();
+  if (!trimmed) {
+    throw new Error('Remote app directory is empty; refusing to reset.');
+  }
+  const unsafeRoots = new Set(['/', '/root', '/home']);
+  if (unsafeRoots.has(trimmed)) {
+    throw new Error(`Refusing to reset remote path "${trimmed}". Set deploy.appDir to a subdirectory.`);
+  }
+  const home = await resolveRemoteHome(target);
+  if (home && trimmed === home) {
+    throw new Error(
+      `Refusing to reset remote path "${trimmed}" (user home). Set deploy.appDir to a subdirectory like "${home}/<app>".`
+    );
+  }
 }
 
 async function remoteFileExists(target: string, remotePath: string): Promise<boolean> {

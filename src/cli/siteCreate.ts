@@ -217,6 +217,7 @@ export async function runSiteCreate(options: {
 
   await writeGeneratedNuxtConfig(targetPath, spec.nuxtConfig);
   await ensureNuxtRuntimeFile(targetPath);
+  await ensureNuxtAdditionsFile(targetPath);
   await updatePackageJson(targetPath, repoRoot, projectRoot, slug, spec);
   await runSitePkgSyncFromCreate(projectRoot, spec, targetPath);
   await ensureEnvYaml(targetPath, projectRoot, spec.layers);
@@ -451,6 +452,17 @@ async function ensureNuxtRuntimeFile(targetPath: string): Promise<void> {
   const exists = await stat(filePath).catch(() => null);
   if (exists?.isFile()) return;
   await writeFile(filePath, 'export default {};\n', 'utf-8');
+}
+
+async function ensureNuxtAdditionsFile(targetPath: string): Promise<void> {
+  const filePath = path.join(targetPath, 'nuxt.config.additions.ts');
+  const exists = await stat(filePath).catch(() => null);
+  if (exists?.isFile()) return;
+  const body =
+    '// Local overrides for arrays like modules/css/transpile.\n' +
+    '// This file is safe to edit and will be merged into the generated config.\n' +
+    'export default {};\n';
+  await writeFile(filePath, body, 'utf-8');
 }
 
 async function writeEnvFiles(
