@@ -129,7 +129,7 @@ config/specs/*
 config/types/*
 config/typesense/*
 config/ui/*
-config/sites
+/sites/
 
 ## Files
 #***************
