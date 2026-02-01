@@ -211,6 +211,7 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
       '@schema/typesense/collections': resolveCandidate([
         resolver.resolve('runtime/generated/typesense/collections.ts'),
         './modules/schema-kit/runtime/generated/typesense/collections.ts',
+        resolver.resolve('runtime/generated/typesense/collections.empty.ts'),
       ]),
       '@schema/db': resolveCandidate([
         resolver.resolve('runtime/generated/databases.ts'),

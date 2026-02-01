@@ -13,12 +13,13 @@ export async function generateTypesenseSchemas(
 ): Promise<void> {
   const { tables, outputRoot } = options;
   const targets = tables.filter((table) => table.typesense && table.typesense.schema);
+  await mkdir(outputRoot, { recursive: true });
   if (targets.length === 0) {
-    console.log('ℹ️  No Typesense schemas to generate.');
+    const bundlePath = path.join(outputRoot, 'collections.ts');
+    await writeFile(bundlePath, buildCollectionsBundle([]), 'utf8');
+    console.log(`ℹ️  No Typesense schemas to generate. Wrote empty bundle → ${path.relative(process.cwd(), bundlePath)}`);
     return;
   }
-
-  await mkdir(outputRoot, { recursive: true });
 
   const bundleEntries: Array<{ name: string; schema: Record<string, any>; meta?: Record<string, any> }> = [];
 
