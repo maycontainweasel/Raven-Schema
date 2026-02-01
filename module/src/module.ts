@@ -343,8 +343,8 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
       }
 
       const sentryEnabled = typeof features.sentry === 'boolean'
-        ? features.sentry
-        : features.sentry?.enabled
+        ? features.sentry === true
+        : features.sentry?.enabled === true
       if (sentryEnabled) {
         const hasSentryDep = hasAnyDep(deps, [
           '@sentry/node',
@@ -380,8 +380,8 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
       }
 
       const authEnabled = typeof features.auth === 'boolean'
-        ? features.auth
-        : features.auth?.enabled
+        ? features.auth === true
+        : features.auth?.enabled === true
       if (authEnabled) {
         const hasSecret =
           requireRuntimeValue('auth.sessionSecret') ||
@@ -506,17 +506,25 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
     }
     addComponentsDir({ path: resolver.resolve('runtime/components'), pathPrefix: false })
     const features = config?.features ?? {}
-    const sentryEnabled = features.sentry?.enabled !== false && features.sentry !== false
+    const sentryEnabled =
+      typeof features.sentry === 'boolean'
+        ? features.sentry === true
+        : (features.sentry as any)?.enabled === true
     const sentryClientEnabled = sentryEnabled && (features.sentry as any)?.client !== false
     const sentryServerEnabled = sentryEnabled && (features.sentry as any)?.server !== false
     const surrealEnabled =
       features.surrealdb === false ? false : (features.surrealdb as any)?.enabled !== false
     const redisEnabled =
-      features.redis === true ? true : (features.redis as any)?.enabled === true
+      typeof features.redis === 'boolean'
+        ? features.redis === true
+        : (features.redis as any)?.enabled === true
     const trpcClientEnabled = features.trpcClient !== false
-    const authEnabled = features.auth === false ? false : (features.auth as any)?.enabled !== false
+    const authEnabled =
+      typeof features.auth === 'boolean'
+        ? features.auth === true
+        : (features.auth as any)?.enabled === true
 
-    if (features.typesense !== false) {
+    if (features.typesense === true) {
       const overridePlugin = resolveOverrideFile('plugins/typesense.client')
       addPlugin(overridePlugin ?? resolver.resolve('runtime/plugins/typesense.client'))
       const overrideServerPlugin = resolveOverrideFile('plugins/typesense.server')

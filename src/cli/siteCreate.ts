@@ -8,8 +8,11 @@ import YAML from 'yaml';
 import { toKebabCase } from './util';
 import { runNginxSetup, resolveNginxConfig, deriveNginxFileName } from './nginxSetup';
 import { ensureNuxtConfigExtends } from '../lib/siteSpec';
+import { loadAppConfig } from '../lib/configLoader';
 import { loadLayerPackages, mergePackages } from '../lib/sitePackages';
 import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
+import { ensureSchemaKitModule } from '../lib/schemaKitModule';
+import { syncProjectLayers } from '../lib/layerSync';
 
 interface SiteSpec {
   name: string;
@@ -163,6 +166,35 @@ export async function runSiteCreate(options: {
       return !EXCLUDE_NAMES.has(base);
     },
   });
+
+  const appConfig = await loadAppConfig(projectRoot).catch(() => null);
+  if (appConfig) {
+    const project: { name: string; nuxtProjectRoot: string } = {
+      name: slug,
+      nuxtProjectRoot: path.relative(projectRoot, targetPath),
+    };
+    const schemaKitConfig = appConfig.schemaKit?.module ?? {};
+    const moduleMode = schemaKitConfig.mode ?? 'copy';
+    const moduleSync = schemaKitConfig.sync ?? 'force';
+    const moduleSource = schemaKitConfig.source ?? 'module';
+    const sharedModulePath = schemaKitConfig.sharedPath;
+    await ensureSchemaKitModule({
+      projectRoot,
+      project,
+      moduleSourceRoot: path.resolve(projectRoot, moduleSource),
+      log: false,
+      mode: moduleMode,
+      sync: moduleSync,
+      sharedModulePath,
+    });
+    await syncProjectLayers({
+      projectRoot,
+      app: appConfig,
+      project,
+      mode: 'force',
+      log: false,
+    });
+  }
 
   if (spec.layers?.includes('admin-core')) {
     await writeAdminAppShell(targetPath);

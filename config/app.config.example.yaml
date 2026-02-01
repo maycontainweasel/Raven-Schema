@@ -1,15 +1,17 @@
 version: 0.1
 
 project:
-  name: passmed-schema
+  name: mpd-schema
   description: Baseline configuration for the SurrealDB schema tooling workspace.
 
+tooling:
+  repoMode: turbo
+
 environment:
-  defaultDatabase: test
+  defaultDatabase: helios
   migrationTargets:
     # - ca
-    - test
-
+    - helios
 
 features:
   schemaMode: schemaless
@@ -17,79 +19,17 @@ features:
   emitDocumentation: true
 
 databases:
-  test:
-    active: false
-    url: http://127.0.0.1:9275
-    namespace: schema
-    database: testing1
-    username: root
-    password: root
-    allowScripting: true
-  pm:
-    active: true
-    url: https://api.v2.passmed.mpire.info
-    namespace: mothership
-    database: pm_v1
-    username: root
-    password: root
-    allowScripting: true
-  # au:
-  #   active: true
-  #   url: https://api.passamc.org
-  #   namespace: appns
-  #   database: app_v1
-  #   username: mpire
-  #   password: BurntMyMoustacheIn1986
-  #   allowScripting: true
-  au:
-    active: true
-    url: http://209.38.89.92:2001 # not sure why we need to connect to it directly
-    namespace: appns
-    database: app_v1
-    username: mpire
-    password: BurntMyMoustacheIn1986
-    allowScripting: true
 
-  uk:
+  helios:
     active: true
-    url: https://api.beta.v2.passmed.uk
-    namespace: pmuk
-    database: pmuk_1
-    username: mpire
-    password: BurntMyMoustacheIn1986
+    url: http://127.0.0.1:2474
+    namespace: helios
+    database: builder1
+    username: root
+    password: root
     allowScripting: true
-  za:
-    active: true
-    url: https://api.passmed.co.za
-    namespace: appns
-    database: app_v1
-    username: mpire
-    password: BurntMyMoustacheIn1986
-    allowScripting: true
-  ca:
-    active: true
-    url: https://api.passmed.ca
-    namespace: appns
-    database: app_v1
-    username: mpire
-    password: BurntMyMoustacheIn1986
-    allowScripting: true
-  us:
-    active: true
-    url: https://api.passmed.com
-    namespace: appns
-    database: app_v1
-    username: mpire
-    password: BurntMyMoustacheIn1986
-    allowScripting: true
-  ph:
-    active: true
-    url: https://api.passmed.ph
-    namespace: appns
-    database: app_v1
-    username: mpire
-    password: BurntMyMoustacheIn1986
-    allowScripting: true
+    root: true
+
     
 paths:
   migrations: ./config/specs
@@ -99,117 +39,156 @@ paths:
   overrides:
     functions: ./config/overrides/functions
   projects:
-    - name: schema-review
-      generated:
-        types: ./config/types
-    - name: pmv2-mothership
-      nuxtProjectRoot: ../../pmv2-mothership
-      generated:
-        # Overrides (defaults derived from nuxtProjectRoot):
-        # types: <root>/app/types/schema/generated
-        # trpcRouters: <root>/server/trpc/routers
-        # piniaStores: <root>/app/stores/generated
-        types: ../../pmv2-mothership/app/types/schema/generated
-        trpcRouters: ../../pmv2-mothership/server/trpc/routers
-        piniaStores: ../../pmv2-mothership/app/stores/generated
-      imports:
-        schemaTypes: '@schema/types'
-        requestSchema: '@pmv2/shared'
-        # typesenseCollections: '~~/app/typesense/collections'
-    - name: pmv2-public
-      nuxtProjectRoot: ../../pmv2-public
-      generated:
-        # Overrides (defaults derived from nuxtProjectRoot)
-        types: ../../pmv2-public/app/types/schema/generated
-        trpcRouters: ../../pmv2-public/server/trpc/routers
-        piniaStores: ../../pmv2-public/app/stores/generated
-      imports:
-        schemaTypes: '@schema/types'
-        requestSchema: '@pmv2/shared'
-        # typesenseCollections: '~~/app/typesense/collections'
-    - name: pmv2-dashboard
-      nuxtProjectRoot: ../../pmv2-dashboard
-      generated:
-        # Overrides (defaults derived from nuxtProjectRoot)
-        types: ../../pmv2-dashboard/app/types/schema/generated
-        trpcRouters: ../../pmv2-dashboard/server/trpc/routers
-        piniaStores: ../../pmv2-dashboard/app/stores/generated
-      imports:
-        schemaTypes: '@schema/types'
-        requestSchema: '@pmv2/shared'
-        # typesenseCollections: '~~/app/typesense/collections'
-    - name: pmv2-session
-      nuxtProjectRoot: ../../pmv2-session
-      generated:
-        # Overrides (defaults derived from nuxtProjectRoot)
-        types: ../../pmv2-session/app/types/schema/generated
-        trpcRouters: ../../pmv2-session/server/trpc/routers
-        piniaStores: ../../pmv2-session/app/stores/generated
-      imports:
-        schemaTypes: '@schema/types'
-        requestSchema: '@pmv2/shared'
-        # typesenseCollections: '~~/app/typesense/collections'
-   
 
+    # - name: admin
+    #   nuxtProjectRoot: ../admin
+    #   active: true
+    #   layers:
+    #     - admin-core
+    #     - generated
+    #     - api-toolkit
+    #     - auth
 
-    # - name: lucky-public
-    #   nuxtProjectRoot: ../../lucky-public
-    #   generated:
-    #     types: ../../lucky-public/app/types/schema/generated
-    #     trpcRouters: ../../lucky-public/server/trpc/routers
-    #     piniaStores: ../../lucky-public/app/stores/generated
-    #   imports:
-    #     schemaTypes: '~~/app/types/schema'
+    - name: pub3
+      nuxtProjectRoot: ../pub3
+      active: true
+      # layers:
+      #   # - api-toolkit
+      #   # - auth
 
+    - name: ad1
+      nuxtProjectRoot: ../ad1
+      active: true
+
+    - name: pmpublic
+      nuxtProjectRoot: ../pmpublic
+      active: true
+  
+
+    # - name: docs
+    #   nuxtProjectRoot: ./schema-docs
+    #   active: true
+    #   layers: 
+    #     - api-toolkit
+    #     - auth
+
+ui:
+  specsPath: ./config/ui
+  projects:
+    - admin
 
 trpc:
   httpEndpoint: /api/trpc
   generateTestPages: true
   routerNamespace: admin
-  contextImport: '../context'
+  contextImport: '@schema/server/trpc/context'
 
-documentation:
-  documentation:
-    enabled: true
-    format: markdown
-    includeSurrealExamples: true
-    locations:
-      - ./docs/mpd-framework
-
-  schemaApp:
-    enabled: false
-    location: ./schema-docs
-    settings:
-      name: schema-docs
-      imports:
-        schemaTypes: '~~/app/types/schema/generated'
-        requestSchema: '@schema'
 
 defaults:
   schemaMode: schemaless
   postRecordEnabled: true
-  bundlesEnabled: true
+  bundlesEnabled: false # generate a bundle with all the assets
 
 events:
-  # split: one file per event (default)
-  # table: one file per table containing all events
-  fileMode: split
+  fileMode: table # split | table
 
 schemaKit:
   # Set false to suppress module update logs
   logModuleUpdates: true
+  features:
+    trpcClient: true
+    trpcServer: true
+    typesense: true
+    auth: false
+    surrealdb:
+      enabled: true
+    redis:
+      enabled: false
+    sentry:
+      enabled: false
+      client: false
+      server: false
+      sourceMaps: false
+  # Per-project overrides (optional)
+  projects:
+    - name: docs
+      features:
+        sentry:
+          enabled: false
+        redis:
+          enabled: false
+    - name: admin
+      features:
+        sentry:
+          enabled: false
+        redis:
+          enabled: false
   module:
     # copy: copy schema-kit into each app under /modules/schema-kit
     # shared: point apps at a single shared module path
-    mode: copy
+    mode: force # copy
     # auto: copy only when hash changes
     # force: delete + copy every generate (debug-friendly)
     # off: never copy during generate (manual sync only)
-    sync: auto
+    sync: force
     # Source folder for copy mode (relative to passmed-schema root)
     source: module
     # Shared module path for shared mode (relative to passmed-schema root)
     # sharedPath: packages/schema-kit
+
+  
+  #### Modes explained:
+
+  # - copy + force → deletes & recopies module into every target on every generate
+  # - copy + auto → copies only if hash changed (current default)
+  # - copy + off → no copying during generate (manual only)
+  # - shared → never copies, Nuxt config points to sharedPath
+
+    # - pnpm run schema-kit:sync
+
+layers:
+  source: ./layers
+  sync: force
+  defaults: []
+  auth:
+    runtimeConfig:
+      sessionCookie: sid
+      sessionSecret: ""
+      cookieDomain: ""
+      sessionDuration: 604800 # seconds (7 days)
+      refreshInterval: 720000 # ms (12 minutes)
+      appPaths:
+        - /
+      cookie:
+        httpOnly: true
+        secure: true
+        sameSite: lax
+        path: /
+        maxAge: 604800
+        legacyCookieNames:
+          - token
+          - sessionId
+          - refreshToken
+          - surreal_access
+          - surreal_refresh
+      redirectOnFail: /login
+      redirectOnSuccess: /dashboard
+      guard:
+        enabled: true
+        refresh: true
+        protect:
+          - "*"
+        ignorePaths:
+          - /login
+          - /register
+        redirectOnFail: /login
+        redirectOnSuccess: /dashboard
+        redirectOnLogout: /
+        testPageEnabled: false
+        redirectAliases: {}
+    publicRuntimeConfig:
+      sessionCookie: sid
+      cookieDomain: ""
 
 databasesExport:
   # Per-project database export (bundled into each target app)
@@ -255,8 +234,7 @@ graph:
     stagingDir: ./config/specs_stage
     liveDir: ./config/specs
     conflictPolicy: overwrite       # skip | overwrite | only-new
-    pruneStale: true                # remove specs not present in graph.mpdg (default: true)
-    syncOnGenerate: true            # run graph:spec before schema:generate (default: true)
+    pruneStale: true
 
 # Modules (explicit). Names correspond to folders under config/modules.
 modules:
@@ -267,6 +245,8 @@ modules:
   - taxonomies
 
 importFilters:
+  # Default import mode (true = only changed assets, false = import all).
+  onlyChanged: true
   # Table selection (only used when you don’t pass --name)
   tables:
     # - exam
@@ -368,3 +348,15 @@ taxonomies:
           type: record<term>
           required: false
           default: ""
+
+documentation:
+  documentation:
+    enabled: true
+    format: markdown
+    includeSurrealExamples: true
+    locations:
+      - ./docs/mpd-framework
+
+  schemaApp:
+    enabled: true
+    location: ./schema-docs
