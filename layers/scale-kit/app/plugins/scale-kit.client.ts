@@ -38,7 +38,9 @@ export default defineNuxtPlugin(() => {
       kit.tokens = JSON.parse(JSON.stringify(value))
       kit.apply()
       scaleStore.saveDraft()
-      syncState.fromStore = false
+      queueMicrotask(() => {
+        syncState.fromStore = false
+      })
     },
     { deep: true }
   )
@@ -46,11 +48,13 @@ export default defineNuxtPlugin(() => {
   watch(
     () => kit.tokens,
     (value) => {
-      if (syncState.fromStore) return
+      if (syncState.fromStore || (kit as any).__suppressSync) return
       syncState.fromKit = true
       scaleStore.replaceTokens(JSON.parse(JSON.stringify(value)))
       scaleStore.saveDraft()
-      syncState.fromKit = false
+      queueMicrotask(() => {
+        syncState.fromKit = false
+      })
     },
     { deep: true }
   )

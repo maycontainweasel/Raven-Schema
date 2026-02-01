@@ -30,6 +30,12 @@ export type HeliosSettings = {
   tokensFile: string
   tokensScssFile: string
   typographyFile: string
+  breakpointsFile: string
+}
+
+export type HeliosBreakpoint = {
+  key: string
+  value: string
 }
 
 type ScaleKitInstance = {
@@ -47,7 +53,34 @@ const defaultSettings: HeliosSettings = {
   tokensFile: 'app/assets/scss/helios/helios.tokens.json',
   tokensScssFile: '_tokens.scss',
   typographyFile: '_typography.scss',
+  breakpointsFile: '_breakpoints.scss',
 }
+
+const defaultBreakpoints: HeliosBreakpoint[] = [
+  { key: 'm', value: '320px' },
+  { key: 'mm', value: '380px' },
+  { key: 'mmx', value: '381px' },
+  { key: 'ml', value: '480px' },
+  { key: 'mlx', value: '481px' },
+  { key: 'txs', value: '550px' },
+  { key: 'ts', value: '600px' },
+  { key: 't', value: '767px' },
+  { key: 'tx', value: '768px' },
+  { key: 'txl', value: '800px' },
+  { key: 'tm', value: '991px' },
+  { key: 'tmx', value: '992px' },
+  { key: 'tl', value: '1024px' },
+  { key: 'ds', value: '1024px' },
+  { key: 'd', value: '1200px' },
+  { key: 'dm', value: '1366px' },
+  { key: 'dmx', value: '1440px' },
+  { key: 'dmxx', value: '1441px' },
+  { key: 'dml', value: '1600px' },
+  { key: 'dmlx', value: '1750px' },
+  { key: 'dl', value: '1900px' },
+  { key: 'dxl', value: '2560px' },
+  { key: 'dxxl', value: '3840px' },
+]
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
@@ -59,6 +92,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
     ranges: [] as ScaleRange[],
     activeScope: 'global',
     settings: { ...defaultSettings },
+    breakpoints: [...defaultBreakpoints],
     levels: 10,
     minLevel: -5,
     isCommitting: false,
@@ -81,7 +115,11 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
       this.tokens = clone(tokens)
     },
     apply() {
-      kitRef?.apply()
+      if (!kitRef || !this.tokens) return
+      ;(kitRef as any).__suppressSync = true
+      kitRef.tokens = clone(this.tokens)
+      kitRef.apply()
+      ;(kitRef as any).__suppressSync = false
     },
     saveDraft() {
       if (typeof window === 'undefined') return
@@ -91,6 +129,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
         ranges: this.ranges,
         activeScope: this.activeScope,
         settings: this.settings,
+        breakpoints: this.breakpoints,
         levels: this.levels,
         minLevel: this.minLevel,
       }
@@ -106,6 +145,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
         if (payload.ranges) this.ranges = payload.ranges
         if (payload.activeScope) this.activeScope = payload.activeScope
         if (payload.settings) this.settings = { ...defaultSettings, ...payload.settings }
+        if (payload.breakpoints) this.breakpoints = payload.breakpoints
         if (payload.levels) this.levels = payload.levels
         if (payload.minLevel) this.minLevel = payload.minLevel
       }
@@ -126,6 +166,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
             settings: this.settings,
             levels: this.levels,
             minLevel: this.minLevel,
+            breakpoints: this.breakpoints,
           },
         })
         this.commitStatus = 'Committed'

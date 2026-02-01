@@ -37,14 +37,15 @@ export interface ScaleKitInstance {
 }
 
 const formatIndexString = (index: number) => {
-  if (index < 0) {
-    const absoluteValue = Math.abs(index)
-    if (absoluteValue % 1 === 0) return `-${absoluteValue}`
-    return `-${(absoluteValue * 10).toFixed(0).padStart(2, '0')}`
-  }
-  if (index > 0 && index % 1 !== 0)
-    return `${(index * 10).toFixed(0).padStart(2, '0')}`
-  return index.toString()
+  const sign = index < 0 ? '-' : ''
+  const absoluteValue = Math.abs(index)
+  if (absoluteValue % 1 === 0) return `${sign}${absoluteValue}`
+  const fixed = absoluteValue.toFixed(2)
+  const [intPart, fracRaw] = fixed.split('.')
+  const frac = fracRaw.replace(/0+$/, '')
+  const normalized = `${intPart}${frac.padEnd(2, '0')}`
+  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized
+  return `${sign}${padded}`
 }
 
 const resolveTokens = (tokens: ScaleKitTokens, width: number) => {
@@ -102,7 +103,7 @@ export const createScaleKit = (config: ScaleKitConfig): ScaleKitInstance => {
     const levels = config.levels
     const minLevel = config.minLevel
 
-    for (let i = minLevel; i <= levels; i += 0.5) {
+    for (let i = minLevel; i <= levels; i += 0.25) {
       const index = Number(i.toFixed(2))
       const key = formatIndexString(index)
       const size = Math.pow(base.ratio, index)

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   defineConfig,
   presetIcons,
@@ -5,6 +7,66 @@ import {
   presetUno,
 } from 'unocss'
 import lucide from '@iconify-json/lucide/icons.json'
+
+const defaultBreakpoints = {
+  m: '320px',
+  mm: '380px',
+  mmx: '381px',
+  ml: '480px',
+  mlx: '481px',
+  txs: '550px',
+  ts: '600px',
+  t: '767px',
+  tx: '768px',
+  txl: '800px',
+  tm: '991px',
+  tmx: '992px',
+  tl: '1024px',
+  ds: '1024px',
+  d: '1200px',
+  dm: '1366px',
+  dmx: '1440px',
+  dmxx: '1441px',
+  dml: '1600px',
+  dmlx: '1750px',
+  dl: '1900px',
+  dxl: '2560px',
+  dxxl: '3840px',
+}
+
+const loadBreakpoints = () => {
+  try {
+    const tokensPath = resolve(process.cwd(), 'app/assets/scss/helios/helios.tokens.json')
+    if (!existsSync(tokensPath)) return defaultBreakpoints
+    const raw = readFileSync(tokensPath, 'utf-8')
+    const data = JSON.parse(raw)
+    const list = Array.isArray(data?.breakpoints) ? data.breakpoints : null
+    if (!list) return defaultBreakpoints
+    const result: Record<string, string> = {}
+    for (const item of list) {
+      if (!item?.key || !item?.value) continue
+      result[item.key] = item.value
+    }
+    return Object.keys(result).length ? result : defaultBreakpoints
+  }
+  catch {
+    return defaultBreakpoints
+  }
+}
+
+const formatScaleKey = (raw: string) => {
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return raw
+  const sign = value < 0 ? '-' : ''
+  const absoluteValue = Math.abs(value)
+  if (absoluteValue % 1 === 0) return `${sign}${absoluteValue}`
+  const fixed = absoluteValue.toFixed(2)
+  const [intPart, fracRaw] = fixed.split('.')
+  const frac = fracRaw.replace(/0+$/, '')
+  const normalized = `${intPart}${frac.padEnd(2, '0')}`
+  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized
+  return `${sign}${padded}`
+}
 
 export default defineConfig({
   content: {
@@ -28,6 +90,7 @@ export default defineConfig({
     presetTypography(),
   ],
   theme: {
+    breakpoints: loadBreakpoints(),
     colors: {
       ink: '#0f172a',
       muted: '#667085',
@@ -200,25 +263,26 @@ export default defineConfig({
     },
   ],
   rules: [
-    [/^fs-([\w-]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${value})` })],
-    [/^lh-([\w-]+)$/, ([, value]) => ({ 'line-height': `var(--lh-${value})` })],
-    [/^v-([\w-]+)$/, ([, value]) => ({ height: `var(--v-${value})` })],
+    [/^fs-(-?[\d.]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],
+    [/^f-(-?[\d.]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],
+    [/^lh-(-?[\d.]+)$/, ([, value]) => ({ 'line-height': `var(--lh-${formatScaleKey(value)})` })],
+    [/^v-(-?[\d.]+)$/, ([, value]) => ({ height: `var(--v-${formatScaleKey(value)})` })],
 
     // scale-based spacing (ratio/grid mode)
-    [/^sp-([\w-]+)$/, ([, value]) => ({ padding: `var(--sp-${value})` })],
-    [/^spt-([\w-]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${value})` })],
-    [/^spr-([\w-]+)$/, ([, value]) => ({ 'padding-right': `var(--sp-${value})` })],
-    [/^spb-([\w-]+)$/, ([, value]) => ({ 'padding-bottom': `var(--sp-${value})` })],
-    [/^spl-([\w-]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${value})` })],
-    [/^spx-([\w-]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${value})`, 'padding-right': `var(--sp-${value})` })],
-    [/^spy-([\w-]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${value})`, 'padding-bottom': `var(--sp-${value})` })],
-    [/^sm-([\w-]+)$/, ([, value]) => ({ margin: `var(--sp-${value})` })],
-    [/^smt-([\w-]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${value})` })],
-    [/^smr-([\w-]+)$/, ([, value]) => ({ 'margin-right': `var(--sp-${value})` })],
-    [/^smb-([\w-]+)$/, ([, value]) => ({ 'margin-bottom': `var(--sp-${value})` })],
-    [/^sml-([\w-]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${value})` })],
-    [/^smx-([\w-]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${value})`, 'margin-right': `var(--sp-${value})` })],
-    [/^smy-([\w-]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${value})`, 'margin-bottom': `var(--sp-${value})` })],
+    [/^sp-(-?[\d.]+)$/, ([, value]) => ({ padding: `var(--sp-${formatScaleKey(value)})` })],
+    [/^spt-(-?[\d.]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})` })],
+    [/^spr-(-?[\d.]+)$/, ([, value]) => ({ 'padding-right': `var(--sp-${formatScaleKey(value)})` })],
+    [/^spb-(-?[\d.]+)$/, ([, value]) => ({ 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],
+    [/^spl-(-?[\d.]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})` })],
+    [/^spx-(-?[\d.]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})`, 'padding-right': `var(--sp-${formatScaleKey(value)})` })],
+    [/^spy-(-?[\d.]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})`, 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],
+    [/^sm-(-?[\d.]+)$/, ([, value]) => ({ margin: `var(--sp-${formatScaleKey(value)})` })],
+    [/^smt-(-?[\d.]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})` })],
+    [/^smr-(-?[\d.]+)$/, ([, value]) => ({ 'margin-right': `var(--sp-${formatScaleKey(value)})` })],
+    [/^smb-(-?[\d.]+)$/, ([, value]) => ({ 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],
+    [/^sml-(-?[\d.]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})` })],
+    [/^smx-(-?[\d.]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})`, 'margin-right': `var(--sp-${formatScaleKey(value)})` })],
+    [/^smy-(-?[\d.]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})`, 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],
     [/^sg-([\w-]+)$/, ([, value]) => ({ gap: `var(--sp-${value})` })],
 
     // grid-based spacing (vertical rhythm)

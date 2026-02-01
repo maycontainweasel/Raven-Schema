@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHeliosScaleStore } from '#layers/helios/app/stores/helios'
 
 const scaleStore = useHeliosScaleStore()
-scaleStore.initFromConfig()
 
-const { ranges, activeScope, settings, tokens, commitStatus, isCommitting } = storeToRefs(scaleStore)
+const { ranges, activeScope, settings, tokens, commitStatus, isCommitting, breakpoints } = storeToRefs(scaleStore)
 
 const modalOpen = ref(false)
-const activePanel = ref<'typography' | 'settings' | 'utilities'>('typography')
+const activePanel = ref<'typography' | 'settings' | 'utilities' | 'breakpoints'>('typography')
 const newRange = reactive({ label: 'Mobile', min: 0, max: 767 })
 const typeUnit = ref<'rem' | 'px' | 'pt'>('rem')
 const showTypeExport = ref(true)
+const exportFile = ref('typography')
 const sampleText = ref('The quick brown fox jumps over the lazy dog')
+const scaleStep = ref(1)
+const scaleStepOptions = [
+  { value: 1, label: '1.0' },
+  { value: 0.5, label: '0.5' },
+  { value: 0.25, label: '0.25' },
+]
 
 const ensureRangeSettings = (maxWidth: number) => {
   if (!tokens.value) return
@@ -57,40 +63,158 @@ const formatOptions = [
 const viewItems = computed(() => [
   { label: 'Typography', action: () => (activePanel.value = 'typography') },
   { label: 'Utilities', action: () => (activePanel.value = 'utilities') },
+  { label: 'Breakpoints', action: () => (activePanel.value = 'breakpoints') },
   { label: 'Settings', action: () => (activePanel.value = 'settings') },
   { label: 'Typography Lab', href: '/type' }
 ])
+
+const formatStep = (value: number) => {
+  const fixed = value.toFixed(2)
+  return fixed.replace(/\.?0+$/, '')
+}
+
+const formatIndexString = (index: number) => {
+  const sign = index < 0 ? '-' : ''
+  const absoluteValue = Math.abs(index)
+  if (absoluteValue % 1 === 0) return `${sign}${absoluteValue}`
+  const fixed = absoluteValue.toFixed(2)
+  const [intPart, fracRaw] = fixed.split('.')
+  const frac = fracRaw.replace(/0+$/, '')
+  const normalized = `${intPart}${frac.padEnd(2, '0')}`
+  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized
+  return `${sign}${padded}`
+}
 
 const typeRows = computed(() => {
   const baseFont = activeSettings.value?.fontSize ?? 16
   const ratio = activeSettings.value?.ratio ?? 1.2
   const toRem = (step: number) => Math.pow(ratio, step)
+  const toPx = (rem: number) => rem * baseFont
   const toUnit = (rem: number) => {
     if (typeUnit.value === 'px') return `${(rem * baseFont).toFixed(2)}px`
     if (typeUnit.value === 'pt') return `${(rem * baseFont * 0.75).toFixed(2)}pt`
     return `${rem.toFixed(3)}rem`
   }
-  const rows = [
-    { tag: 'h1', step: 6, weight: 'font-700', lh: 'var(--lh-1)' },
-    { tag: 'h2', step: 5, weight: 'font-600', lh: 'var(--lh-1)' },
-    { tag: 'h3', step: 4, weight: 'font-600', lh: 'var(--lh-1)' },
-    { tag: 'h4', step: 3, weight: 'font-600', lh: 'var(--lh-0)' },
-    { tag: 'h5', step: 2, weight: 'font-600', lh: 'var(--lh-0)' },
-    { tag: 'h6', step: 1, weight: 'font-600', lh: 'var(--lh-0)' },
-    { tag: 'p', step: 0, weight: 'font-400', lh: 'var(--lh-0)' },
-    { tag: 'small', step: -1, weight: 'font-400', lh: 'var(--lh-0)' },
-    { tag: 'tiny', step: -2, weight: 'font-400', lh: 'var(--lh-0)' },
-  ]
+  const labelMap: Record<string, { label: string; weight: string; lh: string }> = {
+    '6': { label: 'H1', weight: 'font-700', lh: 'var(--lh-1)' },
+    '5': { label: 'H2', weight: 'font-600', lh: 'var(--lh-1)' },
+    '4': { label: 'H3', weight: 'font-600', lh: 'var(--lh-1)' },
+    '3': { label: 'H4', weight: 'font-600', lh: 'var(--lh-0)' },
+    '2': { label: 'H5', weight: 'font-600', lh: 'var(--lh-0)' },
+    '1': { label: 'H6', weight: 'font-600', lh: 'var(--lh-0)' },
+    '0': { label: 'P', weight: 'font-400', lh: 'var(--lh-0)' },
+    '-1': { label: 'Small', weight: 'font-400', lh: 'var(--lh-0)' },
+    '-2': { label: 'Tiny', weight: 'font-400', lh: 'var(--lh-0)' },
+  }
+
+  const maxStep = 6
+  const minStep = -2
+  const rows: Array<{
+    step: number
+    label: string
+    weight: string
+    lh: string
+  }> = []
+
+  for (let step = maxStep; step >= minStep; step -= scaleStep.value) {
+    const normalized = Number(step.toFixed(2))
+    const key = formatStep(normalized)
+    const mapped = labelMap[key]
+    rows.push({
+      step: normalized,
+      label: mapped?.label ?? '',
+      weight: mapped?.weight ?? 'font-500',
+      lh: mapped?.lh ?? 'var(--lh-0)',
+    })
+  }
+
   return rows.map((row) => {
     const rem = toRem(row.step)
+    const px = toPx(rem)
+    const styleSize = toUnit(rem)
+    const hoverHint =
+      typeUnit.value === 'rem'
+        ? `${px.toFixed(2)}px`
+        : typeUnit.value === 'px'
+          ? `${rem.toFixed(3)}rem`
+          : `${rem.toFixed(3)}rem / ${px.toFixed(2)}px`
     return {
       ...row,
       rem,
+      px,
       display: toUnit(rem),
-      className: row.tag === 'tiny' ? 'text-muted' : row.tag === 'small' ? 'text-muted' : ''
+      styleSize,
+      hoverHint,
+      className: row.label ? '' : 'text-muted',
+      classLabel: `f-${formatStep(row.step)}`,
+      key: formatStep(row.step),
     }
   })
 })
+
+const exportWindow = reactive({
+  x: 560,
+  y: 160,
+  width: 460,
+  height: 360,
+  dragging: false,
+  dragOffsetX: 0,
+  dragOffsetY: 0,
+})
+
+const startDrag = (event: PointerEvent) => {
+  exportWindow.dragging = true
+  exportWindow.dragOffsetX = event.clientX - exportWindow.x
+  exportWindow.dragOffsetY = event.clientY - exportWindow.y
+}
+
+const onDrag = (event: PointerEvent) => {
+  if (!exportWindow.dragging) return
+  exportWindow.x = Math.max(16, event.clientX - exportWindow.dragOffsetX)
+  exportWindow.y = Math.max(16, event.clientY - exportWindow.dragOffsetY)
+}
+
+const stopDrag = () => {
+  exportWindow.dragging = false
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    const saved = window.localStorage.getItem('helios-export-window')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        exportWindow.x = parsed.x ?? exportWindow.x
+        exportWindow.y = parsed.y ?? exportWindow.y
+        exportWindow.width = parsed.width ?? exportWindow.width
+        exportWindow.height = parsed.height ?? exportWindow.height
+      } catch {}
+    }
+  }
+  window.addEventListener('pointermove', onDrag)
+  window.addEventListener('pointerup', stopDrag)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', onDrag)
+  window.removeEventListener('pointerup', stopDrag)
+})
+
+watch(
+  () => [exportWindow.x, exportWindow.y, exportWindow.width, exportWindow.height],
+  () => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(
+      'helios-export-window',
+      JSON.stringify({
+        x: exportWindow.x,
+        y: exportWindow.y,
+        width: exportWindow.width,
+        height: exportWindow.height,
+      })
+    )
+  }
+)
 
 const typographyScss = computed(() => [
   'h1 { font-size: var(--fs-6); line-height: var(--lh-1); }',
@@ -105,11 +229,113 @@ const typographyScss = computed(() => [
   '  margin: 0;',
   '  padding-left: var(--v-1);',
   '}'
-].join('\\n'))
+].join('\n'))
+
+const buildTokensScss = () => {
+  if (!tokens.value) return ''
+  const buildBlock = (base: any) => {
+    const lines: string[] = []
+    const fontSizePercentage = (base.fontSize / 16) * 100
+    lines.push(`  font-size: ${fontSizePercentage.toFixed(4)}%;`)
+    lines.push(`  --lh: ${base.gridRatio};`)
+    lines.push(`  --s: ${base.ratio};`)
+    lines.push(`  --space-mode: ${base.spaceMode};`)
+    lines.push(`  --space-sync: ${base.spaceSync !== false};`)
+    for (let i = scaleStore.minLevel; i <= scaleStore.levels; i += 0.25) {
+      const index = Number(i.toFixed(2))
+      const key = formatIndexString(index)
+      const size = Math.pow(base.ratio, index)
+      const gridUnit = base.gridRatio * index
+      const lineHeightUnit = base.gridRatio * (index + 1)
+      let space = 0
+      if (base.spaceSync !== false) {
+        space = gridUnit
+      }
+      else if (index !== 0) {
+        space = base.spaceMode === 'grid'
+          ? base.spaceBase * index
+          : base.spaceBase * Math.pow(base.spaceRatio, index)
+      }
+      lines.push(`  --fs-${key}: ${size}rem;`)
+      lines.push(`  --v-${key}: ${gridUnit}rem;`)
+      lines.push(`  --lh-${key}: ${lineHeightUnit}rem;`)
+      lines.push(`  --sp-${key}: ${space}rem;`)
+    }
+    return lines
+  }
+
+  const lines: string[] = []
+  lines.push(':root {')
+  lines.push(...buildBlock(tokens.value.base))
+  lines.push('}')
+  lines.push('')
+
+  for (const range of ranges.value) {
+    const override = tokens.value.breakpoints?.[range.max]
+    if (!override) continue
+    const nextTokens = { ...tokens.value.base, ...override }
+    lines.push(`@media (min-width: ${range.min}px) and (max-width: ${range.max}px) {`)
+    lines.push('  :root {')
+    lines.push(...buildBlock(nextTokens).map((line) => `  ${line}`))
+    lines.push('  }')
+    lines.push('}')
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
+const breakpointsScss = computed(() => {
+  const lines: string[] = []
+  lines.push('@theme {')
+  for (const bp of breakpoints.value) {
+    if (!bp.key || !bp.value) continue
+    lines.push(`  --breakpoint-${bp.key}: ${bp.value};`)
+  }
+  lines.push('}')
+  return lines.join('\n')
+})
+
+const entryScss = computed(() => {
+  const tokensName = settings.value.tokensScssFile.replace(/^_/, '').replace(/\.scss$/, '')
+  const typeName = settings.value.typographyFile.replace(/^_/, '').replace(/\.scss$/, '')
+  const breakName = settings.value.breakpointsFile.replace(/^_/, '').replace(/\.scss$/, '')
+  return `@use "${tokensName}";\n@use "${typeName}";\n@use "${breakName}";\n`
+})
+
+const exportFiles = computed(() => ([
+  { value: 'typography', label: 'Typography', content: typographyScss.value },
+  { value: 'tokens', label: 'Tokens', content: buildTokensScss() },
+  { value: 'breakpoints', label: 'Breakpoints', content: breakpointsScss.value },
+  { value: 'entry', label: 'Entry', content: entryScss.value },
+]))
+
+const activeExport = computed(() => {
+  return exportFiles.value.find((file) => file.value === exportFile.value) ?? exportFiles.value[0]
+})
 
 const copyTypographyScss = async () => {
-  await navigator.clipboard.writeText(typographyScss.value)
+  if (!activeExport.value) return
+  await navigator.clipboard.writeText(activeExport.value.content)
 }
+
+const removeBreakpoint = (key: string) => {
+  breakpoints.value = breakpoints.value.filter((item) => item.key !== key)
+  scaleStore.saveDraft()
+}
+
+const addBreakpoint = () => {
+  breakpoints.value = [...breakpoints.value, { key: 'new', value: '1000px' }]
+  scaleStore.saveDraft()
+}
+
+watch(
+  breakpoints,
+  () => {
+    scaleStore.saveDraft()
+  },
+  { deep: true }
+)
 
 const addRange = () => {
   const label = newRange.label.trim() || `Range ${ranges.value.length + 1}`
@@ -160,7 +386,6 @@ const removeRange = (id: string) => {
               min="12"
               max="22"
               step="0.5"
-              @input="scaleStore.apply"
             />
             <span>{{ activeSettings?.fontSize?.toFixed(1) }}px</span>
           </div>
@@ -173,7 +398,6 @@ const removeRange = (id: string) => {
               min="1.05"
               max="1.6"
               step="0.01"
-              @input="scaleStore.apply"
             />
             <span>{{ activeSettings?.ratio?.toFixed(2) }}</span>
           </div>
@@ -186,12 +410,14 @@ const removeRange = (id: string) => {
               min="1.1"
               max="2"
               step="0.01"
-              @input="scaleStore.apply"
             />
             <span>{{ activeSettings?.gridRatio?.toFixed(2) }}</span>
           </div>
           <button class="ui-btn-ghost" type="button" @click="modalOpen = true">Add range</button>
           <UiMenu :items="viewItems" label="Views" />
+          <button class="ui-btn-ghost" type="button" @click="showTypeExport = !showTypeExport">
+            SCSS
+          </button>
           <button class="ui-btn-primary" type="button" :disabled="isCommitting" @click="scaleStore.commit">
             {{ isCommitting ? 'Committing…' : 'Commit' }}
           </button>
@@ -217,36 +443,32 @@ const removeRange = (id: string) => {
             <div class="type-subheader">
               <div class="type-subheader__left">
                 <div class="text-xs uppercase tracking-wide text-muted">Typography scale</div>
-                <div class="type-unit-toggle">
-                  <button class="type-unit" :class="{ active: typeUnit === 'rem' }" @click="typeUnit = 'rem'">REM</button>
-                  <button class="type-unit" :class="{ active: typeUnit === 'px' }" @click="typeUnit = 'px'">PX</button>
-                  <button class="type-unit" :class="{ active: typeUnit === 'pt' }" @click="typeUnit = 'pt'">PT</button>
+                <div class="type-subheader__controls">
+                  <div class="type-unit-toggle">
+                    <button class="type-unit" :class="{ active: typeUnit === 'rem' }" @click="typeUnit = 'rem'">REM</button>
+                    <button class="type-unit" :class="{ active: typeUnit === 'px' }" @click="typeUnit = 'px'">PX</button>
+                    <button class="type-unit" :class="{ active: typeUnit === 'pt' }" @click="typeUnit = 'pt'">PT</button>
+                  </div>
+                  <input v-model="sampleText" class="input type-subheader__input" type="text" />
+                  <label class="type-toggle type-toggle--inline">
+                    <span>Step</span>
+                    <UiListbox v-model="scaleStep" :options="scaleStepOptions" />
+                  </label>
                 </div>
               </div>
               <div class="type-subheader__right">
-                <label class="type-toggle">
-                  <input type="checkbox" v-model="showTypeExport" />
-                  <span>Show SCSS</span>
-                </label>
               </div>
             </div>
-
-            <div class="type-scale" :class="{ 'type-scale--split': showTypeExport }">
+            <div class="type-scale">
               <div class="type-scale__list">
-                <div class="type-scale__row" v-for="row in typeRows" :key="row.tag">
-                  <div class="type-scale__label">{{ row.tag }}</div>
-                  <div class="type-scale__value">{{ row.display }}</div>
+                <div class="type-scale__row" v-for="row in typeRows" :key="row.key">
+                  <div class="type-scale__label">{{ row.label }}</div>
+                  <div class="type-scale__value" :data-tooltip="row.hoverHint">{{ row.display }}</div>
+                  <div class="type-scale__class">{{ row.classLabel }}</div>
                   <div class="type-scale__sample" :class="row.weight">
-                    <span :style="{ fontSize: `${row.rem}rem`, lineHeight: row.lh }">{{ sampleText }}</span>
+                    <span :style="{ fontSize: row.styleSize, lineHeight: row.lh }">{{ sampleText }}</span>
                   </div>
                 </div>
-              </div>
-              <div v-if="showTypeExport" class="type-scale__export">
-                <div class="export-header">
-                  <div class="text-xs uppercase tracking-wide text-muted">SCSS export</div>
-                  <button class="ui-btn-ghost text-xs" type="button" @click="copyTypographyScss">Copy</button>
-                </div>
-                <pre class="export-code">{{ typographyScss }}</pre>
               </div>
             </div>
           </section>
@@ -254,6 +476,26 @@ const removeRange = (id: string) => {
 
         <section v-else-if="activePanel === 'utilities'" class="flex flex-col g-2">
           <ScaleUtilitiesPanel />
+        </section>
+
+        <section v-else-if="activePanel === 'breakpoints'" class="ui-card gp-3 flex flex-col g-1">
+          <div class="text-xs uppercase tracking-wide text-muted">Breakpoints</div>
+          <div class="breakpoints-grid">
+            <div v-for="bp in breakpoints" :key="bp.key" class="breakpoint-row">
+              <input v-model="bp.key" class="input input-sm" />
+              <input v-model="bp.value" class="input input-sm" />
+              <button class="ui-btn-ghost text-xs" type="button" @click="removeBreakpoint(bp.key)">
+                Remove
+              </button>
+            </div>
+            <button class="ui-btn-ghost text-xs" type="button" @click="addBreakpoint">
+              Add breakpoint
+            </button>
+          </div>
+          <div class="text-xs text-muted">
+            Uses UnoCSS breakpoint names (e.g. <code>t:flex-row</code> or <code>lt-t=\"flex-col\"</code>).
+            Commit writes <code>_breakpoints.scss</code> and updates <code>helios.tokens.json</code>; restart dev server to reload UnoCSS breakpoints.
+          </div>
         </section>
 
         <section v-else class="ui-card gp-3 flex flex-col g-1">
@@ -282,6 +524,10 @@ const removeRange = (id: string) => {
             <label class="settings-field">
               Typography SCSS
               <input v-model="settings.typographyFile" type="text" />
+            </label>
+            <label class="settings-field">
+              Breakpoints SCSS
+              <input v-model="settings.breakpointsFile" type="text" />
             </label>
           </div>
           <p class="text-xs text-muted">
@@ -319,6 +565,30 @@ const removeRange = (id: string) => {
             <button class="ui-btn-ghost" type="button" @click="modalOpen = false">Cancel</button>
             <button class="ui-btn-primary" type="button" @click="addRange">Add</button>
           </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="showTypeExport"
+        class="export-window"
+        :style="{
+          width: `${exportWindow.width}px`,
+          height: `${exportWindow.height}px`,
+          transform: `translate(${exportWindow.x}px, ${exportWindow.y}px)`
+        }"
+      >
+        <div class="export-window__header" @pointerdown="startDrag">
+          <div class="export-window__title">SCSS export</div>
+          <div class="export-window__controls">
+            <UiListbox v-model="exportFile" :options="exportFiles.map(({ value, label }) => ({ value, label }))" />
+            <button class="ui-btn-ghost text-xs" type="button" @click="copyTypographyScss">Copy</button>
+            <button class="ui-btn-ghost text-xs" type="button" @click="showTypeExport = false">Close</button>
+          </div>
+        </div>
+        <div class="export-window__body">
+          <pre class="export-code">{{ activeExport?.content }}</pre>
         </div>
       </div>
     </Teleport>
@@ -463,8 +733,17 @@ const removeRange = (id: string) => {
   flex-wrap: wrap;
 }
 
+.type-subheader__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.type-subheader__input {
+  max-width: 320px;
+}
+
 .type-unit-toggle {
-  margin-top: 6px;
   display: inline-flex;
   gap: 6px;
   background: #f1f5f9;
@@ -496,14 +775,15 @@ const removeRange = (id: string) => {
   color: #64748b;
 }
 
+.type-toggle--inline :deep(.ui-select-shell) {
+  width: 88px;
+}
+
 .type-scale {
   display: grid;
   gap: 16px;
 }
 
-.type-scale--split {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
 
 .type-scale__list {
   display: grid;
@@ -512,7 +792,7 @@ const removeRange = (id: string) => {
 
 .type-scale__row {
   display: grid;
-  grid-template-columns: 48px 90px 1fr;
+  grid-template-columns: 48px 90px 90px 1fr;
   gap: 12px;
   align-items: center;
 }
@@ -527,25 +807,41 @@ const removeRange = (id: string) => {
   font-size: 0.85rem;
   font-weight: 600;
   color: #475569;
+  position: relative;
+}
+
+.type-scale__value::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  top: -28px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 2;
+}
+
+.type-scale__value:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.type-scale__class {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
 .type-scale__sample {
   font-size: 1rem;
   color: #0f172a;
-}
-
-.type-scale__export {
-  border-left: 1px solid rgba(226, 232, 240, 0.8);
-  padding-left: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.export-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .export-code {
@@ -554,7 +850,66 @@ const removeRange = (id: string) => {
   border-radius: 12px;
   padding: 14px;
   font-size: 0.75rem;
-  white-space: pre-wrap;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.export-window {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
+  resize: both;
+  overflow: auto;
+}
+
+.export-window__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  cursor: grab;
+}
+
+.export-window__header:active {
+  cursor: grabbing;
+}
+
+.export-window__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.export-window__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-window__body {
+  padding: 12px;
+  flex: 1;
+}
+
+.breakpoints-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.breakpoint-row {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 10px;
+  align-items: center;
 }
 
 .settings-field {

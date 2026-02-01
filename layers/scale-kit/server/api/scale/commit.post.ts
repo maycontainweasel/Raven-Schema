@@ -3,14 +3,15 @@ import { dirname, join, resolve } from 'node:path'
 import { defineEventHandler, readBody } from 'h3'
 
 const formatIndexString = (index: number) => {
-  if (index < 0) {
-    const absoluteValue = Math.abs(index)
-    if (absoluteValue % 1 === 0) return `-${absoluteValue}`
-    return `-${(absoluteValue * 10).toFixed(0).padStart(2, '0')}`
-  }
-  if (index > 0 && index % 1 !== 0)
-    return `${(index * 10).toFixed(0).padStart(2, '0')}`
-  return index.toString()
+  const sign = index < 0 ? '-' : ''
+  const absoluteValue = Math.abs(index)
+  if (absoluteValue % 1 === 0) return `${sign}${absoluteValue}`
+  const fixed = absoluteValue.toFixed(2)
+  const [intPart, fracRaw] = fixed.split('.')
+  const frac = fracRaw.replace(/0+$/, '')
+  const normalized = `${intPart}${frac.padEnd(2, '0')}`
+  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized
+  return `${sign}${padded}`
 }
 
 const buildVariableBlock = (
@@ -26,7 +27,7 @@ const buildVariableBlock = (
   lines.push(`  --space-mode: ${tokens.spaceMode};`)
   lines.push(`  --space-sync: ${tokens.spaceSync !== false};`)
 
-  for (let i = minLevel; i <= levels; i += 0.5) {
+  for (let i = minLevel; i <= levels; i += 0.25) {
     const index = Number(i.toFixed(2))
     const key = formatIndexString(index)
     const size = Math.pow(tokens.ratio, index)
@@ -93,9 +94,20 @@ const buildTypographyScss = () => {
   ].join('\n')
 }
 
+const buildBreakpointsScss = (breakpoints: Array<{ key: string; value: string }>) => {
+  const lines: string[] = []
+  lines.push('@theme {')
+  for (const bp of breakpoints) {
+    if (!bp.key || !bp.value) continue
+    lines.push(`  --breakpoint-${bp.key}: ${bp.value};`)
+  }
+  lines.push('}')
+  return lines.join('\n')
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { tokens, ranges, settings, levels, minLevel } = body || {}
+  const { tokens, ranges, settings, levels, minLevel, breakpoints } = body || {}
   if (!tokens) return { ok: false }
 
   const outputDir = settings?.outputDir || 'app/assets/scss/helios'
@@ -103,6 +115,7 @@ export default defineEventHandler(async (event) => {
   const tokensFile = settings?.tokensFile || 'app/assets/scss/helios/helios.tokens.json'
   const tokensScssFile = settings?.tokensScssFile || '_tokens.scss'
   const typographyFile = settings?.typographyFile || '_typography.scss'
+  const breakpointsFile = settings?.breakpointsFile || '_breakpoints.scss'
 
   const rootDir = process.cwd()
   const outputPath = resolve(rootDir, outputDir)
@@ -110,21 +123,26 @@ export default defineEventHandler(async (event) => {
 
   const tokensScssPath = join(outputPath, tokensScssFile)
   const typographyScssPath = join(outputPath, typographyFile)
+  const breakpointsScssPath = join(outputPath, breakpointsFile)
   const entryPath = join(outputPath, outputEntry)
 
   const tokensScss = buildTokensScss(tokens, ranges || [], levels || 10, minLevel ?? -5)
   const typographyScss = buildTypographyScss()
+  const breakpointsScss = buildBreakpointsScss(breakpoints || [])
 
   await fs.writeFile(tokensScssPath, tokensScss, 'utf-8')
   await fs.writeFile(typographyScssPath, typographyScss, 'utf-8')
+  await fs.writeFile(breakpointsScssPath, breakpointsScss, 'utf-8')
   await fs.writeFile(
     entryPath,
-    `@use "${tokensScssFile.replace(/^_/, '').replace(/\.scss$/, '')}";\n@use "${typographyFile.replace(/^_/, '').replace(/\.scss$/, '')}";\n`,
+    `@use "${tokensScssFile.replace(/^_/, '').replace(/\.scss$/, '')}";\n` +
+    `@use "${typographyFile.replace(/^_/, '').replace(/\.scss$/, '')}";\n` +
+    `@use "${breakpointsFile.replace(/^_/, '').replace(/\.scss$/, '')}";\n`,
     'utf-8'
   )
 
   await fs.mkdir(dirname(resolve(rootDir, tokensFile)), { recursive: true })
-  await fs.writeFile(resolve(rootDir, tokensFile), JSON.stringify({ tokens, ranges, settings }, null, 2), 'utf-8')
+  await fs.writeFile(resolve(rootDir, tokensFile), JSON.stringify({ tokens, ranges, settings, breakpoints: breakpoints || [] }, null, 2), 'utf-8')
 
   return { ok: true }
 })

@@ -37,21 +37,7 @@ export default defineNuxtPlugin(async () => {
     deps.push({ name: '@iconify-json/lucide', ok: false })
   }
 
-  try {
-    await import('@unocss/nuxt')
-    deps.push({ name: '@unocss/nuxt', ok: true })
-  }
-  catch {
-    deps.push({ name: '@unocss/nuxt', ok: false })
-  }
-
-  try {
-    await import('unocss')
-    deps.push({ name: 'unocss', ok: true })
-  }
-  catch {
-    deps.push({ name: 'unocss', ok: false })
-  }
+  // UnoCSS presence is detected in the client plugin via injected styles.
 
   const missing = deps.filter((dep) => !dep.ok).map((dep) => dep.name)
   warnMissing(missing)

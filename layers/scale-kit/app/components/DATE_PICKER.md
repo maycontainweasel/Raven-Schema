@@ -4,7 +4,7 @@
 - `UiDatePicker.vue` headless single-date picker using Headless UI `Popover` and `TransitionRoot`.
 - Built on existing `.input` styling from `app/assets/scss/_components.scss` for visual consistency.
 - Uses `date-fns` for calendar math and formatting.
-- Added `calendar` icon in `app/components/Icon.vue`.
+- Uses `i-lucide:calendar` icon via Iconify.
 - A small lab page for testing: `app/pages/datepicker-test.vue`.
 
 ## Component API (current)
