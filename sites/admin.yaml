@@ -1,0 +1,20 @@
+name: admin
+slug: admin
+template: templates/nuxt-4.3.0
+target: apps/admin
+deploy:
+  ssl:
+    email: ""
+    redirect: true
+  host: mpire.live
+  domain: dmo.admin.mpire.live
+  port: 5337
+  appDir: /home/mpire
+  pm2Name: admin
+  pm2Command: pm2
+  nginxSitesEnabled: /etc/nginx/sites-enabled
+  restartCommand: systemctl reload nginx
+  overwriteNginx: true
+  overwriteApp: true
+  startPm2: true
+  setupComplete: true

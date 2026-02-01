@@ -1,0 +1,41 @@
+name: Example Site
+slug: example-site
+template: templates/nuxt-4.3.0
+target: apps/example-site
+layers:
+  - schema-core
+nuxtConfig:
+  extends:
+    - ./layers/admin-core
+    - ./layers/generated
+    - ./layers/api-toolkit
+    - ./layers/auth
+  build:
+    transpile:
+      - trpc-nuxt
+  modules:
+    - ./modules/schema-kit
+  compatibilityDate: "2025-07-15"
+  devtools:
+    enabled: true
+  devServer:
+    port: 1300
+    host: 0.0.0.0
+  vite:
+    server:
+      allowedHosts:
+        - admin.schema.dev
+      origin: https://admin.schema.dev:4443
+      hmr:
+        protocol: wss
+        host: admin.schema.dev
+        clientPort: 4443
+        path: /__vitews
+        port: 42363
+packageJson:
+  scripts:
+    dev: nuxt dev --port 1300
+env:
+  SCHEMA_API_URL:
+    local: http://localhost:3000
+    staging: https://api.schema.dev

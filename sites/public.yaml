@@ -1,0 +1,12 @@
+name: public
+slug: public
+template: templates/nuxt-4.3.0
+target: apps/public
+nuxtConfig:
+  modules:
+    - ~~/modules/schema-kit
+  extends:
+    - ./layers/auth
+  build:
+    transpile:
+      - trpc-nuxt

@@ -16,9 +16,9 @@
     "trpcClient": true,
     "trpcServer": true,
     "sentry": {
-      "enabled": false,
-      "client": false,
-      "server": false,
+      "enabled": true,
+      "client": true,
+      "server": true,
       "sourceMaps": false
     },
     "redis": {
@@ -26,9 +26,6 @@
     },
     "surrealdb": {
       "enabled": true
-    },
-    "auth": {
-      "enabled": false
     }
   }
 }
