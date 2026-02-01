@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHeliosScaleStore } from '#layers/helios/app/stores/helios'
+
+definePageMeta({ ssr: false })
 
 const scaleStore = useHeliosScaleStore()
 
@@ -11,7 +13,8 @@ const modalOpen = ref(false)
 const activePanel = ref<'typography' | 'settings' | 'utilities' | 'breakpoints'>('typography')
 const newRange = reactive({ label: 'Mobile', min: 0, max: 767 })
 const typeUnit = ref<'rem' | 'px' | 'pt'>('rem')
-const showTypeExport = ref(true)
+const showTypeExport = ref(false)
+const isClient = ref(false)
 const exportFile = ref('typography')
 const sampleText = ref('The quick brown fox jumps over the lazy dog')
 const scaleStep = ref(1)
@@ -153,16 +156,69 @@ const typeRows = computed(() => {
 })
 
 const exportWindow = reactive({
-  x: 560,
-  y: 160,
-  width: 460,
-  height: 360,
+  x: 120,
+  y: 120,
+  width: 720,
+  height: 520,
   dragging: false,
   dragOffsetX: 0,
   dragOffsetY: 0,
 })
 
+const exportWindowRef = ref<HTMLElement | null>(null)
+let exportResizeObserver: ResizeObserver | null = null
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+const minExportSize = { width: 480, height: 320 }
+
+const normalizeExportWindow = () => {
+  if (!Number.isFinite(exportWindow.width) || exportWindow.width <= 0)
+    exportWindow.width = minExportSize.width
+  if (!Number.isFinite(exportWindow.height) || exportWindow.height <= 0)
+    exportWindow.height = minExportSize.height
+  if (!Number.isFinite(exportWindow.x)) exportWindow.x = 16
+  if (!Number.isFinite(exportWindow.y)) exportWindow.y = 16
+}
+
+const clampExportWindow = () => {
+  if (typeof window === 'undefined') return
+  normalizeExportWindow()
+  exportWindow.width = Math.max(minExportSize.width, exportWindow.width)
+  exportWindow.height = Math.max(minExportSize.height, exportWindow.height)
+  const maxX = Math.max(16, window.innerWidth - exportWindow.width - 16)
+  const maxY = Math.max(16, window.innerHeight - exportWindow.height - 16)
+  exportWindow.x = clamp(exportWindow.x, 16, maxX)
+  exportWindow.y = clamp(exportWindow.y, 16, maxY)
+}
+
+const toggleExport = () => {
+  showTypeExport.value = !showTypeExport.value
+  if (showTypeExport.value) {
+    normalizeExportWindow()
+    clampExportWindow()
+  }
+}
+
+const setupExportObserver = () => {
+  if (typeof ResizeObserver === 'undefined' || !exportWindowRef.value) return
+  exportResizeObserver?.disconnect()
+  exportResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0]
+    if (!entry) return
+    const { width, height } = entry.contentRect
+    if (width >= minExportSize.width) exportWindow.width = width
+    if (height >= minExportSize.height) exportWindow.height = height
+    clampExportWindow()
+  })
+  exportResizeObserver.observe(exportWindowRef.value)
+}
+
 const startDrag = (event: PointerEvent) => {
+  if (exportWindowRef.value) {
+    const rect = exportWindowRef.value.getBoundingClientRect()
+    exportWindow.width = rect.width
+    exportWindow.height = rect.height
+  }
   exportWindow.dragging = true
   exportWindow.dragOffsetX = event.clientX - exportWindow.x
   exportWindow.dragOffsetY = event.clientY - exportWindow.y
@@ -179,7 +235,14 @@ const stopDrag = () => {
 }
 
 onMounted(() => {
+  isClient.value = true
   if (typeof window !== 'undefined') {
+    if (!window.localStorage.getItem('helios-export-window')) {
+      exportWindow.width = Math.max(minExportSize.width, Math.round(window.innerWidth * 0.6))
+      exportWindow.height = Math.max(minExportSize.height, Math.round(window.innerHeight * 0.7))
+      exportWindow.x = Math.max(16, Math.round((window.innerWidth - exportWindow.width) / 2))
+      exportWindow.y = Math.max(16, Math.round((window.innerHeight - exportWindow.height) / 2))
+    }
     const saved = window.localStorage.getItem('helios-export-window')
     if (saved) {
       try {
@@ -190,12 +253,15 @@ onMounted(() => {
         exportWindow.height = parsed.height ?? exportWindow.height
       } catch {}
     }
+    clampExportWindow()
   }
+  if (showTypeExport.value) setupExportObserver()
   window.addEventListener('pointermove', onDrag)
   window.addEventListener('pointerup', stopDrag)
 })
 
 onBeforeUnmount(() => {
+  exportResizeObserver?.disconnect()
   window.removeEventListener('pointermove', onDrag)
   window.removeEventListener('pointerup', stopDrag)
 })
@@ -213,6 +279,21 @@ watch(
         height: exportWindow.height,
       })
     )
+  }
+)
+
+watch(
+  () => showTypeExport.value,
+  (value) => {
+    if (value) {
+      nextTick(() => {
+        setupExportObserver()
+        clampExportWindow()
+      })
+    }
+    else {
+      exportResizeObserver?.disconnect()
+    }
   }
 )
 
@@ -415,7 +496,7 @@ const removeRange = (id: string) => {
           </div>
           <button class="ui-btn-ghost" type="button" @click="modalOpen = true">Add range</button>
           <UiMenu :items="viewItems" label="Views" />
-          <button class="ui-btn-ghost" type="button" @click="showTypeExport = !showTypeExport">
+          <button class="ui-btn-ghost" type="button" @click="toggleExport">
             SCSS
           </button>
           <button class="ui-btn-primary" type="button" :disabled="isCommitting" @click="scaleStore.commit">
@@ -569,9 +650,10 @@ const removeRange = (id: string) => {
       </div>
     </Teleport>
 
-    <Teleport to="body">
+    <Teleport v-if="isClient" to="body">
       <div
         v-if="showTypeExport"
+        ref="exportWindowRef"
         class="export-window"
         :style="{
           width: `${exportWindow.width}px`,
@@ -867,6 +949,8 @@ const removeRange = (id: string) => {
   flex-direction: column;
   resize: both;
   overflow: auto;
+  min-width: 320px;
+  min-height: 220px;
 }
 
 .export-window__header {
