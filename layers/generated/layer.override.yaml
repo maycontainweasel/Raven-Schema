@@ -1,0 +1,7 @@
+# Layer overrides (per-app).
+# Copy this file into the app layer folder if you need project-specific overrides.
+#
+# modules:
+#   - "@nuxt/fonts"
+# nuxtConfig:
+#   fonts: {}

@@ -37,6 +37,7 @@
     "site:pkg:sync": "tsx src/cli.ts site:pkg:sync",
     "site:pkg:add": "tsx src/cli.ts site:pkg:add",
     "site:setup": "tsx src/cli.ts site:setup",
+    "site:config:sync": "tsx src/cli.ts site:config:sync",
     "site:deploy:init": "tsx src/cli.ts site:deploy:init",
     "site:deploy:setup": "tsx src/cli.ts site:deploy:setup",
     "site:deploy:ssl": "tsx src/cli.ts site:deploy:ssl",

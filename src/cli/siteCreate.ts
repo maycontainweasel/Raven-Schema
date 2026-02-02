@@ -11,7 +11,7 @@ import { ensureNuxtConfigExtends } from '../lib/siteSpec';
 import { loadAppConfig } from '../lib/configLoader';
 import { loadLayerPackages, mergePackages } from '../lib/sitePackages';
 import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
-import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList } from '../lib/layerNuxtConfig';
+import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList, mergeOverride } from '../lib/layerNuxtConfig';
 import { normalizeConfigValue, writeGeneratedNuxtConfig } from '../lib/siteNuxtConfig';
 import { ensureSchemaKitModule } from '../lib/schemaKitModule';
 import { syncProjectLayers } from '../lib/layerSync';
@@ -144,12 +144,17 @@ export async function runSiteCreate(options: {
     if (Array.isArray(spec.layers) && spec.layers.length > 0) {
       const layerDefaults = await collectLayerNuxtDefaults(projectRoot, spec.layers);
       const baseConfig = isPlainObject(spec.nuxtConfig) ? spec.nuxtConfig : {};
-      const mergedConfig = mergeDefaults(baseConfig, layerDefaults.config);
+      const mergedConfig = mergeOverride(layerDefaults.config, baseConfig);
       if (layerDefaults.modules.length > 0) {
-        (mergedConfig as Record<string, unknown>).modules = mergeModuleList(
-          (mergedConfig as Record<string, unknown>).modules,
-          layerDefaults.modules
-        );
+        const existingModules = (mergedConfig as Record<string, unknown>).modules;
+        if (!Array.isArray(existingModules) || existingModules.length === 0) {
+          (mergedConfig as Record<string, unknown>).modules = layerDefaults.modules;
+        } else {
+          (mergedConfig as Record<string, unknown>).modules = mergeModuleList(
+            existingModules,
+            layerDefaults.modules
+          );
+        }
       }
       spec.nuxtConfig = mergedConfig;
     }

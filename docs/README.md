@@ -56,6 +56,10 @@ Recommended usage:
 Layers are “registered” by a `layer.yaml` file inside each layer folder:
 
 - `apps/schema/layers/<layer>/layer.yaml`
+- Optional per-app overrides live at:
+  - `apps/<site>/layers/<layer>/layer.override.yaml`
+  These overrides are merged into the generated Nuxt config and never overwrite the
+  schema source layer. The sync process preserves existing override files.
 
 The registry fields are currently minimal (name, version, description). When you include a layer in a site’s `layers:` list, `site:setup --fix` will:
 

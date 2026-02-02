@@ -10,7 +10,8 @@ export type LayerNuxtDefaults = {
 
 export async function collectLayerNuxtDefaults(
   projectRoot: string,
-  layers: string[] | undefined
+  layers: string[] | undefined,
+  options?: { appRoot?: string; includeOverrides?: boolean }
 ): Promise<LayerNuxtDefaults> {
   const orderedLayers = Array.isArray(layers)
     ? layers.map((layer) => String(layer).trim()).filter(Boolean)
@@ -20,8 +21,17 @@ export async function collectLayerNuxtDefaults(
   const mergedModules: string[] = [];
   const seenModules = new Set<string>();
 
+  const includeOverrides = options?.includeOverrides === true && options.appRoot;
+
   for (const layer of orderedLayers) {
-    const { modules, config } = await loadLayerNuxtConfig(projectRoot, layer);
+    const base = await loadLayerNuxtConfig(projectRoot, layer);
+    const override = includeOverrides
+      ? await loadLayerOverride(options!.appRoot as string, layer)
+      : { modules: [], config: {} };
+
+    const modules = override.modules.length > 0 ? override.modules : base.modules;
+    const config = mergeOverride(base.config, override.config);
+
     if (modules.length > 0) {
       perLayerModules[layer] = modules;
       for (const mod of modules) {
@@ -31,7 +41,7 @@ export async function collectLayerNuxtDefaults(
         }
       }
     }
-    mergedConfig = mergeDefaults(mergedConfig, config);
+    mergedConfig = mergeOverride(mergedConfig, config);
   }
 
   return { modules: mergedModules, config: mergedConfig, perLayerModules };
@@ -50,6 +60,22 @@ export function mergeDefaults(
     const existing = out[key];
     if (isPlainObject(existing) && isPlainObject(value)) {
       out[key] = mergeDefaults(existing as Record<string, unknown>, value as Record<string, unknown>);
+    }
+  }
+  return out;
+}
+
+export function mergeOverride(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const existing = out[key];
+    if (isPlainObject(existing) && isPlainObject(value)) {
+      out[key] = mergeOverride(existing as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      out[key] = value;
     }
   }
   return out;
@@ -128,6 +154,31 @@ async function loadLayerNuxtConfig(
     delete nuxtConfig.modules;
   }
 
+  return { modules: combinedModules, config: nuxtConfig };
+}
+
+async function loadLayerOverride(
+  appRoot: string,
+  layer: string
+): Promise<{ modules: string[]; config: Record<string, unknown> }> {
+  const overridePath = path.resolve(appRoot, 'layers', layer, 'layer.override.yaml');
+  const exists = await stat(overridePath).catch(() => null);
+  if (!exists?.isFile()) return { modules: [], config: {} };
+  const raw = await readFile(overridePath, 'utf-8');
+  const parsed = YAML.parse(raw) as Record<string, unknown> | null;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { modules: [], config: {} };
+  }
+  const overrideModules = normalizeModules(parsed.modules);
+  const nuxtConfigRaw = parsed.nuxtConfig;
+  const nuxtConfig = isPlainObject(nuxtConfigRaw)
+    ? { ...(nuxtConfigRaw as Record<string, unknown>) }
+    : {};
+  const nuxtModules = normalizeModules(nuxtConfig.modules);
+  const combinedModules = mergeModuleList(overrideModules, nuxtModules);
+  if (combinedModules.length > 0) {
+    delete nuxtConfig.modules;
+  }
   return { modules: combinedModules, config: nuxtConfig };
 }
 

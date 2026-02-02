@@ -202,6 +202,12 @@ async function copyDir(sourceDir: string, targetDir: string): Promise<void> {
     if (entry.isDirectory()) {
       await copyDir(from, to);
     } else if (entry.isFile()) {
+      if (entry.name === 'layer.override.yaml') {
+        const existing = await stat(to).catch(() => null);
+        if (existing?.isFile()) {
+          continue;
+        }
+      }
       const content = await readFile(from, 'utf-8');
       await writeFile(to, content, 'utf-8');
     }

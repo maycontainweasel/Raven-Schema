@@ -70,7 +70,7 @@ import { ensureSchemaKitModule } from './lib/schemaKitModule';
 import { syncProjectLayers } from './lib/layerSync';
 import { writeAuthLayerConfig } from './lib/layerConfigWriter';
 import { readLayerMeta, listLayerMetas } from './lib/layerRegistry';
-import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList, removeModuleList } from './lib/layerNuxtConfig';
+import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList, removeModuleList, mergeOverride } from './lib/layerNuxtConfig';
 import { writeGeneratedNuxtConfig } from './lib/siteNuxtConfig';
 import {
   checkProjectSetup,
@@ -515,7 +515,10 @@ const argv = yargs(hideBin(process.argv))
         : [];
       const availableMetas = await listLayerMetas(projectRoot, { autoCreate: false });
       const availableNames = new Set(availableMetas.map((meta) => meta.name));
-      const layerDefaults = await collectLayerNuxtDefaults(projectRoot, configured);
+      const layerDefaults = await collectLayerNuxtDefaults(projectRoot, configured, {
+        appRoot,
+        includeOverrides: true,
+      });
 
       console.log(`\n🧩 Layers for ${specEntry.spec.slug} (${path.relative(repoRoot, appRoot)}):`);
       if (configured.length === 0) {
@@ -633,15 +636,23 @@ const argv = yargs(hideBin(process.argv))
         && !Array.isArray(specEntry.spec.nuxtConfig))
         ? (specEntry.spec.nuxtConfig as Record<string, unknown>)
         : {};
-      const mergedConfig = mergeDefaults(baseConfig, layerDefaults.config);
+      const mergedConfig = mergeOverride(layerDefaults.config, baseConfig);
       if (layerDefaults.modules.length > 0) {
-        mergedConfig.modules = mergeModuleList(mergedConfig.modules, layerDefaults.modules);
+        if (!Array.isArray(mergedConfig.modules) || mergedConfig.modules.length === 0) {
+          mergedConfig.modules = layerDefaults.modules;
+        } else {
+          mergedConfig.modules = mergeModuleList(mergedConfig.modules, layerDefaults.modules);
+        }
       }
       specEntry.spec.nuxtConfig = mergedConfig;
       await writeSiteSpec(specEntry.path, specEntry.spec);
       console.log(`✅ Added layers to ${specEntry.spec.slug}: ${layersToAdd.join(', ')}`);
-
-      await writeGeneratedNuxtConfig(appRoot, specEntry.spec.nuxtConfig as Record<string, unknown> | undefined);
+      const effectiveConfig = await buildSiteNuxtConfig({
+        projectRoot,
+        spec: specEntry.spec,
+        appRoot,
+      });
+      await writeGeneratedNuxtConfig(appRoot, effectiveConfig);
 
       if (args['no-sync'] !== true) {
         await syncProjectLayers({
@@ -745,7 +756,7 @@ const argv = yargs(hideBin(process.argv))
         && !Array.isArray(specEntry.spec.nuxtConfig))
         ? (specEntry.spec.nuxtConfig as Record<string, unknown>)
         : {};
-      const mergedConfig = mergeDefaults(baseConfig, remainingDefaults.config);
+      const mergedConfig = mergeOverride(remainingDefaults.config, baseConfig);
       if (remainingDefaults.modules.length > 0 || removedDefaults.modules.length > 0) {
         const trimmed = removeModuleList(
           mergedConfig.modules,
@@ -757,8 +768,12 @@ const argv = yargs(hideBin(process.argv))
       specEntry.spec.nuxtConfig = mergedConfig;
       await writeSiteSpec(specEntry.path, specEntry.spec);
       console.log(`✅ Removed layers from ${specEntry.spec.slug}: ${layersToRemove.join(', ')}`);
-
-      await writeGeneratedNuxtConfig(appRoot, specEntry.spec.nuxtConfig as Record<string, unknown> | undefined);
+      const effectiveConfig = await buildSiteNuxtConfig({
+        projectRoot,
+        spec: specEntry.spec,
+        appRoot,
+      });
+      await writeGeneratedNuxtConfig(appRoot, effectiveConfig);
 
       if (args['no-sync'] !== true) {
         await syncProjectLayers({
@@ -1460,6 +1475,40 @@ const argv = yargs(hideBin(process.argv))
         specEntry,
         fix: args.fix === true,
       });
+    }
+  )
+  .command(
+    'site:config:sync [name]',
+    'Regenerate nuxt.config.generated.ts from site spec',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const { specEntry, appRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+      const effectiveConfig = await buildSiteNuxtConfig({
+        projectRoot,
+        spec: specEntry.spec,
+        appRoot,
+      });
+      await writeGeneratedNuxtConfig(appRoot, effectiveConfig);
+      console.log(`✅ Regenerated nuxt.config.generated.ts for ${specEntry.spec.slug}.`);
     }
   )
   .command(
@@ -4019,6 +4068,26 @@ async function resolveSiteLayerTarget(options: {
     active: true,
   };
   return { bundle, specEntry, project, appRoot: targetAbs, repoRoot };
+}
+
+async function buildSiteNuxtConfig(options: {
+  projectRoot: string;
+  spec: SiteSpecForSetup;
+  appRoot: string;
+}): Promise<Record<string, unknown>> {
+  const baseConfig = (options.spec.nuxtConfig && typeof options.spec.nuxtConfig === 'object'
+    && !Array.isArray(options.spec.nuxtConfig))
+    ? (options.spec.nuxtConfig as Record<string, unknown>)
+    : {};
+  const layerDefaults = await collectLayerNuxtDefaults(options.projectRoot, options.spec.layers, {
+    appRoot: options.appRoot,
+    includeOverrides: true,
+  });
+  const merged = mergeOverride(layerDefaults.config, baseConfig);
+  if (!('modules' in merged) && layerDefaults.modules.length > 0) {
+    merged.modules = layerDefaults.modules;
+  }
+  return merged;
 }
 
 function normalizeLayerArgs(raw: unknown): string[] {

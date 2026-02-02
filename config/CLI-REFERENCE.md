@@ -120,6 +120,11 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:setup public`
   - `pnpm -C apps/schema run site:setup -- --spec sites/public.yaml --fix`
 
+- `site:config:sync [name]`  
+  Regenerate `nuxt.config.generated.ts` from `sites/<slug>.yaml` without touching layers/packages.  
+  Example:
+  - `pnpm -C apps/schema run site:config:sync my-site`
+
 - `site:delete [name]`  
   Remove nginx server block, certs, and hosts entry for a site.  
   Examples:
