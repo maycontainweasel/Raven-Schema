@@ -86,6 +86,7 @@ export async function runSiteDeploy(options: {
   skipVerify?: boolean;
   reset?: boolean;
   resetRemote?: boolean;
+  resetOnly?: boolean;
   from?: string;
 }): Promise<void> {
   const projectRoot = options.projectRoot;
@@ -163,10 +164,14 @@ export async function runSiteDeploy(options: {
     await removeLocalState(context.localStatePath);
   }
 
-  if (options.resetRemote) {
+  if (options.resetRemote || options.resetOnly) {
     await resetRemoteResources(context);
     await removeRemoteState(context.sshTarget, context.statePath);
     await removeLocalState(context.localStatePath);
+    if (options.resetOnly) {
+      console.log('🧹 Reset-only complete. Exiting before deploy.');
+      return;
+    }
   }
 
   let state = options.reset || options.resetRemote
@@ -207,15 +212,27 @@ export async function runSiteDeploy(options: {
 
   const skipVerify = Boolean(options.skipVerify || options.yes || !process.stdin.isTTY);
   if (!skipVerify && fromIndex <= stepIndex('verify') && !state?.verify) {
-    const proceed = await promptYesNo(
-      `Confirm http://${context.resolvedAnswers.domain} is serving (shows "working")?`,
-      true
-    );
-    if (!proceed) {
-      console.log('Aborted before SSL/deploy.');
-      return;
+    let verified = await tryHttpVerify(context);
+    if (verified) {
+      console.log('✅ HTTP verify passed (curl).');
+    } else if (!process.stdin.isTTY) {
+      throw new Error(
+        `HTTP verify failed for http://${context.resolvedAnswers.domain}. Re-run with --skip-verify to bypass.`
+      );
+    } else {
+      const proceed = await promptYesNo(
+        `Confirm http://${context.resolvedAnswers.domain} is serving (shows "working")?`,
+        true
+      );
+      if (!proceed) {
+        console.log('Aborted before SSL/deploy.');
+        return;
+      }
+      verified = true;
     }
-    state = await updateRemoteState(context, state, { verify: true });
+    if (verified) {
+      state = await updateRemoteState(context, state, { verify: true });
+    }
   }
 
   if (fromIndex <= stepIndex('ssl') && hasSslEnabled(context.spec.deploy)) {
@@ -239,15 +256,27 @@ export async function runSiteDeploy(options: {
     }
 
     if (!skipVerify && !state?.sslVerified) {
-      const proceed = await promptYesNo(
-        `Confirm https://${context.resolvedAnswers.domain} is serving?`,
-        true
-      );
-      if (!proceed) {
-        console.log('Aborted before deploy.');
-        return;
+      let verified = await tryUrlVerify(context, 'https');
+      if (verified) {
+        console.log('✅ HTTPS verify passed (curl).');
+      } else if (!process.stdin.isTTY) {
+        throw new Error(
+          `HTTPS verify failed for https://${context.resolvedAnswers.domain}. Re-run with --skip-verify to bypass.`
+        );
+      } else {
+        const proceed = await promptYesNo(
+          `Confirm https://${context.resolvedAnswers.domain} is serving?`,
+          true
+        );
+        if (!proceed) {
+          console.log('Aborted before deploy.');
+          return;
+        }
+        verified = true;
       }
-      state = await updateRemoteState(context, state, { ssl: true, sslVerified: true });
+      if (verified) {
+        state = await updateRemoteState(context, state, { ssl: true, sslVerified: true });
+      }
     } else {
       state = await updateRemoteState(context, state, { ssl: true, sslVerified: true });
     }
@@ -515,6 +544,26 @@ async function remoteCommandExists(target: string, command: string): Promise<boo
   return output.trim() === 'yes';
 }
 
+async function tryHttpVerify(context: DeployContext): Promise<boolean> {
+  return tryUrlVerify(context, 'http');
+}
+
+async function tryUrlVerify(
+  context: DeployContext,
+  scheme: 'http' | 'https'
+): Promise<boolean> {
+  const curlAvailable = await remoteCommandExists(context.sshTarget, 'curl');
+  if (!curlAvailable) return false;
+  const url = `${scheme}://${context.resolvedAnswers.domain}`;
+  const cmd = `curl -fsS --max-time 5 ${shellEscapePath(url)}`;
+  try {
+    const output = await runSshCapture(context.sshTarget, cmd);
+    return output.trim().includes('working');
+  } catch {
+    return false;
+  }
+}
+
 async function resolveRemoteHome(target: string): Promise<string> {
   const output = await runSshCapture(target, 'printf %s "$HOME"');
   return output.trim();
@@ -738,6 +787,7 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
     sshTarget,
     `sudo rm -rf /etc/letsencrypt/live/${certName} /etc/letsencrypt/archive/${certName} /etc/letsencrypt/renewal/${certName}.conf >/dev/null 2>&1 || true`
   );
+  await pruneEmptyParents(sshTarget, resolvedAnswers.appDir, resolvedAnswers.remoteBase);
   console.log('🔧 Testing nginx config...');
   await runSsh(sshTarget, 'sudo nginx -t');
   await runSsh(sshTarget, `sudo ${resolvedAnswers.restartCommand}`);
@@ -759,6 +809,24 @@ async function assertSafeRemotePath(target: string, appDir: string): Promise<voi
       `Refusing to reset remote path "${trimmed}" (user home). Set deploy.appDir to a subdirectory like "${home}/<app>".`
     );
   }
+}
+
+async function pruneEmptyParents(
+  target: string,
+  appDir: string,
+  baseDir?: string
+): Promise<void> {
+  const resolvedBase = baseDir
+    ? await resolveRemoteAppDir(target, baseDir)
+    : await resolveRemoteHome(target);
+  if (!resolvedBase) return;
+  const stopDir = resolvedBase.replace(/\/+$/, '');
+  const appParent = path.posix.dirname(appDir.replace(/\/+$/, ''));
+  if (!appParent.startsWith(`${stopDir}/`) || appParent === stopDir) {
+    return;
+  }
+  const cmd = `find ${shellEscapePath(appParent)} -depth -type d -empty -delete`;
+  await runSsh(target, cmd);
 }
 
 async function remoteFileExists(target: string, remotePath: string): Promise<boolean> {
@@ -869,10 +937,24 @@ async function promptYesNo(question: string, defaultYes: boolean): Promise<boole
   if (!process.stdin.isTTY) return defaultYes;
   const hint = defaultYes ? 'Y/n' : 'y/N';
   const rl = readline.createInterface({ input, output });
-  const answer = await rl.question(`${question} (${hint}) `);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const answer = await rl.question(`${question} (${hint}) `);
+    if (!answer) {
+      rl.close();
+      return defaultYes;
+    }
+    if (/^y(es)?$/i.test(answer.trim())) {
+      rl.close();
+      return true;
+    }
+    if (/^n(o)?$/i.test(answer.trim())) {
+      rl.close();
+      return false;
+    }
+    console.warn('⚠️  Please answer with y or n.');
+  }
   rl.close();
-  if (!answer) return defaultYes;
-  return /^y(es)?$/i.test(answer.trim());
+  return defaultYes;
 }
 
 function hasSslEnabled(deploy?: Record<string, unknown>): boolean {

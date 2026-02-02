@@ -63,6 +63,17 @@ The registry fields are currently minimal (name, version, description). When you
 
 If a `layer.yaml` is missing, the sync process auto‑creates one with version `0.0.0` to keep older layers compatible.
 
+### Layer Status Command
+
+Use the CLI to inspect layer versions per app:
+
+```
+pnpm -C apps/schema run layers:status
+pnpm -C apps/schema run layers:status -- --project admin
+```
+
+It reads `layers.lock.json` when available, falling back to `layer.yaml` metadata.
+
 ## Database Targeting
 
 - Define `environment.migrationTargets` in `config/app.config.yaml` with the database keys you want the pipeline to hit (e.g., `['local', 'testing']`). When unset, the runner falls back to `environment.defaultDatabase`.

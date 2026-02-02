@@ -212,6 +212,23 @@ export async function runSiteDeployInit(options: {
   console.log(`🌐 URL: http://${answers.domain}`);
 
   if (specEntry) {
+    const sslEnvEmail = process.env.MPD_SSL_EMAIL || process.env.DEPLOY_SSL_EMAIL || '';
+    let sslConfig = (specEntry.spec.deploy as any)?.ssl;
+    if (!sslConfig || typeof sslConfig !== 'object') {
+      sslConfig = {};
+    }
+    if (typeof (sslConfig as any).redirect !== 'boolean') {
+      (sslConfig as any).redirect = true;
+    }
+    if (!options.yes && process.stdin.isTTY) {
+      const existing = typeof (sslConfig as any).email === 'string' ? (sslConfig as any).email : '';
+      if (!existing) {
+        const emailInput = await promptInput(`SSL email (${sslEnvEmail || 'required'})`);
+        (sslConfig as any).email = emailInput && emailInput.trim() ? emailInput.trim() : sslEnvEmail;
+      }
+    } else if (!(sslConfig as any).email && sslEnvEmail) {
+      (sslConfig as any).email = sslEnvEmail;
+    }
     const nextDeploy = {
       ...(specEntry.spec.deploy ?? {}),
       host: answers.host,
@@ -238,12 +255,7 @@ export async function runSiteDeployInit(options: {
     } else {
       (nextDeploy as any).appDir = answers.appDir;
     }
-    if (!(nextDeploy as any).ssl) {
-      (nextDeploy as any).ssl = {
-        email: process.env.MPD_SSL_EMAIL || process.env.DEPLOY_SSL_EMAIL || '',
-        redirect: true,
-      };
-    }
+    (nextDeploy as any).ssl = sslConfig;
     const nextSpec = { ...specEntry.spec, deploy: nextDeploy };
     await writeFile(specEntry.path, YAML.stringify(nextSpec), 'utf-8');
   }
@@ -872,9 +884,14 @@ async function promptRequiredInput(label: string, fallback: string): Promise<str
 async function promptYesNo(question: string, defaultYes: boolean): Promise<boolean> {
   if (!process.stdin.isTTY) return defaultYes;
   const hint = defaultYes ? 'Y/n' : 'y/N';
-  const answer = await promptInput(`${question} (${hint})`);
-  if (!answer) return defaultYes;
-  return /^y(es)?$/i.test(answer.trim());
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const answer = await promptInput(`${question} (${hint})`);
+    if (!answer) return defaultYes;
+    if (/^y(es)?$/i.test(answer.trim())) return true;
+    if (/^n(o)?$/i.test(answer.trim())) return false;
+    console.warn('⚠️  Please answer with y or n.');
+  }
+  return defaultYes;
 }
 
 async function promptNumber(label: string, fallback: number): Promise<number> {

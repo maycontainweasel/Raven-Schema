@@ -642,6 +642,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Remove remote nginx/app/pm2 and reset state',
         })
+        .option('reset-only', {
+          type: 'boolean',
+          describe: 'Only reset remote resources and exit',
+        })
         .option('from', {
           type: 'string',
           describe: 'Start from step: init | verify | ssl | deploy',
@@ -673,6 +677,7 @@ const argv = yargs(hideBin(process.argv))
         skipVerify: args['skip-verify'] === true,
         reset: args.reset === true,
         resetRemote: args['reset-remote'] === true,
+        resetOnly: args['reset-only'] === true,
         from: args.from ? String(args.from) : undefined,
       });
     }
