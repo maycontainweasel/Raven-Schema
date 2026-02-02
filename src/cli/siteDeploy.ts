@@ -221,7 +221,7 @@ export async function runSiteDeploy(options: {
       );
     } else {
       const proceed = await promptYesNo(
-        `Confirm http://${context.resolvedAnswers.domain} is serving (shows "working")?`,
+        `Confirm http://${context.resolvedAnswers.domain} is serving?`,
         true
       );
       if (!proceed) {
@@ -552,13 +552,29 @@ async function tryUrlVerify(
   context: DeployContext,
   scheme: 'http' | 'https'
 ): Promise<boolean> {
-  const curlAvailable = await remoteCommandExists(context.sshTarget, 'curl');
-  if (!curlAvailable) return false;
   const url = `${scheme}://${context.resolvedAnswers.domain}`;
-  const cmd = `curl -fsS --max-time 5 ${shellEscapePath(url)}`;
+  const curlAvailable = await remoteCommandExists(context.sshTarget, 'curl');
+  if (curlAvailable) {
+    const cmd = `curl -sS --max-time 5 -o - -w '\\n__STATUS__%{http_code}' ${shellEscapePath(url)}`;
+    try {
+      const output = await runSshCapture(context.sshTarget, cmd);
+      const lines = output.trim().split('\n');
+      const statusLine = lines.find((line) => line.startsWith('__STATUS__'));
+      const status = statusLine ? Number(statusLine.replace('__STATUS__', '')) : NaN;
+      if (Number.isFinite(status)) {
+        return status >= 200 && status < 400;
+      }
+      return output.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+  const wgetAvailable = await remoteCommandExists(context.sshTarget, 'wget');
+  if (!wgetAvailable) return false;
+  const cmd = `wget -qO- --timeout=5 ${shellEscapePath(url)}`;
   try {
     const output = await runSshCapture(context.sshTarget, cmd);
-    return output.trim().includes('working');
+    return output.trim().length > 0;
   } catch {
     return false;
   }

@@ -1,3 +1,6 @@
 name: scale-kit
 version: 0.1.0
 description: Design system layer (tokens, typography, spacing, base UI).
+tags:
+  - design-system
+  - ui

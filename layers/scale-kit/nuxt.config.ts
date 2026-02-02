@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const loadTokens = () => {
   if (process.env.SCALE_KIT_DISABLE_TOKENS === '1') return {}
@@ -11,10 +12,15 @@ const loadTokens = () => {
 }
 
 const scaleTokens = loadTokens()
+const unoConfigPath = fileURLToPath(new URL('./uno.config.ts', import.meta.url))
 
 export default defineNuxtConfig({
   $meta: {
     name: 'helios',
+  },
+  modules: ['@unocss/nuxt', '@pinia/nuxt'],
+  unocss: {
+    configFile: unoConfigPath,
   },
   runtimeConfig: {
     public: {
