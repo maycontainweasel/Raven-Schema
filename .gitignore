@@ -73,6 +73,9 @@ temp/
 .yarn-integrity
 
 
+#deploy cache
+/.deploy/*
+
 # Schema app local config (do not sync across repos)
 config/app.config.yaml
 config/environment.yaml
