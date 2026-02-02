@@ -4193,6 +4193,7 @@ async function runSiteSetupFlow(options: {
     }
     await ensureCompatibilityDate(appRoot, '2026-01-30');
     await ensureNuxtAdditionsFile(appRoot);
+    await ensureNuxtAdditionsUno(appRoot);
     await ensureNuxtAdditionsConfig(appRoot);
   }
 
@@ -4430,9 +4431,46 @@ async function ensureNuxtAdditionsFile(appRoot: string): Promise<void> {
   const body =
     '// Local overrides for arrays like modules/css/transpile.\n' +
     '// This file is safe to edit and will be merged into the generated config.\n' +
-    'export default {};\n';
+    'export default {\n' +
+    '  unocss: {\n' +
+    '    nuxtLayers: true,\n' +
+    '  },\n' +
+    '};\n';
   await writeFile(filePath, body, 'utf-8');
   console.log(`✅ Created ${path.relative(appRoot, filePath)}.`);
+}
+
+async function ensureNuxtAdditionsUno(appRoot: string): Promise<void> {
+  const filePath = path.join(appRoot, 'nuxt.config.additions.ts');
+  const content = await readFile(filePath, 'utf-8').catch(() => null);
+  if (!content) return;
+  if (content.includes('unocss') && content.includes('nuxtLayers')) return;
+
+  const exportDefaultObject = /export default\s*{[\s\S]*?}\s*;?/.test(content);
+  if (!exportDefaultObject) {
+    console.log('⚠️  nuxt.config.additions.ts exists; add `unocss: { nuxtLayers: true }` manually.');
+    return;
+  }
+
+  let updated = content;
+  if (/export default\s*{}\s*;?/.test(content)) {
+    updated = content.replace(
+      /export default\s*{}\s*;?/,
+      'export default {\n  unocss: {\n    nuxtLayers: true,\n  },\n};'
+    );
+  } else if (content.includes('export default {')) {
+    updated = content.replace(
+      'export default {',
+      'export default {\n  unocss: {\n    nuxtLayers: true,\n  },'
+    );
+  }
+
+  if (updated !== content) {
+    await writeFile(filePath, updated, 'utf-8');
+    console.log('✅ Added unocss.nuxtLayers to nuxt.config.additions.ts.');
+  } else {
+    console.log('⚠️  nuxt.config.additions.ts exists; add `unocss: { nuxtLayers: true }` manually.');
+  }
 }
 
 async function ensureNuxtAdditionsConfig(appRoot: string): Promise<void> {
