@@ -79,6 +79,7 @@ export async function runSiteDeployInit(options: {
   remoteRoot?: string;
   remotePath?: string;
   yes?: boolean;
+  skipAudit?: boolean;
   overwriteNginx?: boolean;
   overwriteApp?: boolean;
   startPm2?: boolean;
@@ -98,6 +99,16 @@ export async function runSiteDeployInit(options: {
   }
 
   const sshTarget = answers.user ? `${answers.user}@${answers.host}` : answers.host;
+  if (!options.skipAudit) {
+    await auditRemoteDependencies({
+      sshTarget,
+      requireNginx: true,
+      requireNode: answers.startPm2,
+      requirePm2: answers.startPm2,
+      requireCertbot: hasSslEnabled(spec?.deploy),
+      allowInstallCurl: true,
+    });
+  }
   const resolvedAppDir = await resolveRemoteAppDir(sshTarget, answers.appDir);
   if (resolvedAppDir && resolvedAppDir !== answers.appDir) {
     answers = { ...answers, appDir: resolvedAppDir };
@@ -693,6 +704,71 @@ async function resolveRemoteAppDir(target: string, appDir: string): Promise<stri
   let resolved = trimmed.replace(/^~(?=\/|$)/, home);
   resolved = resolved.replace(/\$HOME/g, home);
   return resolved;
+}
+
+async function auditRemoteDependencies(options: {
+  sshTarget: string;
+  requireNginx: boolean;
+  requireNode: boolean;
+  requirePm2: boolean;
+  requireCertbot: boolean;
+  allowInstallCurl: boolean;
+}): Promise<void> {
+  const missing: string[] = [];
+  if (options.requireNginx && !(await remoteCommandExists(options.sshTarget, 'nginx'))) {
+    missing.push('nginx');
+  }
+  if (options.requireNode && !(await remoteCommandExists(options.sshTarget, 'node'))) {
+    missing.push('node');
+  }
+  if (options.requirePm2 && !(await remoteCommandExists(options.sshTarget, 'pm2'))) {
+    missing.push('pm2');
+  }
+  if (options.requireCertbot && !(await remoteCommandExists(options.sshTarget, 'certbot'))) {
+    missing.push('certbot');
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required tools on remote host: ${missing.join(', ')}. ` +
+      'Install them (Ansible recommended) or re-run with --skip-audit.'
+    );
+  }
+
+  const hasCurl = await remoteCommandExists(options.sshTarget, 'curl');
+  const hasWget = await remoteCommandExists(options.sshTarget, 'wget');
+  if (!hasCurl && !hasWget && options.allowInstallCurl && process.stdin.isTTY) {
+    const proceed = await promptYesNo('curl not found on server. Install curl now?', true);
+    if (proceed) {
+      await installCurl(options.sshTarget);
+    }
+  }
+}
+
+async function installCurl(target: string): Promise<void> {
+  const installers: Array<{ cmd: string; install: string }> = [
+    { cmd: 'apt-get', install: 'sudo apt-get install -y curl' },
+    { cmd: 'apt', install: 'sudo apt install -y curl' },
+    { cmd: 'dnf', install: 'sudo dnf install -y curl' },
+    { cmd: 'yum', install: 'sudo yum install -y curl' },
+    { cmd: 'apk', install: 'sudo apk add curl' },
+  ];
+  for (const installer of installers) {
+    if (await remoteCommandExists(target, installer.cmd)) {
+      await runSsh(target, installer.install);
+      return;
+    }
+  }
+  console.warn('⚠️  Unable to install curl automatically (no supported package manager found).');
+}
+
+function hasSslEnabled(deploy?: Record<string, unknown>): boolean {
+  if (!deploy) return false;
+  const ssl = (deploy as any).ssl;
+  if (!ssl) return false;
+  if (typeof ssl === 'boolean') return ssl;
+  if (typeof ssl !== 'object') return false;
+  return (ssl as any).enabled !== false;
 }
 
 async function assertSafeRemotePath(target: string, appDir: string): Promise<void> {

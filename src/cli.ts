@@ -69,7 +69,7 @@ import { writeSchemaKitConfig, resolveSchemaKitFeatures, applySchemaKitDefaults 
 import { ensureSchemaKitModule } from './lib/schemaKitModule';
 import { syncProjectLayers } from './lib/layerSync';
 import { writeAuthLayerConfig } from './lib/layerConfigWriter';
-import { readLayerMeta } from './lib/layerRegistry';
+import { readLayerMeta, listLayerMetas } from './lib/layerRegistry';
 import {
   checkProjectSetup,
   buildInstallHint,
@@ -160,6 +160,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Start PM2 with ecosystem.config.cjs',
         })
+        .option('skip-audit', {
+          type: 'boolean',
+          describe: 'Skip remote dependency audit',
+        })
         .option('yes', {
           type: 'boolean',
           default: false,
@@ -182,6 +186,7 @@ const argv = yargs(hideBin(process.argv))
         overwriteNginx: args['overwrite-nginx'],
         overwriteApp: args['overwrite-app'],
         startPm2: args['start-pm2'],
+        skipAudit: args['skip-audit'] === true,
         yes: args.yes === true,
       });
     }
@@ -478,6 +483,250 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:layers:status [name]',
+    'Show configured and available layers for a site',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const { bundle, specEntry, project, appRoot, repoRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+
+      const configured = Array.isArray(specEntry.spec.layers)
+        ? specEntry.spec.layers.map((layer) => String(layer))
+        : [];
+      const availableMetas = await listLayerMetas(projectRoot, { autoCreate: false });
+      const availableNames = new Set(availableMetas.map((meta) => meta.name));
+
+      console.log(`\n🧩 Layers for ${specEntry.spec.slug} (${path.relative(repoRoot, appRoot)}):`);
+      if (configured.length === 0) {
+        console.log('ℹ️  No layers configured.');
+      } else {
+        for (const layer of configured) {
+          const meta = availableMetas.find((entry) => entry.name === layer);
+          const suffix = meta ? `@${meta.version}` : ' (missing)';
+          console.log(`- ${layer}${suffix}`);
+        }
+      }
+
+      const missing = configured.filter((layer) => !availableNames.has(layer));
+      if (missing.length > 0) {
+        console.warn(`⚠️  Missing layer sources: ${missing.join(', ')}`);
+      }
+
+      if (appRoot) {
+        const lockPath = path.join(appRoot, 'layers.lock.json');
+        const lockRaw = await readFile(lockPath, 'utf-8').catch(() => null);
+        if (lockRaw) {
+          try {
+            const lock = JSON.parse(lockRaw) as { layers?: Array<{ name: string; version: string; hash?: string }> };
+            if (lock.layers && lock.layers.length > 0) {
+              console.log('🔒 Synced layers:');
+              for (const entry of lock.layers) {
+                const suffix = entry.hash ? ` (${entry.hash.slice(0, 8)})` : '';
+                console.log(`- ${entry.name}@${entry.version}${suffix}`);
+              }
+            }
+          } catch {
+            console.warn('⚠️  Unable to read layers.lock.json');
+          }
+        }
+      }
+    }
+  )
+  .command(
+    'site:layers:add [name] <layers..>',
+    'Add layers to a site and sync packages/layers',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .positional('layers', {
+          describe: 'Layer names to add (space or comma separated)',
+          type: 'string',
+          array: true,
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('no-sync', {
+          type: 'boolean',
+          describe: 'Skip syncing layer files into the app',
+        })
+        .option('no-packages', {
+          type: 'boolean',
+          describe: 'Skip package.json sync',
+        })
+        .option('no-install', {
+          type: 'boolean',
+          describe: 'Skip pnpm install after syncing packages',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const layersToAdd = normalizeLayerArgs(args.layers);
+      if (layersToAdd.length === 0) {
+        throw new Error('Provide at least one layer to add.');
+      }
+
+      const { bundle, specEntry, project, appRoot, repoRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+
+      const availableMetas = await listLayerMetas(projectRoot, { autoCreate: false });
+      const availableNames = new Set(availableMetas.map((meta) => meta.name));
+      const missingLayers = layersToAdd.filter((layer) => !availableNames.has(layer));
+      if (missingLayers.length > 0) {
+        console.warn(`⚠️  Unknown layer(s): ${missingLayers.join(', ')}`);
+      }
+
+      const current = Array.isArray(specEntry.spec.layers)
+        ? specEntry.spec.layers.map((layer) => String(layer))
+        : [];
+      const next = uniqueLayers([...current, ...layersToAdd]);
+      specEntry.spec.layers = next;
+      await writeSiteSpec(specEntry.path, specEntry.spec);
+      console.log(`✅ Added layers to ${specEntry.spec.slug}: ${layersToAdd.join(', ')}`);
+
+      if (args['no-sync'] !== true) {
+        await syncProjectLayers({
+          projectRoot,
+          app: bundle.app,
+          project,
+          mode: 'auto',
+          log: true,
+        });
+      }
+
+      if (args['no-packages'] !== true) {
+        await runSitePkgSync({
+          projectRoot,
+          name: specEntry.spec.slug,
+          appPath: appRoot,
+          specPath: specEntry.path,
+        });
+        if (args['no-install'] !== true) {
+          await runChildProcess('pnpm', ['-C', repoRoot, '--filter', specEntry.spec.slug, 'install'], repoRoot);
+        }
+      }
+    }
+  )
+  .command(
+    'site:layers:remove [name] <layers..>',
+    'Remove layers from a site and sync packages/layers',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .positional('layers', {
+          describe: 'Layer names to remove (space or comma separated)',
+          type: 'string',
+          array: true,
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('force', {
+          type: 'boolean',
+          default: false,
+          describe: 'Allow removing schema-core',
+        })
+        .option('no-sync', {
+          type: 'boolean',
+          describe: 'Skip syncing layer files into the app',
+        })
+        .option('no-packages', {
+          type: 'boolean',
+          describe: 'Skip package.json sync',
+        })
+        .option('no-install', {
+          type: 'boolean',
+          describe: 'Skip pnpm install after syncing packages',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const layersToRemove = normalizeLayerArgs(args.layers);
+      if (layersToRemove.length === 0) {
+        throw new Error('Provide at least one layer to remove.');
+      }
+
+      const { bundle, specEntry, project, appRoot, repoRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+
+      const current = Array.isArray(specEntry.spec.layers)
+        ? specEntry.spec.layers.map((layer) => String(layer))
+        : [];
+      let filtered = current.filter((layer) => !layersToRemove.includes(layer));
+      if (!args.force && layersToRemove.includes('schema-core') && current.includes('schema-core')) {
+        console.warn('⚠️  schema-core is required; pass --force to remove it.');
+        if (!filtered.includes('schema-core')) {
+          filtered = ['schema-core', ...filtered];
+        }
+      }
+      specEntry.spec.layers = uniqueLayers(filtered);
+      await writeSiteSpec(specEntry.path, specEntry.spec);
+      console.log(`✅ Removed layers from ${specEntry.spec.slug}: ${layersToRemove.join(', ')}`);
+
+      if (args['no-sync'] !== true) {
+        await syncProjectLayers({
+          projectRoot,
+          app: bundle.app,
+          project,
+          mode: 'auto',
+          log: true,
+        });
+      }
+
+      if (args['no-packages'] !== true) {
+        await runSitePkgSync({
+          projectRoot,
+          name: specEntry.spec.slug,
+          appPath: appRoot,
+          specPath: specEntry.path,
+        });
+        if (args['no-install'] !== true) {
+          await runChildProcess('pnpm', ['-C', repoRoot, '--filter', specEntry.spec.slug, 'install'], repoRoot);
+        }
+      }
+    }
+  )
+  .command(
     'layers:status [name]',
     'Show layer versions for site(s)',
     (yargsBuilder: any) =>
@@ -618,6 +867,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Restart nginx after deploy',
         })
+        .option('skip-audit', {
+          type: 'boolean',
+          describe: 'Skip remote dependency audit',
+        })
         .option('overwrite-nginx', {
           type: 'boolean',
           describe: 'Overwrite nginx config during init step',
@@ -675,6 +928,7 @@ const argv = yargs(hideBin(process.argv))
         overwriteApp: args['overwrite-app'],
         yes: args.yes === true,
         skipVerify: args['skip-verify'] === true,
+        skipAudit: args['skip-audit'] === true,
         reset: args.reset === true,
         resetRemote: args['reset-remote'] === true,
         resetOnly: args['reset-only'] === true,
@@ -3638,6 +3892,72 @@ async function loadSiteSpecForSetup(options: {
           schemaKit: parsed.schemaKit as Record<string, unknown> | undefined,
         },
       };
+}
+
+async function resolveSiteLayerTarget(options: {
+  projectRoot: string;
+  name?: string;
+  specPath?: string;
+}): Promise<{
+  bundle: { app: AppConfig };
+  specEntry: { path: string; spec: SiteSpecForSetup };
+  project: ProjectPathsConfig;
+  appRoot: string;
+  repoRoot: string;
+}> {
+  const { projectRoot, name, specPath } = options;
+  const bundle = await loadConfigBundle(projectRoot);
+  const repoRoot = path.resolve(projectRoot, '..', '..');
+  const specEntry = await loadSiteSpecForSetup({
+    projectRoot,
+    name,
+    specPath,
+  });
+  if (!specEntry) {
+    throw new Error('Site spec not found. Provide a name or --spec.');
+  }
+  const targetAbs = path.isAbsolute(specEntry.spec.target)
+    ? specEntry.spec.target
+    : path.resolve(repoRoot, specEntry.spec.target);
+  const nuxtProjectRoot = path.relative(projectRoot, targetAbs);
+  const existingProject = bundle.app.paths.projects.find((proj) => {
+    if (proj.name === specEntry.spec.slug) return true;
+    if (!proj.nuxtProjectRoot) return false;
+    return path.resolve(projectRoot, proj.nuxtProjectRoot) === targetAbs;
+  });
+  const project: ProjectPathsConfig = existingProject ?? {
+    name: specEntry.spec.slug,
+    nuxtProjectRoot,
+    active: true,
+  };
+  return { bundle, specEntry, project, appRoot: targetAbs, repoRoot };
+}
+
+function normalizeLayerArgs(raw: unknown): string[] {
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const out: string[] = [];
+  for (const value of values) {
+    const parts = String(value)
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    for (const part of parts) {
+      out.push(toKebabCase(part));
+    }
+  }
+  return uniqueLayers(out);
+}
+
+function uniqueLayers(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    if (!value) continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
 }
 
 async function runSiteSetupFlow(options: {

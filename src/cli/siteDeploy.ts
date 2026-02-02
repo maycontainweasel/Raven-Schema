@@ -84,6 +84,7 @@ export async function runSiteDeploy(options: {
   overwriteApp?: boolean;
   yes?: boolean;
   skipVerify?: boolean;
+  skipAudit?: boolean;
   reset?: boolean;
   resetRemote?: boolean;
   resetOnly?: boolean;
@@ -117,6 +118,7 @@ export async function runSiteDeploy(options: {
       overwriteNginx: options.overwriteNginx,
       overwriteApp: options.overwriteApp,
       yes: initYes,
+      skipAudit: options.skipAudit,
     });
     spec = await loadSiteSpec(options, sitesRoot, projectRoot);
     if (!spec) {
@@ -201,6 +203,7 @@ export async function runSiteDeploy(options: {
       overwriteNginx: options.overwriteNginx,
       overwriteApp: options.overwriteApp,
       yes: initYes,
+      skipAudit: options.skipAudit,
     });
     spec = await loadSiteSpec(options, sitesRoot, projectRoot);
     if (!spec) {

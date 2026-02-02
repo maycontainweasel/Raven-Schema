@@ -176,6 +176,24 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:layers:sync`
   - `pnpm -C apps/schema run site:layers:sync -- --project admin`
 
+- `site:layers:status [name]`  
+  Show configured and available layers for a site (plus `layers.lock.json` if present).  
+  Examples:
+  - `pnpm -C apps/schema run site:layers:status public`
+  - `pnpm -C apps/schema run site:layers:status -- --spec sites/public.yaml`
+
+- `site:layers:add [name] <layers..>`  
+  Add one or more layers to a site, sync layer files, sync packages, and optionally install.  
+  Examples:
+  - `pnpm -C apps/schema run site:layers:add public scale-kit`
+  - `pnpm -C apps/schema run site:layers:add public scale-kit,auth`
+
+- `site:layers:remove [name] <layers..>`  
+  Remove layers from a site (use `--force` to remove `schema-core`).  
+  Examples:
+  - `pnpm -C apps/schema run site:layers:remove public scale-kit`
+  - `pnpm -C apps/schema run site:layers:remove public schema-core -- --force`
+
 - `layers:status [name]`  
   Show layer versions for site(s), using `layers.lock.json` when available.  
   Examples:
