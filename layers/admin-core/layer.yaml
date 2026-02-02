@@ -1,0 +1,3 @@
+name: admin-core
+version: 0.1.0
+description: Core admin UI layer (navigation, layouts, admin components).

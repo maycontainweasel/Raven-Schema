@@ -1,0 +1,3 @@
+name: schema-core
+version: 0.1.0
+description: Schema kit core layer (TRPC, runtime config, shared tooling).

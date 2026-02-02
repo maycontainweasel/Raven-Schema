@@ -92,39 +92,71 @@ export default defineConfig({
   theme: {
     breakpoints: loadBreakpoints(),
     colors: {
-      ink: '#0f172a',
-      muted: '#667085',
-      panel: '#ffffff',
-      panelSoft: '#f8f9fc',
-      border: '#e3e7ef',
-      accent: '#1c2b4f',
-      accentSoft: '#e7ecff',
-      accentStrong: '#2858ff',
+      ink: 'var(--ds-text, #0f172a)',
+      muted: 'var(--ds-muted, #667085)',
+      panel: 'var(--ds-panel, #ffffff)',
+      panelSoft: 'var(--ds-panel-soft, #f8f9fc)',
+      border: 'var(--ds-border, #e3e7ef)',
+      accent: 'var(--ds-accent, #1c2b4f)',
+      accentSoft: 'var(--ds-accent-soft, #e7ecff)',
+      accentStrong: 'var(--ds-accent-strong, #2858ff)',
+      success: 'var(--ds-success, #19a974)',
+      warning: 'var(--ds-warning, #f59f00)',
+      danger: 'var(--ds-danger, #e03131)',
     },
     fontFamily: {
       sans: ['Poppins', 'Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
     },
     boxShadow: {
-      sm: '0 4px 10px rgba(15, 23, 42, 0.06)',
-      md: '0 12px 32px rgba(16, 24, 40, 0.08)',
-      lg: '0 30px 60px rgba(15, 23, 42, 0.15)',
+      sm: 'var(--ds-shadow-sm, 0 6px 18px rgba(15, 23, 42, 0.06))',
+      md: 'var(--ds-shadow-md, 0 18px 40px rgba(16, 24, 40, 0.12))',
+      lg: 'var(--ds-shadow-lg, 0 30px 70px rgba(15, 23, 42, 0.2))',
     },
     borderRadius: {
-      lg: '18px',
-      md: '12px',
-      sm: '8px',
+      lg: 'var(--ds-radius-lg, 18px)',
+      md: 'var(--ds-radius-md, 12px)',
+      sm: 'var(--ds-radius-sm, 8px)',
     },
   },
   shortcuts: {
-    'ui-card': 'bg-panel border border-border rounded-md shadow-sm',
+    'ui-card': 'bg-panel border-ds rounded-[var(--ds-card-radius)] shadow-[var(--ds-shadow-sm)]',
     'ui-pill': 'inline-flex items-center gap-2 rounded-full border border-border bg-panelSoft px-4 py-1.5 text-sm text-muted',
-    'ui-btn': 'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition',
-    'ui-btn-primary': 'ui-btn bg-accentStrong text-white shadow-sm hover:bg-[#2047d6]',
+    'ui-btn': 'inline-flex items-center justify-center gap-2 rounded-[var(--ds-btn-radius)] px-[var(--ds-btn-pad-x)] h-[var(--ds-btn-height)] text-sm font-semibold transition',
+    'ui-btn-primary': 'ui-btn bg-accentStrong text-white shadow-[var(--ds-shadow-sm)] hover:bg-[#2047d6]',
     'ui-btn-ghost': 'ui-btn border border-border text-ink hover:border-[#cfd6e5]',
+    'ui-btn-soft': 'ui-btn bg-accentSoft text-accent border border-transparent',
   },
   preflights: [
     {
       getCSS: () => `
+        :root {
+          --ds-bg: #f4f6fb;
+          --ds-panel: #ffffff;
+          --ds-panel-soft: #f8f9fc;
+          --ds-text: #0f172a;
+          --ds-muted: #667085;
+          --ds-border: #e3e7ef;
+          --ds-accent: #1c2b4f;
+          --ds-accent-strong: #2858ff;
+          --ds-accent-soft: #e7ecff;
+          --ds-success: #19a974;
+          --ds-warning: #f59f00;
+          --ds-danger: #e03131;
+          --ds-radius-sm: 8px;
+          --ds-radius-md: 12px;
+          --ds-radius-lg: 18px;
+          --ds-radius-xl: 28px;
+          --ds-shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.06);
+          --ds-shadow-md: 0 18px 40px rgba(16, 24, 40, 0.12);
+          --ds-shadow-lg: 0 30px 70px rgba(15, 23, 42, 0.2);
+          --ds-border-width: 1px;
+          --ds-btn-height: 44px;
+          --ds-btn-pad-x: 20px;
+          --ds-btn-radius: 999px;
+          --ds-card-radius: 20px;
+          --ds-card-border: 1px;
+        }
+
         .type-default :is(p, li, h1, h2, h3, h4, h5, h6) {
           line-height: var(--lh-0);
           margin: 0;
@@ -263,6 +295,13 @@ export default defineConfig({
     },
   ],
   rules: [
+    [/^shadow-ds-(sm|md|lg)$/, ([, size]) => ({ 'box-shadow': `var(--ds-shadow-${size})` })],
+    [/^radius-ds-(sm|md|lg|xl)$/, ([, size]) => ({ 'border-radius': `var(--ds-radius-${size})` })],
+    [/^border-ds$/, () => ({
+      'border-width': 'var(--ds-border-width)',
+      'border-style': 'solid',
+      'border-color': 'var(--ds-border)',
+    })],
     [/^fs-(-?[\d.]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],
     [/^f-(-?[\d.]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],
     [/^lh-(-?[\d.]+)$/, ([, value]) => ({ 'line-height': `var(--lh-${formatScaleKey(value)})` })],

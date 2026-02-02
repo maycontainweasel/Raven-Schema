@@ -11,6 +11,7 @@ export default defineNuxtPlugin(() => {
   const scaleStore = useHeliosScaleStore()
   scaleStore.initFromConfig()
   scaleStore.setKit(kit)
+  scaleStore.applyDesignTokens()
 
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', () => kit.apply())
@@ -41,6 +42,15 @@ export default defineNuxtPlugin(() => {
       queueMicrotask(() => {
         syncState.fromStore = false
       })
+    },
+    { deep: true }
+  )
+
+  watch(
+    () => scaleStore.designTokens,
+    () => {
+      scaleStore.applyDesignTokens()
+      scaleStore.saveDraft()
     },
     { deep: true }
   )

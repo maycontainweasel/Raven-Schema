@@ -4,6 +4,7 @@ import path from 'path';
 
 import type { AppConfig, ProjectPathsConfig } from '../types';
 import { loadSiteSpec, writeSiteSpec, ensureNuxtConfigExtends } from './siteSpec';
+import { readLayerMeta } from './layerRegistry';
 
 export type LayerSyncMode = 'auto' | 'force' | 'off';
 
@@ -41,8 +42,10 @@ export async function syncProjectLayers(options: {
   }
 
   const layerRefs = layers.map((name) => `./layers/${name}`);
+  const lockEntries: LayerLockEntry[] = [];
 
   for (const layerName of layers) {
+    const meta = await readLayerMeta(projectRoot, layerName, { autoCreate: true });
     const sourceDir = path.join(sourceRoot, layerName);
     const sourceStat = await stat(sourceDir).catch(() => null);
     if (!sourceStat?.isDirectory()) {
@@ -67,6 +70,7 @@ export async function syncProjectLayers(options: {
       if (log) {
         console.log(`✅ Layer unchanged: ${project.name} → ${layerName}`);
       }
+      lockEntries.push(buildLayerLockEntry(meta, currentHash, sourceDir));
       continue;
     }
 
@@ -77,9 +81,11 @@ export async function syncProjectLayers(options: {
     if (log) {
       console.log(`🧩 Synced layer: ${project.name} → ${layerName}`);
     }
+    lockEntries.push(buildLayerLockEntry(meta, currentHash, sourceDir));
   }
 
   await removeUnusedLayerDirs(appRoot, managedLayerNames, desiredLayerNames, log);
+  await writeLayerLock(appRoot, lockEntries);
 
   const configPath = await findNuxtConfig(appRoot);
   if (!configPath) {
@@ -111,6 +117,32 @@ export async function syncProjectLayers(options: {
   if (!layersDisabled && layerRefs.length > 0) {
     warnLayerOrderMismatch(updated, layerRefs, project.name);
   }
+}
+
+interface LayerLockEntry {
+  name: string;
+  version: string;
+  hash: string;
+  source: string;
+}
+
+function buildLayerLockEntry(meta: { name: string; version: string }, hash: string, sourceDir: string): LayerLockEntry {
+  return {
+    name: meta.name,
+    version: meta.version,
+    hash,
+    source: sourceDir,
+  };
+}
+
+async function writeLayerLock(appRoot: string, entries: LayerLockEntry[]): Promise<void> {
+  const outputPath = path.join(appRoot, 'layers.lock.json');
+  const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    layers: sorted,
+  };
+  await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
 }
 
 function resolveLayerList(app: AppConfig, project: ProjectPathsConfig): string[] {

@@ -31,11 +31,52 @@ export type HeliosSettings = {
   tokensScssFile: string
   typographyFile: string
   breakpointsFile: string
+  designFile: string
 }
 
 export type HeliosBreakpoint = {
   key: string
   value: string
+}
+
+export type HeliosDesignTokens = {
+  colors: {
+    bg: string
+    panel: string
+    panelSoft: string
+    text: string
+    muted: string
+    border: string
+    accent: string
+    accentStrong: string
+    accentSoft: string
+    success: string
+    warning: string
+    danger: string
+  }
+  radius: {
+    sm: number
+    md: number
+    lg: number
+    xl: number
+  }
+  shadows: {
+    sm: number
+    md: number
+    lg: number
+  }
+  borders: {
+    width: number
+  }
+  buttons: {
+    height: number
+    padX: number
+    radius: number
+  }
+  cards: {
+    radius: number
+    border: number
+  }
 }
 
 type ScaleKitInstance = {
@@ -54,6 +95,47 @@ const defaultSettings: HeliosSettings = {
   tokensScssFile: '_tokens.scss',
   typographyFile: '_typography.scss',
   breakpointsFile: '_breakpoints.scss',
+  designFile: '_design-system.scss',
+}
+
+const defaultDesignTokens: HeliosDesignTokens = {
+  colors: {
+    bg: '#f4f6fb',
+    panel: '#ffffff',
+    panelSoft: '#f8f9fc',
+    text: '#0f172a',
+    muted: '#667085',
+    border: '#e3e7ef',
+    accent: '#1c2b4f',
+    accentStrong: '#2858ff',
+    accentSoft: '#e7ecff',
+    success: '#19a974',
+    warning: '#f59f00',
+    danger: '#e03131',
+  },
+  radius: {
+    sm: 8,
+    md: 12,
+    lg: 18,
+    xl: 28,
+  },
+  shadows: {
+    sm: 0.06,
+    md: 0.12,
+    lg: 0.2,
+  },
+  borders: {
+    width: 1,
+  },
+  buttons: {
+    height: 44,
+    padX: 20,
+    radius: 999,
+  },
+  cards: {
+    radius: 20,
+    border: 1,
+  },
 }
 
 const defaultBreakpoints: HeliosBreakpoint[] = [
@@ -92,6 +174,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
     ranges: [] as ScaleRange[],
     activeScope: 'global',
     settings: { ...defaultSettings },
+    designTokens: { ...defaultDesignTokens },
     breakpoints: [...defaultBreakpoints],
     levels: 10,
     minLevel: -5,
@@ -120,6 +203,45 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
       kitRef.tokens = clone(this.tokens)
       kitRef.apply()
       ;(kitRef as any).__suppressSync = false
+      this.applyDesignTokens()
+    },
+    applyDesignTokens() {
+      if (typeof document === 'undefined') return
+      const root = document.documentElement
+      const tokens = this.designTokens
+      if (!tokens) return
+
+      const shadowBaseRaw = tokens.colors.text || '#0f172a'
+      const shadowBase = shadowBaseRaw.startsWith('#') ? shadowBaseRaw : '#0f172a'
+
+      root.style.setProperty('--ds-bg', tokens.colors.bg)
+      root.style.setProperty('--ds-panel', tokens.colors.panel)
+      root.style.setProperty('--ds-panel-soft', tokens.colors.panelSoft)
+      root.style.setProperty('--ds-text', tokens.colors.text)
+      root.style.setProperty('--ds-muted', tokens.colors.muted)
+      root.style.setProperty('--ds-border', tokens.colors.border)
+      root.style.setProperty('--ds-accent', tokens.colors.accent)
+      root.style.setProperty('--ds-accent-strong', tokens.colors.accentStrong)
+      root.style.setProperty('--ds-accent-soft', tokens.colors.accentSoft)
+      root.style.setProperty('--ds-success', tokens.colors.success)
+      root.style.setProperty('--ds-warning', tokens.colors.warning)
+      root.style.setProperty('--ds-danger', tokens.colors.danger)
+
+      root.style.setProperty('--ds-radius-sm', `${tokens.radius.sm}px`)
+      root.style.setProperty('--ds-radius-md', `${tokens.radius.md}px`)
+      root.style.setProperty('--ds-radius-lg', `${tokens.radius.lg}px`)
+      root.style.setProperty('--ds-radius-xl', `${tokens.radius.xl}px`)
+
+      root.style.setProperty('--ds-shadow-sm', `0 6px 18px ${shadowBase}${Math.round(tokens.shadows.sm * 255).toString(16).padStart(2, '0')}`)
+      root.style.setProperty('--ds-shadow-md', `0 18px 40px ${shadowBase}${Math.round(tokens.shadows.md * 255).toString(16).padStart(2, '0')}`)
+      root.style.setProperty('--ds-shadow-lg', `0 30px 70px ${shadowBase}${Math.round(tokens.shadows.lg * 255).toString(16).padStart(2, '0')}`)
+
+      root.style.setProperty('--ds-border-width', `${tokens.borders.width}px`)
+      root.style.setProperty('--ds-btn-height', `${tokens.buttons.height}px`)
+      root.style.setProperty('--ds-btn-pad-x', `${tokens.buttons.padX}px`)
+      root.style.setProperty('--ds-btn-radius', `${tokens.buttons.radius}px`)
+      root.style.setProperty('--ds-card-radius', `${tokens.cards.radius}px`)
+      root.style.setProperty('--ds-card-border', `${tokens.cards.border}px`)
     },
     saveDraft() {
       if (typeof window === 'undefined') return
@@ -129,6 +251,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
         ranges: this.ranges,
         activeScope: this.activeScope,
         settings: this.settings,
+        designTokens: this.designTokens,
         breakpoints: this.breakpoints,
         levels: this.levels,
         minLevel: this.minLevel,
@@ -145,6 +268,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
         if (payload.ranges) this.ranges = payload.ranges
         if (payload.activeScope) this.activeScope = payload.activeScope
         if (payload.settings) this.settings = { ...defaultSettings, ...payload.settings }
+        if (payload.designTokens) this.designTokens = { ...defaultDesignTokens, ...payload.designTokens }
         if (payload.breakpoints) this.breakpoints = payload.breakpoints
         if (payload.levels) this.levels = payload.levels
         if (payload.minLevel) this.minLevel = payload.minLevel
@@ -164,6 +288,7 @@ export const useHeliosScaleStore = defineStore('heliosScale', {
             tokens: this.tokens,
             ranges: this.ranges,
             settings: this.settings,
+            designTokens: this.designTokens,
             levels: this.levels,
             minLevel: this.minLevel,
             breakpoints: this.breakpoints,

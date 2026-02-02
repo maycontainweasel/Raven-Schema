@@ -29,6 +29,40 @@ This document tracks the evolving architecture and behaviour of the schema tooli
    - `schema-testing-nuxt/app/types/schema/generated` – per-table Zod schema (`Z_<Table>`) + inferred types.
    - `schema-testing-nuxt/server/trpc/routers/generated` – TRPC router files plus `index.ts` aggregator consumed by the main router.
 
+## Nuxt Config Merge Order (Generated Apps)
+
+Generated Nuxt apps use a three‑file merge with a safe “additions” layer:
+
+1. `nuxt.config.generated.ts` – generated from `sites/<name>.yaml` (base config + generated modules).
+2. `nuxt.config.runtime.ts` – generated from `env.yaml` (runtimeConfig only).
+3. `nuxt.config.additions.ts` – **manual** additions (safe place for extra modules/css/transpile).
+4. `overrides` inside `nuxt.config.ts` – **manual** and highest priority.
+
+Important rules:
+
+- Arrays (`modules`, `css`, `build.transpile`) are **concatenated** when merging additions.
+- Arrays in `overrides` **replace** earlier values.
+- Layers add their own modules via their `nuxt.config.ts` (Nuxt merges these automatically).
+
+Recommended usage:
+
+- Put extra modules in `nuxt.config.additions.ts` (safe append).
+- Only use `overrides.modules` if you want to **replace/reorder** everything.
+
+## Layer Registry (Short Term)
+
+Layers are “registered” by a `layer.yaml` file inside each layer folder:
+
+- `apps/schema/layers/<layer>/layer.yaml`
+
+The registry fields are currently minimal (name, version, description). When you include a layer in a site’s `layers:` list, `site:setup --fix` will:
+
+1. Sync the layer folder into `apps/<site>/layers/<layer>`
+2. Update `extends` in `nuxt.config.generated.ts`
+3. Write `layers.lock.json` in the app root (name + version + hash)
+
+If a `layer.yaml` is missing, the sync process auto‑creates one with version `0.0.0` to keep older layers compatible.
+
 ## Database Targeting
 
 - Define `environment.migrationTargets` in `config/app.config.yaml` with the database keys you want the pipeline to hit (e.g., `['local', 'testing']`). When unset, the runner falls back to `environment.defaultDatabase`.

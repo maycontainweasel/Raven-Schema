@@ -1,7 +1,7 @@
 import path from 'path';
 import readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
-import { readFile, stat, writeFile } from 'fs/promises';
+import { readFile, stat, writeFile, mkdir, rm } from 'fs/promises';
 import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import YAML from 'yaml';
@@ -25,6 +25,8 @@ interface DeployAnswers {
   domain: string;
   port: number;
   appDir: string;
+  remoteBase?: string;
+  remoteRoot?: string;
   remoteName: string;
   pm2Name: string;
   pm2Command: string;
@@ -38,6 +40,7 @@ interface DeployAnswers {
 type DeployStep = 'init' | 'verify' | 'ssl' | 'deploy';
 
 interface DeployState {
+  preflight?: boolean;
   init?: boolean;
   verify?: boolean;
   ssl?: boolean;
@@ -55,6 +58,7 @@ interface DeployContext {
   sshTarget: string;
   nginxPath: string;
   statePath: string;
+  localStatePath: string;
 }
 
 export async function runSiteDeploy(options: {
@@ -65,6 +69,9 @@ export async function runSiteDeploy(options: {
   user?: string;
   domain?: string;
   appDir?: string;
+  remoteBase?: string;
+  remoteRoot?: string;
+  remotePath?: string;
   port?: number;
   buildCommand?: string;
   rsyncDelete?: boolean;
@@ -103,6 +110,9 @@ export async function runSiteDeploy(options: {
       domain: options.domain,
       port: options.port,
       appDir: options.appDir,
+      remoteBase: options.remoteBase,
+      remoteRoot: options.remoteRoot,
+      remotePath: options.remotePath,
       overwriteNginx: options.overwriteNginx,
       overwriteApp: options.overwriteApp,
       yes: initYes,
@@ -130,6 +140,7 @@ export async function runSiteDeploy(options: {
       resolvedAnswers.domain
     );
     const statePath = path.posix.join(resolvedAnswers.appDir, '.deploy-state.json');
+    const localStatePath = path.resolve(projectRoot, '.deploy', `${slug}.json`);
     return {
       spec: currentSpec,
       slug,
@@ -139,23 +150,30 @@ export async function runSiteDeploy(options: {
       sshTarget,
       nginxPath,
       statePath,
+      localStatePath,
     };
   };
 
   let context = await resolveContext(spec);
 
+  await assertSafeRemotePath(context.sshTarget, context.resolvedAnswers.appDir);
+
   if (options.reset) {
     await removeRemoteState(context.sshTarget, context.statePath);
+    await removeLocalState(context.localStatePath);
   }
 
   if (options.resetRemote) {
     await resetRemoteResources(context);
     await removeRemoteState(context.sshTarget, context.statePath);
+    await removeLocalState(context.localStatePath);
   }
 
   let state = options.reset || options.resetRemote
     ? null
     : await readRemoteState(context.sshTarget, context.statePath);
+
+  state = await updateLocalState(context.localStatePath, state, { preflight: true });
 
   const initComplete = options.resetRemote ? false : await isRemoteInitComplete(context);
   const normalizedFrom = normalizeStep(options.from);
@@ -172,6 +190,9 @@ export async function runSiteDeploy(options: {
       domain: options.domain,
       port: options.port,
       appDir: options.appDir,
+      remoteBase: options.remoteBase,
+      remoteRoot: options.remoteRoot,
+      remotePath: options.remotePath,
       overwriteNginx: options.overwriteNginx,
       overwriteApp: options.overwriteApp,
       yes: initYes,
@@ -248,14 +269,26 @@ export async function runSiteDeploy(options: {
 
 function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAnswers {
   const deploy = spec.deploy ?? {};
-  const remoteName = String((deploy as any).remoteName ?? slug);
+  const remoteBase = normalizeRemoteBase((deploy as any).remoteBase);
+  const remotePathValue = typeof (deploy as any).remotePath === 'string'
+    ? (deploy as any).remotePath
+    : undefined;
+  const parsedRemotePath = buildPathsFromRemotePath(remotePathValue, remoteBase);
+  const remoteName = String((deploy as any).remoteName ?? parsedRemotePath.remoteName ?? slug);
+  const remoteRoot = typeof (deploy as any).remoteRoot === 'string'
+    ? (deploy as any).remoteRoot
+    : parsedRemotePath.remoteRoot;
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
   const domain = (deploy as any).domain ?? '';
   const port = Number((deploy as any).port ?? 4041);
   const appDirValue = (deploy as any).appDir;
+  const appDirFallback = parsedRemotePath.appDir
+    ?? (remoteRoot && remoteRoot.trim()
+      ? `${remoteRoot.replace(/\/+$/, '')}/${remoteName || slug}`
+      : `~/${remoteName || slug}`);
   const appDir = normalizeRemotePath(
-    typeof appDirValue === 'string' && appDirValue.trim() ? appDirValue : `~/${remoteName || slug}`
+    typeof appDirValue === 'string' && appDirValue.trim() ? appDirValue : appDirFallback
   );
   const pm2Name = (deploy as any).pm2Name ?? remoteName;
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
@@ -271,6 +304,8 @@ function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAn
     domain,
     port: Number.isFinite(port) && port > 0 ? port : 4041,
     appDir,
+    remoteBase,
+    remoteRoot,
     remoteName,
     pm2Name,
     pm2Command,
@@ -287,6 +322,9 @@ function resolveAnswers(options: {
   user?: string;
   domain?: string;
   appDir?: string;
+  remoteBase?: string;
+  remoteRoot?: string;
+  remotePath?: string;
   port?: number;
   buildCommand?: string;
   rsyncDelete?: boolean;
@@ -297,18 +335,82 @@ function resolveAnswers(options: {
   if (!host || !domain) {
     throw new Error('host and domain are required for deploy.');
   }
+  const remoteBase = normalizeRemoteBase(options.remoteBase ?? defaults.remoteBase ?? '$HOME') || '$HOME';
+  const parsedRemotePath = buildPathsFromRemotePath(options.remotePath, remoteBase);
+  const remoteName = parsedRemotePath.remoteName ?? defaults.remoteName;
+  const remoteRoot = typeof options.remoteRoot === 'string' && options.remoteRoot.trim()
+    ? options.remoteRoot
+    : parsedRemotePath.remoteRoot ?? defaults.remoteRoot;
+  const appDir = resolveAppDir({
+    explicit: options.appDir ?? parsedRemotePath.appDir,
+    remoteRoot,
+    remoteName,
+    fallback: defaults.appDir,
+  });
   return {
     ...defaults,
     host,
     user: options.user ?? defaults.user,
     domain,
     port: options.port ?? defaults.port,
-    appDir: options.appDir ? normalizeRemotePath(options.appDir) : defaults.appDir,
-    remoteName: defaults.remoteName,
+    appDir,
+    remoteBase,
+    remoteRoot,
+    remoteName,
     buildCommand: options.buildCommand ?? defaults.buildCommand,
     rsyncDelete: options.rsyncDelete ?? defaults.rsyncDelete,
     restartNginx: options.restartNginx ?? defaults.restartNginx,
   };
+}
+
+function resolveAppDir(params: {
+  explicit?: string;
+  remoteRoot?: string;
+  remoteName: string;
+  fallback: string;
+}): string {
+  if (params.explicit && params.explicit.trim()) {
+    return normalizeRemotePath(params.explicit);
+  }
+  if (params.remoteRoot && params.remoteRoot.trim()) {
+    const root = params.remoteRoot.replace(/\/+$/, '');
+    return normalizeRemotePath(`${root}/${params.remoteName}`);
+  }
+  return params.fallback;
+}
+
+function normalizeRemoteBase(value?: string): string | undefined {
+  if (!value || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (trimmed === '~') return '$HOME';
+  if (trimmed.startsWith('~/')) return `$HOME/${trimmed.slice(2)}`;
+  if (trimmed.startsWith('$HOME')) {
+    const normalized = trimmed.replace(/^\$HOME\/?/, '');
+    return normalized ? `$HOME/${normalized}` : '$HOME';
+  }
+  return trimmed;
+}
+
+function buildPathsFromRemotePath(value?: string, baseRoot?: string): {
+  remoteRoot?: string;
+  remoteName?: string;
+  appDir?: string;
+} {
+  if (!value || !value.trim()) return {};
+  const base = normalizeRemoteBase(baseRoot ?? '$HOME') || '$HOME';
+  let trimmed = value.trim();
+  trimmed = trimmed.replace(/^~\/?/, '');
+  trimmed = trimmed.replace(/^\$HOME\/?/, '');
+  trimmed = trimmed.replace(/^\/+/, '');
+  if (!trimmed) return {};
+  const parts = trimmed.split('/').map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return {};
+  const remoteName = parts[parts.length - 1];
+  const rootParts = parts.slice(0, -1);
+  const basePrefix = base.replace(/\/+$/, '');
+  const remoteRoot = rootParts.length ? `${basePrefix}/${rootParts.join('/')}` : basePrefix;
+  const appDir = `${basePrefix}/${parts.join('/')}`;
+  return { remoteRoot, remoteName, appDir };
 }
 
 async function loadSiteSpec(
@@ -620,7 +722,7 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
   if (!resolvedAnswers.appDir || !resolvedAnswers.appDir.trim()) {
     throw new Error('Remote app directory is required for reset.');
   }
-  await assertSafeResetPath(sshTarget, resolvedAnswers.appDir);
+  await assertSafeRemotePath(sshTarget, resolvedAnswers.appDir);
   console.log('🧹 Resetting remote deploy resources...');
   const pm2Available = await remoteCommandExists(sshTarget, resolvedAnswers.pm2Command);
   if (pm2Available) {
@@ -642,7 +744,7 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
   console.log('✅ Remote reset complete.');
 }
 
-async function assertSafeResetPath(target: string, appDir: string): Promise<void> {
+async function assertSafeRemotePath(target: string, appDir: string): Promise<void> {
   const trimmed = appDir.trim();
   if (!trimmed) {
     throw new Error('Remote app directory is empty; refusing to reset.');
@@ -698,6 +800,21 @@ async function updateRemoteState(
     updatedAt: new Date().toISOString(),
   };
   await writeRemoteFile(context.sshTarget, context.statePath, JSON.stringify(next, null, 2));
+  await writeLocalState(context.localStatePath, next);
+  return next;
+}
+
+async function updateLocalState(
+  localPath: string,
+  state: DeployState | null,
+  patch: Partial<DeployState>
+): Promise<DeployState> {
+  const next: DeployState = {
+    ...(state ?? {}),
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeLocalState(localPath, next);
   return next;
 }
 
@@ -713,6 +830,16 @@ async function writeRemoteFile(target: string, remotePath: string, contents: str
     proc.stdin.write(contents);
     proc.stdin.end();
   });
+}
+
+async function writeLocalState(localPath: string, state: DeployState): Promise<void> {
+  const dir = path.dirname(localPath);
+  await mkdir(dir, { recursive: true });
+  await writeFile(localPath, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+async function removeLocalState(localPath: string): Promise<void> {
+  await rm(localPath, { force: true }).catch(() => null);
 }
 
 function normalizeStep(step?: string): DeployStep | undefined {

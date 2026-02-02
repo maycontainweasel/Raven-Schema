@@ -176,6 +176,12 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:layers:sync`
   - `pnpm -C apps/schema run site:layers:sync -- --project admin`
 
+- `layers:status [name]`  
+  Show layer versions for site(s), using `layers.lock.json` when available.  
+  Examples:
+  - `pnpm -C apps/schema run layers:status`
+  - `pnpm -C apps/schema run layers:status -- --project admin`
+
 - `request-schema:generate`  
   Generate RequestSchema helper.
 

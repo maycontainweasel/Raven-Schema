@@ -7,10 +7,10 @@ definePageMeta({ ssr: false })
 
 const scaleStore = useHeliosScaleStore()
 
-const { ranges, activeScope, settings, tokens, commitStatus, isCommitting, breakpoints } = storeToRefs(scaleStore)
+const { ranges, activeScope, settings, tokens, commitStatus, isCommitting, breakpoints, designTokens } = storeToRefs(scaleStore)
 
 const modalOpen = ref(false)
-const activePanel = ref<'typography' | 'settings' | 'utilities' | 'breakpoints'>('typography')
+const activePanel = ref<'typography' | 'spacing' | 'design' | 'components' | 'settings' | 'utilities' | 'breakpoints'>('typography')
 const newRange = reactive({ label: 'Mobile', min: 0, max: 767 })
 const typeUnit = ref<'rem' | 'px' | 'pt'>('rem')
 const showTypeExport = ref(false)
@@ -22,6 +22,49 @@ const scaleStepOptions = [
   { value: 1, label: '1.0' },
   { value: 0.5, label: '0.5' },
   { value: 0.25, label: '0.25' },
+]
+
+const spacingSteps = [-3, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 1.5, 2, 3, 4]
+
+const buttonSizeScales = reactive([
+  { label: 'XS', scale: 0.85 },
+  { label: 'SM', scale: 1 },
+  { label: 'MD', scale: 1.15 },
+  { label: 'LG', scale: 1.3 },
+])
+
+const buttonVariants = [
+  { label: 'Primary', className: 'ui-btn-primary' },
+  { label: 'Ghost', className: 'ui-btn-ghost' },
+  { label: 'Soft', className: 'ui-btn-soft' },
+]
+
+const colorFields = [
+  { key: 'bg', label: 'Background' },
+  { key: 'panel', label: 'Panel' },
+  { key: 'panelSoft', label: 'Panel soft' },
+  { key: 'text', label: 'Text' },
+  { key: 'muted', label: 'Muted' },
+  { key: 'border', label: 'Border' },
+  { key: 'accent', label: 'Accent' },
+  { key: 'accentStrong', label: 'Accent strong' },
+  { key: 'accentSoft', label: 'Accent soft' },
+  { key: 'success', label: 'Success' },
+  { key: 'warning', label: 'Warning' },
+  { key: 'danger', label: 'Danger' },
+]
+
+const radiusFields = [
+  { key: 'sm', label: 'Radius sm' },
+  { key: 'md', label: 'Radius md' },
+  { key: 'lg', label: 'Radius lg' },
+  { key: 'xl', label: 'Radius xl' },
+]
+
+const shadowFields = [
+  { key: 'sm', label: 'Shadow sm' },
+  { key: 'md', label: 'Shadow md' },
+  { key: 'lg', label: 'Shadow lg' },
 ]
 
 const ensureRangeSettings = (maxWidth: number) => {
@@ -65,9 +108,13 @@ const formatOptions = [
 
 const viewItems = computed(() => [
   { label: 'Typography', action: () => (activePanel.value = 'typography') },
+  { label: 'Spacing', action: () => (activePanel.value = 'spacing') },
+  { label: 'Design system', action: () => (activePanel.value = 'design') },
+  { label: 'Components', action: () => (activePanel.value = 'components') },
   { label: 'Utilities', action: () => (activePanel.value = 'utilities') },
   { label: 'Breakpoints', action: () => (activePanel.value = 'breakpoints') },
   { label: 'Settings', action: () => (activePanel.value = 'settings') },
+  { label: 'Preview canvas', href: '/preview' },
   { label: 'Typography Lab', href: '/type' }
 ])
 
@@ -154,6 +201,57 @@ const typeRows = computed(() => {
     }
   })
 })
+
+const spaceSync = computed(() => activeSettings.value?.spaceSync !== false)
+const spaceMode = computed(() => activeSettings.value?.spaceMode ?? 'grid')
+
+const toggleSpaceSync = () => {
+  if (!activeSettings.value) return
+  const current = activeSettings.value.spaceSync !== false
+  activeSettings.value.spaceSync = current ? false : true
+}
+
+const spacingRows = computed(() => {
+  const base = activeSettings.value
+  if (!base) return []
+  const baseFont = base.fontSize ?? 16
+  return spacingSteps.map((step) => {
+    const key = formatIndexString(step)
+    const gridRem = base.gridRatio * step
+    let spaceRem = 0
+    if (base.spaceSync !== false) {
+      spaceRem = gridRem
+    } else if (step !== 0) {
+      spaceRem = base.spaceMode === 'grid'
+        ? base.spaceBase * step
+        : base.spaceBase * Math.pow(base.spaceRatio, step)
+    }
+    return {
+      step,
+      key,
+      isNegative: step < 0,
+      gridRem,
+      gridPx: gridRem * baseFont,
+      spaceRem,
+      spacePx: spaceRem * baseFont,
+      gridClass: `gp-${key}`,
+      spaceClass: `sp-${key}`,
+    }
+  })
+})
+
+const buttonStyle = (scale: number) => {
+  const tokensValue = designTokens.value
+  if (!tokensValue) return {}
+  const height = tokensValue.buttons.height * scale
+  const padX = tokensValue.buttons.padX * scale
+  return {
+    height: `${height}px`,
+    padding: `0 ${padX}px`,
+    borderRadius: `${tokensValue.buttons.radius}px`,
+    fontSize: 'var(--fs-0)',
+  }
+}
 
 const exportWindow = reactive({
   x: 120,
@@ -312,6 +410,51 @@ const typographyScss = computed(() => [
   '}'
 ].join('\n'))
 
+const spacingScss = computed(() => {
+  if (!tokens.value) return ''
+  const buildBlock = (base: any) => {
+    const lines: string[] = []
+    lines.push(`  --space-mode: ${base.spaceMode};`)
+    lines.push(`  --space-sync: ${base.spaceSync !== false};`)
+    for (let i = scaleStore.minLevel; i <= scaleStore.levels; i += 0.25) {
+      const index = Number(i.toFixed(2))
+      const key = formatIndexString(index)
+      const gridUnit = base.gridRatio * index
+      let space = 0
+      if (base.spaceSync !== false) {
+        space = gridUnit
+      }
+      else if (index !== 0) {
+        space = base.spaceMode === 'grid'
+          ? base.spaceBase * index
+          : base.spaceBase * Math.pow(base.spaceRatio, index)
+      }
+      lines.push(`  --sp-${key}: ${space}rem;`)
+    }
+    return lines
+  }
+
+  const lines: string[] = []
+  lines.push(':root {')
+  lines.push(...buildBlock(tokens.value.base))
+  lines.push('}')
+  lines.push('')
+
+  for (const range of ranges.value) {
+    const override = tokens.value.breakpoints?.[range.max]
+    if (!override) continue
+    const nextTokens = { ...tokens.value.base, ...override }
+    lines.push(`@media (min-width: ${range.min}px) and (max-width: ${range.max}px) {`)
+    lines.push('  :root {')
+    lines.push(...buildBlock(nextTokens).map((line) => `  ${line}`))
+    lines.push('  }')
+    lines.push('}')
+    lines.push('')
+  }
+
+  return lines.join('\n')
+})
+
 const buildTokensScss = () => {
   if (!tokens.value) return ''
   const buildBlock = (base: any) => {
@@ -377,16 +520,62 @@ const breakpointsScss = computed(() => {
   return lines.join('\n')
 })
 
+const designScss = computed(() => {
+  const tokensValue = designTokens.value
+  if (!tokensValue) return ''
+  const colors = tokensValue.colors
+  const radius = tokensValue.radius
+  const shadows = tokensValue.shadows
+  const borders = tokensValue.borders
+  const buttons = tokensValue.buttons
+  const cards = tokensValue.cards
+  const shadowBase = colors.text || '#0f172a'
+  const alphaHex = (value: number) =>
+    Math.round(value * 255).toString(16).padStart(2, '0')
+  return [
+    ':root {',
+    `  --ds-bg: ${colors.bg};`,
+    `  --ds-panel: ${colors.panel};`,
+    `  --ds-panel-soft: ${colors.panelSoft};`,
+    `  --ds-text: ${colors.text};`,
+    `  --ds-muted: ${colors.muted};`,
+    `  --ds-border: ${colors.border};`,
+    `  --ds-accent: ${colors.accent};`,
+    `  --ds-accent-strong: ${colors.accentStrong};`,
+    `  --ds-accent-soft: ${colors.accentSoft};`,
+    `  --ds-success: ${colors.success};`,
+    `  --ds-warning: ${colors.warning};`,
+    `  --ds-danger: ${colors.danger};`,
+    `  --ds-radius-sm: ${radius.sm}px;`,
+    `  --ds-radius-md: ${radius.md}px;`,
+    `  --ds-radius-lg: ${radius.lg}px;`,
+    `  --ds-radius-xl: ${radius.xl}px;`,
+    `  --ds-shadow-sm: 0 6px 18px ${shadowBase}${alphaHex(shadows.sm)};`,
+    `  --ds-shadow-md: 0 18px 40px ${shadowBase}${alphaHex(shadows.md)};`,
+    `  --ds-shadow-lg: 0 30px 70px ${shadowBase}${alphaHex(shadows.lg)};`,
+    `  --ds-border-width: ${borders.width}px;`,
+    `  --ds-btn-height: ${buttons.height}px;`,
+    `  --ds-btn-pad-x: ${buttons.padX}px;`,
+    `  --ds-btn-radius: ${buttons.radius}px;`,
+    `  --ds-card-radius: ${cards.radius}px;`,
+    `  --ds-card-border: ${cards.border}px;`,
+    '}',
+  ].join('\n')
+})
+
 const entryScss = computed(() => {
   const tokensName = settings.value.tokensScssFile.replace(/^_/, '').replace(/\.scss$/, '')
   const typeName = settings.value.typographyFile.replace(/^_/, '').replace(/\.scss$/, '')
   const breakName = settings.value.breakpointsFile.replace(/^_/, '').replace(/\.scss$/, '')
-  return `@use "${tokensName}";\n@use "${typeName}";\n@use "${breakName}";\n`
+  const designName = settings.value.designFile.replace(/^_/, '').replace(/\.scss$/, '')
+  return `@use "${tokensName}";\n@use "${typeName}";\n@use "${breakName}";\n@use "${designName}";\n`
 })
 
 const exportFiles = computed(() => ([
   { value: 'typography', label: 'Typography', content: typographyScss.value },
+  { value: 'spacing', label: 'Spacing', content: spacingScss.value },
   { value: 'tokens', label: 'Tokens', content: buildTokensScss() },
+  { value: 'design', label: 'Design system', content: designScss.value },
   { value: 'breakpoints', label: 'Breakpoints', content: breakpointsScss.value },
   { value: 'entry', label: 'Entry', content: entryScss.value },
 ]))
@@ -446,7 +635,7 @@ const removeRange = (id: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f6fb] text-ink type-default">
+  <div class="min-h-screen bg-[var(--ds-bg)] text-ink type-default">
     <header class="scale-header">
       <div class="scale-header__bar">
         <div class="scale-header__left">
@@ -515,8 +704,15 @@ const removeRange = (id: string) => {
         <button class="scale-nav" :class="{ active: activePanel === 'typography' }" @click="activePanel = 'typography'">
           Typography
         </button>
-        <button class="scale-nav" disabled>Spacing</button>
-        <button class="scale-nav" disabled>Components</button>
+        <button class="scale-nav" :class="{ active: activePanel === 'spacing' }" @click="activePanel = 'spacing'">
+          Spacing
+        </button>
+        <button class="scale-nav" :class="{ active: activePanel === 'design' }" @click="activePanel = 'design'">
+          Design system
+        </button>
+        <button class="scale-nav" :class="{ active: activePanel === 'components' }" @click="activePanel = 'components'">
+          Components
+        </button>
       </aside>
       <main class="scale-content">
         <section v-if="activePanel === 'typography'" class="flex flex-col g-2">
@@ -551,6 +747,286 @@ const removeRange = (id: string) => {
                   </div>
                 </div>
               </div>
+            </div>
+          </section>
+        </section>
+
+        <section v-else-if="activePanel === 'spacing'" class="flex flex-col g-2">
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Spacing scale</div>
+            <div class="spacing-controls">
+              <div class="spacing-control">
+                <span>Sync to grid</span>
+                <button class="toggle-btn" :class="{ active: spaceSync }" type="button" @click="toggleSpaceSync">
+                  {{ spaceSync ? 'On' : 'Off' }}
+                </button>
+              </div>
+              <div class="spacing-control">
+                <span>Mode</span>
+                <div class="segmented">
+                  <button
+                    type="button"
+                    class="segmented__item"
+                    :class="{ active: spaceMode === 'grid' }"
+                    :disabled="spaceSync"
+                    @click="activeSettings && (activeSettings.spaceMode = 'grid')"
+                  >
+                    Grid
+                  </button>
+                  <button
+                    type="button"
+                    class="segmented__item"
+                    :class="{ active: spaceMode === 'ratio' }"
+                    :disabled="spaceSync"
+                    @click="activeSettings && (activeSettings.spaceMode = 'ratio')"
+                  >
+                    Ratio
+                  </button>
+                </div>
+              </div>
+              <label class="spacing-control">
+                <span>Base unit (rem)</span>
+                <input
+                  v-if="activeSettings"
+                  v-model.number="activeSettings.spaceBase"
+                  type="range"
+                  min="0.25"
+                  max="2"
+                  step="0.05"
+                  :disabled="spaceSync"
+                />
+                <strong>{{ activeSettings?.spaceBase?.toFixed(2) }}rem</strong>
+              </label>
+              <label class="spacing-control">
+                <span>Space ratio</span>
+                <input
+                  v-if="activeSettings"
+                  v-model.number="activeSettings.spaceRatio"
+                  type="range"
+                  min="1.05"
+                  max="1.8"
+                  step="0.01"
+                  :disabled="spaceSync || spaceMode === 'grid'"
+                />
+                <strong>{{ activeSettings?.spaceRatio?.toFixed(2) }}</strong>
+              </label>
+            </div>
+            <div class="text-xs text-muted">
+              <code>gp-*</code> uses the typographic grid (<code>--v-*</code>). <code>sp-*</code> uses the spacing scale (<code>--sp-*</code>).
+            </div>
+          </section>
+
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Spacing preview</div>
+            <div class="spacing-table">
+              <div class="spacing-row spacing-row--head">
+                <div>Step</div>
+                <div>Grid (gp)</div>
+                <div>Class</div>
+                <div>Space (sp)</div>
+                <div>Class</div>
+                <div>Preview</div>
+              </div>
+              <div v-for="row in spacingRows" :key="row.key" class="spacing-row">
+                <div class="spacing-step">{{ row.step }}</div>
+                <div class="spacing-value">{{ row.gridRem.toFixed(2) }}rem</div>
+                <div class="spacing-class">{{ row.gridClass }}</div>
+                <div class="spacing-value">{{ row.spaceRem.toFixed(2) }}rem</div>
+                <div class="spacing-class">{{ row.spaceClass }}</div>
+                <div class="spacing-preview">
+                  <div
+                    class="spacing-chip"
+                    :class="{ negative: row.isNegative }"
+                    :style="row.isNegative ? { marginTop: `${row.gridRem}rem` } : { padding: `${row.gridRem}rem` }"
+                  >
+                    gp
+                  </div>
+                  <div
+                    class="spacing-chip"
+                    :class="{ negative: row.isNegative }"
+                    :style="row.isNegative ? { marginTop: `${row.spaceRem}rem` } : { padding: `${row.spaceRem}rem` }"
+                  >
+                    sp
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Utility class preview</div>
+            <div class="spacing-class-preview">
+              <div class="preview-column">
+                <div class="text-xs uppercase tracking-wide text-muted">Grid (gp/gm/g)</div>
+                <div class="preview-block gp-1">gp-1 padding</div>
+                <div class="preview-block gmy-1">gmy-1 margin</div>
+                <div class="preview-block g-1">g-1 gap (parent)</div>
+                <div class="preview-stack g-1">
+                  <div class="preview-chip">Item</div>
+                  <div class="preview-chip">Item</div>
+                </div>
+              </div>
+              <div class="preview-column">
+                <div class="text-xs uppercase tracking-wide text-muted">Space (sp/sm/sg)</div>
+                <div class="preview-block sp-1">sp-1 padding</div>
+                <div class="preview-block smy-1">smy-1 margin</div>
+                <div class="preview-block sg-1">sg-1 gap (parent)</div>
+                <div class="preview-stack sg-1">
+                  <div class="preview-chip">Item</div>
+                  <div class="preview-chip">Item</div>
+                </div>
+              </div>
+            </div>
+            <p class="text-xs text-muted">
+              Negative spacing works on margin utilities (e.g. <code>gmy--1</code>, <code>smt--05</code>).
+            </p>
+          </section>
+        </section>
+
+        <section v-else-if="activePanel === 'design'" class="flex flex-col g-2">
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Atomic design tokens</div>
+            <div class="design-grid">
+              <div class="design-panel">
+                <div class="panel-title">Colors</div>
+                <div class="token-grid">
+                  <label v-for="item in colorFields" :key="item.key" class="token-row">
+                    <span>{{ item.label }}</span>
+                    <div class="token-inputs">
+                      <input v-model="designTokens.colors[item.key]" type="color" class="color-input" />
+                      <input v-model="designTokens.colors[item.key]" type="text" class="input input-sm" />
+                    </div>
+                  </label>
+                </div>
+              </div>
+              <div class="design-panel">
+                <div class="panel-title">Radii</div>
+                <div class="token-grid">
+                  <label v-for="item in radiusFields" :key="item.key" class="token-row">
+                    <span>{{ item.label }}</span>
+                    <input v-model.number="designTokens.radius[item.key]" type="number" class="input input-sm" />
+                  </label>
+                </div>
+
+                <div class="panel-title mt-6">Shadows (opacity)</div>
+                <div class="token-grid">
+                  <label v-for="item in shadowFields" :key="item.key" class="token-row">
+                    <span>{{ item.label }}</span>
+                    <input v-model.number="designTokens.shadows[item.key]" type="number" step="0.01" min="0" max="0.5" class="input input-sm" />
+                  </label>
+                </div>
+              </div>
+              <div class="design-panel">
+                <div class="panel-title">Buttons</div>
+                <div class="token-grid">
+                  <label class="token-row">
+                    <span>Height</span>
+                    <input v-model.number="designTokens.buttons.height" type="number" class="input input-sm" />
+                  </label>
+                  <label class="token-row">
+                    <span>Horizontal padding</span>
+                    <input v-model.number="designTokens.buttons.padX" type="number" class="input input-sm" />
+                  </label>
+                  <label class="token-row">
+                    <span>Radius</span>
+                    <input v-model.number="designTokens.buttons.radius" type="number" class="input input-sm" />
+                  </label>
+                </div>
+
+                <div class="panel-title mt-6">Cards</div>
+                <div class="token-grid">
+                  <label class="token-row">
+                    <span>Radius</span>
+                    <input v-model.number="designTokens.cards.radius" type="number" class="input input-sm" />
+                  </label>
+                  <label class="token-row">
+                    <span>Border width</span>
+                    <input v-model.number="designTokens.cards.border" type="number" class="input input-sm" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Design preview</div>
+            <div class="preview-grid">
+              <div class="ui-card preview-card shadow-ds-sm">
+                <div class="text-xs uppercase tracking-wide text-muted">Primary card</div>
+                <div class="fs-2 font-600">Launch faster with atomic tokens.</div>
+                <div class="text-muted">Every surface is powered by CSS variables and UnoCSS shortcuts.</div>
+                <div class="flex items-center gap-2">
+                  <button class="ui-btn-primary">Primary</button>
+                  <button class="ui-btn-ghost">Ghost</button>
+                </div>
+              </div>
+              <div class="preview-stack">
+                <div class="ui-card shadow-ds-md">
+                  <div class="ui-pill">System tag</div>
+                  <div class="fs-1 font-600">Tokens sync everywhere</div>
+                  <div class="text-muted">Update once, see the UI refresh instantly.</div>
+                </div>
+                <div class="ui-card shadow-ds-lg">
+                  <div class="fs-1 font-600">Buttons</div>
+                  <div class="flex flex-wrap gap-2">
+                    <button class="ui-btn-primary">Primary</button>
+                    <button class="ui-btn-ghost">Secondary</button>
+                    <button class="ui-btn-soft">Soft</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section v-else-if="activePanel === 'components'" class="flex flex-col g-2">
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Button system</div>
+            <div class="component-grid">
+              <div class="component-panel">
+                <div class="panel-title">Size scale</div>
+                <div class="token-grid">
+                  <label v-for="size in buttonSizeScales" :key="size.label" class="token-row">
+                    <span>{{ size.label }}</span>
+                    <input v-model.number="size.scale" type="number" step="0.05" class="input input-sm" />
+                  </label>
+                </div>
+                <p class="text-xs text-muted mt-3">
+                  Sizes multiply the base button tokens (<code>--ds-btn-height</code>, <code>--ds-btn-pad-x</code>).
+                </p>
+              </div>
+              <div class="component-panel">
+                <div class="panel-title">Preview</div>
+                <div class="button-preview">
+                  <div v-for="variant in buttonVariants" :key="variant.label" class="button-preview__row">
+                    <div class="text-xs uppercase tracking-wide text-muted">{{ variant.label }}</div>
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        v-for="size in buttonSizeScales"
+                        :key="size.label"
+                        :class="variant.className"
+                        :style="buttonStyle(size.scale)"
+                      >
+                        {{ size.label }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="ui-card gp-3 flex flex-col g-2">
+            <div class="text-xs uppercase tracking-wide text-muted">Tags & surfaces</div>
+            <div class="flex flex-wrap gap-2">
+              <span class="ui-pill">UI Pill</span>
+              <span class="ui-pill bg-[var(--ds-accent-soft)] text-[var(--ds-accent-strong)]">Accent</span>
+              <span class="ui-pill" style="border-radius: var(--ds-radius-sm);">Soft radius</span>
+            </div>
+            <div class="preview-grid mt-3">
+              <div class="ui-card shadow-ds-sm">Card sm</div>
+              <div class="ui-card shadow-ds-md">Card md</div>
+              <div class="ui-card shadow-ds-lg">Card lg</div>
             </div>
           </section>
         </section>
@@ -609,6 +1085,10 @@ const removeRange = (id: string) => {
             <label class="settings-field">
               Breakpoints SCSS
               <input v-model="settings.breakpointsFile" type="text" />
+            </label>
+            <label class="settings-field">
+              Design system SCSS
+              <input v-model="settings.designFile" type="text" />
             </label>
           </div>
           <p class="text-xs text-muted">
@@ -800,6 +1280,76 @@ const removeRange = (id: string) => {
   cursor: not-allowed;
 }
 
+.design-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.design-panel {
+  background: var(--ds-panel-soft, #f8f9fc);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.panel-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #667085;
+  margin-bottom: 8px;
+}
+
+.token-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.token-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.2fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #1f2937;
+}
+
+.token-inputs {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.color-input {
+  width: 36px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: #fff;
+  padding: 0;
+}
+
+.preview-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.9fr);
+}
+
+.preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .scale-content {
   padding: 24px;
   display: flex;
@@ -924,6 +1474,176 @@ const removeRange = (id: string) => {
 .type-scale__sample {
   font-size: 1rem;
   color: #0f172a;
+}
+
+.spacing-controls {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: center;
+}
+
+.spacing-control {
+  display: grid;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.spacing-control strong {
+  font-size: 0.75rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.toggle-btn {
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #fff;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+}
+
+.toggle-btn.active {
+  background: #1f2a44;
+  border-color: #1f2a44;
+  color: #fff;
+}
+
+.segmented {
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  overflow: hidden;
+  background: #fff;
+}
+
+.segmented__item {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.segmented__item.active {
+  background: #e7ecff;
+  color: #2047d6;
+}
+
+.segmented__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spacing-table {
+  display: grid;
+  gap: 8px;
+}
+
+.spacing-row {
+  display: grid;
+  grid-template-columns: 60px 120px 120px 120px 120px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.spacing-row--head {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.spacing-class {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.spacing-preview {
+  display: flex;
+  gap: 8px;
+}
+
+.spacing-chip {
+  background: #e7ecff;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #2047d6;
+  min-width: 46px;
+  text-align: center;
+}
+
+.spacing-chip.negative {
+  background: #ffe8e8;
+  color: #c92a2a;
+}
+
+.spacing-class-preview {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.preview-column {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-block {
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.7);
+  background: #f8fafc;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.preview-stack {
+  display: grid;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.7);
+  padding: 8px;
+}
+
+.preview-chip {
+  background: #e7ecff;
+  color: #2047d6;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 6px 8px;
+  border-radius: 999px;
+}
+
+.component-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.component-panel {
+  background: var(--ds-panel-soft, #f8f9fc);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.button-preview {
+  display: grid;
+  gap: 16px;
+}
+
+.button-preview__row {
+  display: grid;
+  gap: 8px;
 }
 
 .export-code {

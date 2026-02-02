@@ -69,6 +69,7 @@ import { writeSchemaKitConfig, resolveSchemaKitFeatures, applySchemaKitDefaults 
 import { ensureSchemaKitModule } from './lib/schemaKitModule';
 import { syncProjectLayers } from './lib/layerSync';
 import { writeAuthLayerConfig } from './lib/layerConfigWriter';
+import { readLayerMeta } from './lib/layerRegistry';
 import {
   checkProjectSetup,
   buildInstallHint,
@@ -135,6 +136,18 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Remote app directory (default ~/<slug>)',
         })
+        .option('remote-root', {
+          type: 'string',
+          describe: 'Remote root directory (parent of appDir)',
+        })
+        .option('remote-base', {
+          type: 'string',
+          describe: 'Base directory for remotePath (default $HOME)',
+        })
+        .option('remote-path', {
+          type: 'string',
+          describe: 'Remote path under base directory (e.g. dmo/public)',
+        })
         .option('overwrite-nginx', {
           type: 'boolean',
           describe: 'Overwrite nginx config if it exists',
@@ -163,6 +176,9 @@ const argv = yargs(hideBin(process.argv))
         domain: args.domain ? String(args.domain) : undefined,
         port: typeof args.port === 'number' ? args.port : undefined,
         appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        remoteBase: args['remote-base'] ? String(args['remote-base']) : undefined,
+        remoteRoot: args['remote-root'] ? String(args['remote-root']) : undefined,
+        remotePath: args['remote-path'] ? String(args['remote-path']) : undefined,
         overwriteNginx: args['overwrite-nginx'],
         overwriteApp: args['overwrite-app'],
         startPm2: args['start-pm2'],
@@ -462,6 +478,69 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'layers:status [name]',
+    'Show layer versions for site(s)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Optional project name to inspect',
+          type: 'string',
+        })
+        .option('project', {
+          alias: 'p',
+          type: 'string',
+          describe: 'Comma-separated list of project names to inspect',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const repoRoot = path.resolve(projectRoot, '..', '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      const positional = args.name || (args._ && args._[1]);
+      const projectFilter = parseList(args.project ?? positional);
+      const targetProjects = projectFilter
+        ? bundle.app.paths.projects.filter((proj) => projectFilter.has(proj.name))
+        : bundle.app.paths.projects;
+
+      for (const project of targetProjects) {
+        if (!project.nuxtProjectRoot) continue;
+        const appRoot = path.resolve(projectRoot, project.nuxtProjectRoot);
+        const specEntry = await loadSiteSpec(projectRoot, project);
+        const layers = Array.isArray(specEntry?.spec.layers)
+          ? specEntry?.spec.layers ?? []
+          : resolveLayerList(bundle.app, project);
+        if (!layers || layers.length === 0) {
+          console.log(`ℹ️  No layers configured for ${project.name}.`);
+          continue;
+        }
+
+        const lockPath = path.join(appRoot, 'layers.lock.json');
+        let lock: { layers?: Array<{ name: string; version: string; hash?: string }> } | null = null;
+        const lockRaw = await readFile(lockPath, 'utf-8').catch(() => null);
+        if (lockRaw) {
+          try {
+            lock = JSON.parse(lockRaw) as any;
+          } catch {
+            lock = null;
+          }
+        }
+
+        console.log(`\n🔗 Layers for ${project.name} (${path.relative(repoRoot, appRoot)}):`);
+        if (lock?.layers && lock.layers.length > 0) {
+          for (const entry of lock.layers) {
+            const suffix = entry.hash ? ` (${entry.hash.slice(0, 8)})` : '';
+            console.log(`- ${entry.name}@${entry.version}${suffix}`);
+          }
+          continue;
+        }
+
+        for (const layerName of layers) {
+          const meta = await readLayerMeta(projectRoot, layerName, { autoCreate: false });
+          console.log(`- ${meta.name}@${meta.version}`);
+        }
+      }
+    }
+  )
+  .command(
     'site:deploy [name]',
     'Deploy pipeline (init → verify → SSL → build/sync)',
     (yargsBuilder: any) =>
@@ -498,6 +577,18 @@ const argv = yargs(hideBin(process.argv))
         .option('app-dir', {
           type: 'string',
           describe: 'Remote app directory',
+        })
+        .option('remote-root', {
+          type: 'string',
+          describe: 'Remote root directory (parent of appDir)',
+        })
+        .option('remote-base', {
+          type: 'string',
+          describe: 'Base directory for remotePath (default $HOME)',
+        })
+        .option('remote-path', {
+          type: 'string',
+          describe: 'Remote path under base directory (e.g. dmo/public)',
         })
         .option('build-command', {
           type: 'string',
@@ -566,6 +657,9 @@ const argv = yargs(hideBin(process.argv))
         domain: args.domain ? String(args.domain) : undefined,
         port: typeof args.port === 'number' ? args.port : undefined,
         appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        remoteBase: args['remote-base'] ? String(args['remote-base']) : undefined,
+        remoteRoot: args['remote-root'] ? String(args['remote-root']) : undefined,
+        remotePath: args['remote-path'] ? String(args['remote-path']) : undefined,
         buildCommand: args['build-command'] ? String(args['build-command']) : undefined,
         rsyncDelete: args['rsync-delete'],
         restartNginx: args['restart-nginx'],
@@ -621,6 +715,18 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Remote app directory (default ~/<slug>)',
         })
+        .option('remote-root', {
+          type: 'string',
+          describe: 'Remote root directory (parent of appDir)',
+        })
+        .option('remote-base', {
+          type: 'string',
+          describe: 'Base directory for remotePath (default $HOME)',
+        })
+        .option('remote-path', {
+          type: 'string',
+          describe: 'Remote path under base directory (e.g. dmo/public)',
+        })
         .option('overwrite-nginx', {
           type: 'boolean',
           describe: 'Overwrite nginx config if it exists',
@@ -649,6 +755,9 @@ const argv = yargs(hideBin(process.argv))
         domain: args.domain ? String(args.domain) : undefined,
         port: typeof args.port === 'number' ? args.port : undefined,
         appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        remoteBase: args['remote-base'] ? String(args['remote-base']) : undefined,
+        remoteRoot: args['remote-root'] ? String(args['remote-root']) : undefined,
+        remotePath: args['remote-path'] ? String(args['remote-path']) : undefined,
         overwriteNginx: args['overwrite-nginx'],
         overwriteApp: args['overwrite-app'],
         startPm2: args['start-pm2'],

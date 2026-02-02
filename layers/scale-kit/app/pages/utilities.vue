@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-[#f5f6fb] text-ink type-default">
+  <div class="min-h-screen bg-[var(--ds-bg)] text-ink type-default">
     <header class="border-b border-border bg-panel/80 backdrop-blur">
       <div class="mx-auto max-w-5xl gp-2 flex flex-wrap items-center justify-between gap-4">
         <div>

@@ -28,7 +28,10 @@ interface DeployAnswers {
   domain: string;
   port: number;
   appDir: string;
+  remoteBase?: string;
+  remoteRoot?: string;
   remoteName: string;
+  remotePath?: string;
   pm2Name: string;
   pm2Command: string;
   nginxSitesEnabled: string;
@@ -72,6 +75,9 @@ export async function runSiteDeployInit(options: {
   domain?: string;
   port?: number;
   appDir?: string;
+  remoteBase?: string;
+  remoteRoot?: string;
+  remotePath?: string;
   yes?: boolean;
   overwriteNginx?: boolean;
   overwriteApp?: boolean;
@@ -96,6 +102,7 @@ export async function runSiteDeployInit(options: {
   if (resolvedAppDir && resolvedAppDir !== answers.appDir) {
     answers = { ...answers, appDir: resolvedAppDir };
   }
+  await assertSafeRemotePath(sshTarget, answers.appDir);
   const nginxFileName = answers.domain;
   const nginxPath = path.posix.join(answers.nginxSitesEnabled, nginxFileName);
 
@@ -211,7 +218,6 @@ export async function runSiteDeployInit(options: {
       user: answers.user ?? undefined,
       domain: answers.domain,
       port: answers.port,
-      appDir: answers.appDir,
       pm2Name: answers.pm2Name,
       pm2Command: answers.pm2Command,
       nginxSitesEnabled: answers.nginxSitesEnabled,
@@ -220,8 +226,18 @@ export async function runSiteDeployInit(options: {
       overwriteApp: answers.overwriteApp,
       startPm2: answers.startPm2,
       remoteName: answers.remoteName ?? (specEntry.spec.deploy as any)?.remoteName ?? answers.pm2Name,
+      remoteRoot: answers.remoteRoot ?? (specEntry.spec.deploy as any)?.remoteRoot,
+      remoteBase: answers.remoteBase && answers.remoteBase !== '$HOME'
+        ? answers.remoteBase
+        : (specEntry.spec.deploy as any)?.remoteBase,
+      remotePath: answers.remotePath ?? (specEntry.spec.deploy as any)?.remotePath,
       setupComplete: true,
     };
+    if (answers.remotePath && answers.remotePath.trim()) {
+      delete (nextDeploy as any).appDir;
+    } else {
+      (nextDeploy as any).appDir = answers.appDir;
+    }
     if (!(nextDeploy as any).ssl) {
       (nextDeploy as any).ssl = {
         email: process.env.MPD_SSL_EMAIL || process.env.DEPLOY_SSL_EMAIL || '',
@@ -338,17 +354,29 @@ function resolveProvidedSpecPath(
 
 function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const deploy = spec?.deploy ?? {};
-  const remoteName = String((deploy as any).remoteName ?? (slug || 'site'));
+  const remoteBase = normalizeRemoteBase((deploy as any).remoteBase);
+  const remotePathValue = typeof (deploy as any).remotePath === 'string'
+    ? (deploy as any).remotePath
+    : undefined;
+  const parsedRemotePath = buildPathsFromRemotePath(remotePathValue, remoteBase);
+  const remoteName = String((deploy as any).remoteName ?? parsedRemotePath.remoteName ?? (slug || 'site'));
+  const remoteRoot = typeof (deploy as any).remoteRoot === 'string'
+    ? (deploy as any).remoteRoot
+    : parsedRemotePath.remoteRoot;
   const host = (deploy as any).host ?? '';
   const user = (deploy as any).user ?? null;
   const domain = (deploy as any).domain ?? '';
   const port = Number((deploy as any).port ?? 4041);
   const defaultSlug = slug || 'site';
   const appDirValue = (deploy as any).appDir;
+  const appDirFallback = parsedRemotePath.appDir
+    ?? (remoteRoot && remoteRoot.trim()
+      ? `${remoteRoot.replace(/\/+$/, '')}/${remoteName || defaultSlug}`
+      : `~/${remoteName || defaultSlug}`);
   const appDir = normalizeRemotePath(
     typeof appDirValue === 'string' && appDirValue.trim()
       ? appDirValue
-      : `~/${remoteName || defaultSlug}`
+      : appDirFallback
   );
   const pm2Name = (deploy as any).pm2Name ?? remoteName;
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
@@ -363,7 +391,10 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
     domain,
     port: Number.isFinite(port) && port > 0 ? port : 4041,
     appDir,
-     remoteName,
+    remoteBase,
+    remoteRoot,
+    remoteName,
+    remotePath: remotePathValue,
     pm2Name,
     pm2Command,
     nginxSitesEnabled,
@@ -381,6 +412,9 @@ async function collectAnswers(
     domain?: string;
     port?: number;
     appDir?: string;
+    remoteBase?: string;
+    remoteRoot?: string;
+    remotePath?: string;
     yes?: boolean;
     overwriteNginx?: boolean;
     overwriteApp?: boolean;
@@ -394,31 +428,18 @@ async function collectAnswers(
     if (!host || !domain) {
       throw new Error('Both host and domain are required in non-interactive mode.');
     }
-    const appDir = options.appDir
-      ? normalizeRemotePath(options.appDir)
-      : defaults.appDir;
-  return {
-    ...defaults,
-    host,
-    user: options.user ?? defaults.user,
-    domain,
-    port: options.port ?? defaults.port,
-    appDir,
-    remoteName: defaults.remoteName,
-    overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
-    overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
-    startPm2: options.startPm2 ?? defaults.startPm2,
-  };
-}
-  if (!process.stdin.isTTY) {
-    const host = options.host ?? defaults.host;
-    const domain = options.domain ?? defaults.domain;
-    if (!host || !domain) {
-      throw new Error('Both host and domain are required in non-interactive mode.');
-    }
-    const appDir = options.appDir
-      ? normalizeRemotePath(options.appDir)
-      : defaults.appDir;
+    const remoteBase = normalizeRemoteBase(options.remoteBase ?? defaults.remoteBase ?? '$HOME') || '$HOME';
+    const parsedRemotePath = buildPathsFromRemotePath(options.remotePath ?? defaults.remotePath, remoteBase);
+    const remoteName = parsedRemotePath.remoteName ?? defaults.remoteName;
+    const remoteRoot = typeof options.remoteRoot === 'string' && options.remoteRoot.trim()
+      ? options.remoteRoot
+      : parsedRemotePath.remoteRoot ?? defaults.remoteRoot;
+    const appDir = resolveAppDir({
+      explicit: options.appDir ?? parsedRemotePath.appDir,
+      remoteRoot,
+      remoteName,
+      fallback: defaults.appDir,
+    });
     return {
       ...defaults,
       host,
@@ -426,6 +447,44 @@ async function collectAnswers(
       domain,
       port: options.port ?? defaults.port,
       appDir,
+      remoteBase,
+      remoteRoot,
+      remoteName,
+      remotePath: options.remotePath ?? defaults.remotePath,
+      overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
+      overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
+      startPm2: options.startPm2 ?? defaults.startPm2,
+    };
+  }
+  if (!process.stdin.isTTY) {
+    const host = options.host ?? defaults.host;
+    const domain = options.domain ?? defaults.domain;
+    if (!host || !domain) {
+      throw new Error('Both host and domain are required in non-interactive mode.');
+    }
+    const remoteBase = normalizeRemoteBase(options.remoteBase ?? defaults.remoteBase ?? '$HOME') || '$HOME';
+    const parsedRemotePath = buildPathsFromRemotePath(options.remotePath ?? defaults.remotePath, remoteBase);
+    const remoteName = parsedRemotePath.remoteName ?? defaults.remoteName;
+    const remoteRoot = typeof options.remoteRoot === 'string' && options.remoteRoot.trim()
+      ? options.remoteRoot
+      : parsedRemotePath.remoteRoot ?? defaults.remoteRoot;
+    const appDir = resolveAppDir({
+      explicit: options.appDir ?? parsedRemotePath.appDir,
+      remoteRoot,
+      remoteName,
+      fallback: defaults.appDir,
+    });
+    return {
+      ...defaults,
+      host,
+      user: options.user ?? defaults.user,
+      domain,
+      port: options.port ?? defaults.port,
+      appDir,
+      remoteBase,
+      remoteRoot,
+      remoteName,
+      remotePath: options.remotePath ?? defaults.remotePath,
       overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
       overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
       startPm2: options.startPm2 ?? defaults.startPm2,
@@ -440,12 +499,30 @@ async function collectAnswers(
   const domain =
     options.domain ?? (await promptRequiredInput('Domain', defaults.domain));
   const port = options.port ?? (await promptNumber(`Upstream port (${defaults.port})`, defaults.port));
-  const appDirInput = await promptInput(`App dir (${defaults.appDir})`);
-  const appDir =
-    options.appDir ??
-    (appDirInput
-      ? normalizeRemotePath(appDirInput)
-      : normalizeRemotePath(defaults.appDir));
+  const baseDefault = normalizeRemoteBase(options.remoteBase ?? defaults.remoteBase ?? '$HOME') || '$HOME';
+  const baseInput = await promptInput(`Base directory (${baseDefault})`);
+  const remoteBase = normalizeRemoteBase(
+    baseInput && baseInput.trim() ? baseInput.trim() : baseDefault
+  ) || '$HOME';
+  const remotePathDefault = buildRemotePathHint(defaults, remoteBase);
+  const baseLabel = remoteBase === '$HOME' ? '$HOME' : remoteBase;
+  const remotePathInput = await promptInput(
+    `Remote path under ${baseLabel} (${remotePathDefault || defaults.remoteName})`
+  );
+  const remotePath =
+    (options.remotePath && options.remotePath.trim() ? options.remotePath.trim() : undefined)
+    ?? (remotePathInput && remotePathInput.trim() ? remotePathInput.trim() : remotePathDefault);
+  const parsedRemotePath = buildPathsFromRemotePath(remotePath, remoteBase);
+  const remoteName = parsedRemotePath.remoteName ?? defaults.remoteName;
+  const remoteRoot = typeof options.remoteRoot === 'string' && options.remoteRoot.trim()
+    ? options.remoteRoot
+    : parsedRemotePath.remoteRoot ?? defaults.remoteRoot;
+  const appDir = resolveAppDir({
+    explicit: options.appDir ?? parsedRemotePath.appDir,
+    remoteRoot,
+    remoteName,
+    fallback: defaults.appDir,
+  });
   const overwriteNginx = options.overwriteNginx ?? await promptYesNo('Overwrite nginx config if it exists?', false);
   const overwriteApp = options.overwriteApp ?? await promptYesNo('Overwrite app folder if it exists?', false);
   const startPm2 = options.startPm2 ?? await promptYesNo('Start PM2 with ecosystem.config.cjs?', true);
@@ -457,10 +534,91 @@ async function collectAnswers(
     domain,
     port,
     appDir,
+    remoteBase,
+    remoteRoot,
+    remoteName,
+    remotePath: remotePath ?? defaults.remotePath,
     overwriteNginx,
     overwriteApp,
     startPm2,
   };
+}
+
+function resolveAppDir(params: {
+  explicit?: string;
+  remoteRoot?: string;
+  remoteName: string;
+  fallback: string;
+}): string {
+  if (params.explicit && params.explicit.trim()) {
+    return normalizeRemotePath(params.explicit);
+  }
+  if (params.remoteRoot && params.remoteRoot.trim()) {
+    const root = params.remoteRoot.replace(/\/+$/, '');
+    return normalizeRemotePath(`${root}/${params.remoteName}`);
+  }
+  return params.fallback;
+}
+
+function normalizeRemoteBase(value?: string): string | undefined {
+  if (!value || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (trimmed === '~') return '$HOME';
+  if (trimmed.startsWith('~/')) return `$HOME/${trimmed.slice(2)}`;
+  if (trimmed.startsWith('$HOME')) {
+    const normalized = trimmed.replace(/^\$HOME\/?/, '');
+    return normalized ? `$HOME/${normalized}` : '$HOME';
+  }
+  return trimmed;
+}
+
+function buildPathsFromRemotePath(value?: string, baseRoot?: string): {
+  remoteRoot?: string;
+  remoteName?: string;
+  appDir?: string;
+} {
+  if (!value || !value.trim()) return {};
+  const base = normalizeRemoteBase(baseRoot ?? '$HOME') || '$HOME';
+  let trimmed = value.trim();
+  trimmed = trimmed.replace(/^~\/?/, '');
+  trimmed = trimmed.replace(/^\$HOME\/?/, '');
+  trimmed = trimmed.replace(/^\/+/, '');
+  if (!trimmed) return {};
+  const parts = trimmed.split('/').map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return {};
+  const remoteName = parts[parts.length - 1];
+  const rootParts = parts.slice(0, -1);
+  const basePrefix = base.replace(/\/+$/, '');
+  const remoteRoot = rootParts.length ? `${basePrefix}/${rootParts.join('/')}` : basePrefix;
+  const appDir = `${basePrefix}/${parts.join('/')}`;
+  return { remoteRoot, remoteName, appDir };
+}
+
+function buildRemotePathHint(defaults: DeployAnswers, baseRoot?: string): string {
+  if (defaults.remotePath) {
+    return defaults.remotePath.replace(/^\/+/, '');
+  }
+  const base = normalizeRemoteBase(baseRoot ?? defaults.remoteBase ?? '$HOME') || '$HOME';
+  const basePrefix = base.replace(/\/+$/, '');
+  if (defaults.appDir && defaults.appDir.startsWith(`${basePrefix}/`)) {
+    return defaults.appDir.slice(basePrefix.length + 1);
+  }
+  if (defaults.remoteRoot) {
+    const root = defaults.remoteRoot.replace(/\/+$/, '');
+    if (root.startsWith(`${basePrefix}/`)) {
+      const rel = root.slice(basePrefix.length + 1);
+      return defaults.remoteName ? `${rel}/${defaults.remoteName}` : rel;
+    }
+    if (root === basePrefix) {
+      return defaults.remoteName ?? '';
+    }
+  }
+  if (basePrefix === '$HOME') {
+    if (defaults.appDir === '$HOME') return '';
+    if (defaults.appDir?.startsWith('$HOME/')) return defaults.appDir.slice(6);
+    if (defaults.appDir?.startsWith('~/')) return defaults.appDir.slice(2);
+  }
+  return defaults.remoteName ?? '';
 }
 
 async function remoteFileExists(target: string, remotePath: string): Promise<boolean> {
@@ -523,6 +681,23 @@ async function resolveRemoteAppDir(target: string, appDir: string): Promise<stri
   let resolved = trimmed.replace(/^~(?=\/|$)/, home);
   resolved = resolved.replace(/\$HOME/g, home);
   return resolved;
+}
+
+async function assertSafeRemotePath(target: string, appDir: string): Promise<void> {
+  const trimmed = appDir.trim();
+  if (!trimmed) {
+    throw new Error('Remote app directory is empty; refusing to reset.');
+  }
+  const unsafeRoots = new Set(['/', '/root', '/home']);
+  if (unsafeRoots.has(trimmed)) {
+    throw new Error(`Refusing to use remote path "${trimmed}". Set deploy.appDir to a subdirectory.`);
+  }
+  const home = await resolveRemoteHome(target);
+  if (home && trimmed === home) {
+    throw new Error(
+      `Refusing to use remote path "${trimmed}" (user home). Set deploy.appDir to a subdirectory like "${home}/<app>".`
+    );
+  }
 }
 
 async function writeRemoteFile(
