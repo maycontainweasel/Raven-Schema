@@ -70,6 +70,8 @@ import { ensureSchemaKitModule } from './lib/schemaKitModule';
 import { syncProjectLayers } from './lib/layerSync';
 import { writeAuthLayerConfig } from './lib/layerConfigWriter';
 import { readLayerMeta, listLayerMetas } from './lib/layerRegistry';
+import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList, removeModuleList } from './lib/layerNuxtConfig';
+import { writeGeneratedNuxtConfig } from './lib/siteNuxtConfig';
 import {
   checkProjectSetup,
   buildInstallHint,
@@ -513,6 +515,7 @@ const argv = yargs(hideBin(process.argv))
         : [];
       const availableMetas = await listLayerMetas(projectRoot, { autoCreate: false });
       const availableNames = new Set(availableMetas.map((meta) => meta.name));
+      const layerDefaults = await collectLayerNuxtDefaults(projectRoot, configured);
 
       console.log(`\n🧩 Layers for ${specEntry.spec.slug} (${path.relative(repoRoot, appRoot)}):`);
       if (configured.length === 0) {
@@ -528,6 +531,13 @@ const argv = yargs(hideBin(process.argv))
       const missing = configured.filter((layer) => !availableNames.has(layer));
       if (missing.length > 0) {
         console.warn(`⚠️  Missing layer sources: ${missing.join(', ')}`);
+      }
+
+      if (layerDefaults.modules.length > 0) {
+        console.log('📦 Modules (from layers):');
+        for (const mod of layerDefaults.modules) {
+          console.log(`- ${mod}`);
+        }
       }
 
       if (appRoot) {
@@ -617,8 +627,21 @@ const argv = yargs(hideBin(process.argv))
         : [];
       const next = uniqueLayers([...current, ...layersToAdd]);
       specEntry.spec.layers = next;
+
+      const layerDefaults = await collectLayerNuxtDefaults(projectRoot, next);
+      const baseConfig = (specEntry.spec.nuxtConfig && typeof specEntry.spec.nuxtConfig === 'object'
+        && !Array.isArray(specEntry.spec.nuxtConfig))
+        ? (specEntry.spec.nuxtConfig as Record<string, unknown>)
+        : {};
+      const mergedConfig = mergeDefaults(baseConfig, layerDefaults.config);
+      if (layerDefaults.modules.length > 0) {
+        mergedConfig.modules = mergeModuleList(mergedConfig.modules, layerDefaults.modules);
+      }
+      specEntry.spec.nuxtConfig = mergedConfig;
       await writeSiteSpec(specEntry.path, specEntry.spec);
       console.log(`✅ Added layers to ${specEntry.spec.slug}: ${layersToAdd.join(', ')}`);
+
+      await writeGeneratedNuxtConfig(appRoot, specEntry.spec.nuxtConfig as Record<string, unknown> | undefined);
 
       if (args['no-sync'] !== true) {
         await syncProjectLayers({
@@ -714,8 +737,28 @@ const argv = yargs(hideBin(process.argv))
         }
       }
       specEntry.spec.layers = uniqueLayers(filtered);
+
+      const remainingLayers = specEntry.spec.layers;
+      const remainingDefaults = await collectLayerNuxtDefaults(projectRoot, remainingLayers);
+      const removedDefaults = await collectLayerNuxtDefaults(projectRoot, layersToRemove);
+      const baseConfig = (specEntry.spec.nuxtConfig && typeof specEntry.spec.nuxtConfig === 'object'
+        && !Array.isArray(specEntry.spec.nuxtConfig))
+        ? (specEntry.spec.nuxtConfig as Record<string, unknown>)
+        : {};
+      const mergedConfig = mergeDefaults(baseConfig, remainingDefaults.config);
+      if (remainingDefaults.modules.length > 0 || removedDefaults.modules.length > 0) {
+        const trimmed = removeModuleList(
+          mergedConfig.modules,
+          removedDefaults.modules,
+          remainingDefaults.modules
+        );
+        mergedConfig.modules = mergeModuleList(trimmed, remainingDefaults.modules);
+      }
+      specEntry.spec.nuxtConfig = mergedConfig;
       await writeSiteSpec(specEntry.path, specEntry.spec);
       console.log(`✅ Removed layers from ${specEntry.spec.slug}: ${layersToRemove.join(', ')}`);
+
+      await writeGeneratedNuxtConfig(appRoot, specEntry.spec.nuxtConfig as Record<string, unknown> | undefined);
 
       if (args['no-sync'] !== true) {
         await syncProjectLayers({

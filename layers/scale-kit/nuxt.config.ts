@@ -21,6 +21,8 @@ export default defineNuxtConfig({
   modules: ['@unocss/nuxt', '@pinia/nuxt'],
   unocss: {
     configFile: unoConfigPath,
+    preflight: true,
+    nuxtLayers: true,
   },
   runtimeConfig: {
     public: {

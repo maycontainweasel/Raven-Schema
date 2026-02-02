@@ -42,7 +42,9 @@ Important rules:
 
 - Arrays (`modules`, `css`, `build.transpile`) are **concatenated** when merging additions.
 - Arrays in `overrides` **replace** earlier values.
-- Layers add their own modules via their `nuxt.config.ts` (Nuxt merges these automatically).
+- Layers can declare Nuxt modules in `layer.yaml` (`modules:`) and optional defaults in
+  `layer.yaml` → `nuxtConfig:`. When you add/remove layers, the site tooling composes
+  these into `nuxt.config.generated.ts` so you can see the final list.
 
 Recommended usage:
 
