@@ -587,14 +587,21 @@ const argv = yargs(hideBin(process.argv))
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
-      const layersToAdd = normalizeLayerArgs(args.layers);
+      const rawLayers = Array.isArray(args.layers)
+        ? args.layers.map((value: any) => String(value))
+        : [];
+      let rawName = args.name || args.n || args._?.[1];
+      if (!rawName && rawLayers.length > 0) {
+        rawName = rawLayers.shift();
+      }
+      const layersToAdd = normalizeLayerArgs(rawLayers);
       if (layersToAdd.length === 0) {
         throw new Error('Provide at least one layer to add.');
       }
 
       const { bundle, specEntry, project, appRoot, repoRoot } = await resolveSiteLayerTarget({
         projectRoot,
-        name: String(args.name || args.n || args._?.[1] || ''),
+        name: rawName ? String(rawName) : '',
         specPath: args.spec ? String(args.spec) : undefined,
       });
 
@@ -678,14 +685,21 @@ const argv = yargs(hideBin(process.argv))
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
-      const layersToRemove = normalizeLayerArgs(args.layers);
+      const rawLayers = Array.isArray(args.layers)
+        ? args.layers.map((value: any) => String(value))
+        : [];
+      let rawName = args.name || args.n || args._?.[1];
+      if (!rawName && rawLayers.length > 0) {
+        rawName = rawLayers.shift();
+      }
+      const layersToRemove = normalizeLayerArgs(rawLayers);
       if (layersToRemove.length === 0) {
         throw new Error('Provide at least one layer to remove.');
       }
 
       const { bundle, specEntry, project, appRoot, repoRoot } = await resolveSiteLayerTarget({
         projectRoot,
-        name: String(args.name || args.n || args._?.[1] || ''),
+        name: rawName ? String(rawName) : '',
         specPath: args.spec ? String(args.spec) : undefined,
       });
 
@@ -3908,11 +3922,42 @@ async function resolveSiteLayerTarget(options: {
   const { projectRoot, name, specPath } = options;
   const bundle = await loadConfigBundle(projectRoot);
   const repoRoot = path.resolve(projectRoot, '..', '..');
-  const specEntry = await loadSiteSpecForSetup({
+  let specEntry = await loadSiteSpecForSetup({
     projectRoot,
     name,
     specPath,
   });
+  if (!specEntry && name) {
+    const slug = toKebabCase(name);
+    const fallbackPath = path.resolve(projectRoot, 'sites', `${slug}.yaml`);
+    const specStat = await stat(fallbackPath).catch(() => null);
+    if (specStat?.isFile()) {
+      const content = await readFile(fallbackPath, 'utf-8');
+      const parsed = YAML.parse(content) as Partial<SiteSpecForSetup>;
+      const missing = ['name', 'slug', 'template', 'target'].filter(
+        (key) => !(parsed as any)?.[key]
+      );
+      if (missing.length > 0) {
+        throw new Error(`Invalid site spec: ${fallbackPath} (missing ${missing.join(', ')})`);
+      }
+      specEntry = {
+        path: fallbackPath,
+        spec: {
+          name: String(parsed.name),
+          slug: String(parsed.slug),
+          template: String(parsed.template),
+          target: String(parsed.target),
+          nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
+          packageJson: parsed.packageJson as Record<string, unknown> | undefined,
+          env: parsed.env as Record<string, unknown> | undefined,
+          deploy: parsed.deploy as Record<string, unknown> | undefined,
+          layers: Array.isArray(parsed.layers) ? parsed.layers.map(String) : undefined,
+          capabilities: parsed.capabilities as Record<string, unknown> | undefined,
+          schemaKit: parsed.schemaKit as Record<string, unknown> | undefined,
+        },
+      };
+    }
+  }
   if (!specEntry) {
     throw new Error('Site spec not found. Provide a name or --spec.');
   }
