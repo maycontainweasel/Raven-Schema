@@ -38,7 +38,7 @@ export async function runSiteDelete(options: {
   let hostname =
     options.hostname ||
     resolveHostnameFromSpec(spec) ||
-    (slug ? `${slug}.schema.dev` : '');
+    (slug ? `${slug}.schema.local` : '');
 
   if (!hostname) {
     hostname = await promptInput('Hostname');

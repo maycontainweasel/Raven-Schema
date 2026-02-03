@@ -28,6 +28,7 @@ const REQUIRED_DEPENDENCIES = [
   'iron-webcrypto',
   'pinia',
   '@pinia/nuxt',
+  'sass-embedded',
 ];
 
 const DEPENDENCY_VERSIONS: Record<string, string> = {
@@ -44,6 +45,7 @@ const DEPENDENCY_VERSIONS: Record<string, string> = {
   '@sentry/node': '^10.5.0',
   '@sentry/vite-plugin': '^4.1.1',
   'ioredis': '^5.7.0',
+  'sass-embedded': '^1.80.0',
 };
 
 const REQUIRED_FILES = [

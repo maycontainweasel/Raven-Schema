@@ -741,7 +741,7 @@ function deriveNginxDefaults(
   const defaultHost =
     typeof allowedHosts?.[0] === 'string' && allowedHosts[0]
       ? allowedHosts[0]
-      : `${slug}.schema.dev`;
+      : `${slug}.schema.local`;
   const devServer = resolvePath(existingConfig, ['devServer']);
   const proxyPort = normalizeNumber(devServer?.port) ?? resolved.defaultProxyPort;
   const listenPort = resolved.defaultListenPort;

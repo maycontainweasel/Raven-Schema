@@ -327,6 +327,11 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
 
       const features = config?.features ?? {}
 
+      if (!hasAnyDep(deps, ['sass-embedded'])) {
+        errors.push('sass-embedded is required but missing.')
+        errors.push('Install: pnpm add -D sass-embedded@^1.80.0')
+      }
+
       const redisEnabled = typeof features.redis === 'boolean'
         ? features.redis
         : features.redis?.enabled

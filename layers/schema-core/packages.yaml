@@ -1,5 +1,4 @@
 dependencies:
-  "@nuxt/fonts": "0.13.0"
   "@trpc/server": "^11.4.4"
   "@trpc/client": "^11.4.4"
   trpc-nuxt: "1.2.0"
@@ -11,3 +10,4 @@ dependencies:
   "@pinia/nuxt": "^0.11.2"
 devDependencies:
   dotenv-cli: "^10.0.0"
+  sass-embedded: "^1.80.0"
