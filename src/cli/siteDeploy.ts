@@ -243,8 +243,29 @@ export async function runSiteDeploy(options: {
     const certPath = `/etc/letsencrypt/live/${context.resolvedAnswers.domain}/fullchain.pem`;
     const certExists = await remoteFileExists(context.sshTarget, certPath);
     if (!certExists) {
-      const sslConfig = getSslConfig(context.spec.deploy);
-      const canSkipPrompts = Boolean(sslConfig?.email);
+      let sslConfig = getSslConfig(context.spec.deploy);
+      let email = sslConfig?.email;
+      if (!email) {
+        if (!process.stdin.isTTY) {
+          throw new Error('SSL email is required to request certificates.');
+        }
+        email = await promptRequiredInput('SSL email', '');
+        if (email) {
+          const specPath = resolveProvidedSpecPath(
+            options.specPath ?? `${context.slug}.yaml`,
+            projectRoot,
+            sitesRoot
+          );
+          await writeSslEmail(specPath, email);
+          const nextSsl = { ...(sslConfig ?? {}), email, redirect: sslConfig?.redirect ?? true };
+          context.spec = {
+            ...context.spec,
+            deploy: { ...(context.spec.deploy ?? {}), ssl: nextSsl },
+          };
+          sslConfig = nextSsl;
+        }
+      }
+      const canSkipPrompts = Boolean(email);
       await runSiteDeploySsl({
         projectRoot,
         name: context.slug,
@@ -252,7 +273,7 @@ export async function runSiteDeploy(options: {
         host: context.answers.host,
         user: context.answers.user ?? undefined,
         domain: context.answers.domain,
-        email: sslConfig?.email,
+        email,
         redirect: sslConfig?.redirect,
         yes: options.yes ?? canSkipPrompts,
       });
@@ -544,7 +565,7 @@ async function runSshCapture(target: string, command: string): Promise<string> {
 async function remoteCommandExists(target: string, command: string): Promise<boolean> {
   const cmd = buildCommandExistsCheck(command);
   const output = await runSshCapture(target, cmd);
-  return output.trim() === 'yes';
+  return /\byes\b/.test(output);
 }
 
 async function tryHttpVerify(context: DeployContext): Promise<boolean> {
@@ -981,6 +1002,19 @@ async function promptYesNo(question: string, defaultYes: boolean): Promise<boole
   return defaultYes;
 }
 
+async function promptRequiredInput(label: string, fallback: string): Promise<string> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const hint = fallback ? `${label} (${fallback})` : label;
+    const rl = readline.createInterface({ input, output });
+    const answer = await rl.question(`${hint}: `);
+    rl.close();
+    const value = (answer || fallback).trim();
+    if (value) return value;
+    console.warn(`⚠️  ${label} is required.`);
+  }
+  throw new Error(`${label} is required.`);
+}
+
 function hasSslEnabled(deploy?: Record<string, unknown>): boolean {
   if (!deploy) return false;
   const ssl = (deploy as any).ssl;
@@ -1000,4 +1034,19 @@ function getSslConfig(
     email: typeof (ssl as any).email === 'string' ? (ssl as any).email : undefined,
     redirect: typeof (ssl as any).redirect === 'boolean' ? (ssl as any).redirect : undefined,
   };
+}
+
+async function writeSslEmail(specPath: string, email: string): Promise<void> {
+  const raw = await readFile(specPath, 'utf-8');
+  const parsed = YAML.parse(raw) as Record<string, any>;
+  parsed.deploy = parsed.deploy ?? {};
+  const ssl = parsed.deploy.ssl && typeof parsed.deploy.ssl === 'object'
+    ? parsed.deploy.ssl
+    : {};
+  ssl.email = email;
+  if (typeof ssl.redirect !== 'boolean') {
+    ssl.redirect = true;
+  }
+  parsed.deploy.ssl = ssl;
+  await writeFile(specPath, YAML.stringify(parsed), 'utf-8');
 }

@@ -100,6 +100,7 @@ export async function runSiteDeployInit(options: {
 
   const sshTarget = answers.user ? `${answers.user}@${answers.host}` : answers.host;
   if (!options.skipAudit) {
+    console.log('🔎 Checking server dependencies...');
     await auditRemoteDependencies({
       sshTarget,
       requireNginx: true,
@@ -665,7 +666,7 @@ async function remotePortInUse(target: string, port: number): Promise<boolean> {
 async function remoteCommandExists(target: string, command: string): Promise<boolean> {
   const cmd = buildCommandExistsCheck(command);
   const output = await runSshCapture(target, cmd);
-  return output.trim() === 'yes';
+  return /\byes\b/.test(output);
 }
 
 function sanitizeLogName(value: string): string {
