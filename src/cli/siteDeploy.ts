@@ -241,7 +241,7 @@ export async function runSiteDeploy(options: {
   if (fromIndex <= stepIndex('ssl') && hasSslEnabled(context.spec.deploy)) {
     console.log('🔐 SSL enabled in site config. Running certbot...');
     const certPath = `/etc/letsencrypt/live/${context.resolvedAnswers.domain}/fullchain.pem`;
-    const certExists = await remoteFileExists(context.sshTarget, certPath);
+    const certExists = await remoteFileExists(context.sshTarget, certPath, { sudo: true });
     if (!certExists) {
       let sslConfig = getSslConfig(context.spec.deploy);
       let email = sslConfig?.email;
@@ -909,8 +909,13 @@ async function remotePortInUse(target: string, port: number): Promise<boolean> {
   return false;
 }
 
-async function remoteFileExists(target: string, remotePath: string): Promise<boolean> {
-  const cmd = `test -f ${shellEscapePath(remotePath)} && echo yes || echo no`;
+async function remoteFileExists(
+  target: string,
+  remotePath: string,
+  options?: { sudo?: boolean }
+): Promise<boolean> {
+  const prefix = options?.sudo ? 'sudo ' : '';
+  const cmd = `${prefix}test -f ${shellEscapePath(remotePath)} && echo yes || echo no`;
   const output = await runSshCapture(target, cmd);
   return output.trim() === 'yes';
 }
