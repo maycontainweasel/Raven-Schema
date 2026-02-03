@@ -70,6 +70,43 @@ export async function runSiteEnvYamlSync(options: EnvSyncOptions): Promise<void>
   console.log(`✅ env.yaml synced → ${path.relative(repoRoot, appRoot)}`);
 }
 
+export async function runSiteEnvPreview(options: EnvSyncOptions): Promise<void> {
+  const projectRoot = options.projectRoot;
+  const repoRoot = path.resolve(projectRoot, '..', '..');
+  const sitesRoot = path.resolve(projectRoot, 'sites');
+
+  const { appRoot, spec } = await resolveAppRoot(options, sitesRoot, projectRoot, repoRoot);
+  const envPath = options.envPath
+    ? resolveEnvPath(options.envPath, appRoot, projectRoot)
+    : path.join(appRoot, 'env.yaml');
+
+  const { envSpecRaw, customBlock, customKeys } = await readEnvYamlWithCustom(envPath);
+  const layerDefaults = spec?.layers && spec.layers.length > 0
+    ? await loadLayerEnvDefaults(projectRoot, spec.layers)
+    : {};
+  const { merged: envSpec } = mergeEnvDefaults(envSpecRaw, layerDefaults);
+  for (const key of customKeys) {
+    delete (envSpec as Record<string, unknown>)[key];
+  }
+
+  const { localLines, stagingLines, envConfig, runtimeConfig } = buildEnvOutputs(envSpec);
+
+  console.log(`\n# env preview for ${path.relative(repoRoot, appRoot)}`);
+  console.log('\n# .env');
+  console.log(localLines.length ? localLines.join('\n') : '(empty)');
+  console.log('\n# .env.staging');
+  console.log(stagingLines.length ? stagingLines.join('\n') : '(empty)');
+  console.log('\n# env.config.cjs');
+  console.log(`module.exports = ${JSON.stringify(envConfig, null, 2)};`);
+  console.log('\n# nuxt.config.runtime.ts');
+  console.log(`export default ${JSON.stringify({ runtimeConfig }, null, 2)};`);
+
+  if (customBlock) {
+    console.log('\n# custom env block (ignored for generated outputs)');
+    console.log(customBlock.trimEnd());
+  }
+}
+
 async function resolveAppRoot(
   options: EnvSyncOptions,
   sitesRoot: string,

@@ -54,8 +54,7 @@ import { generateModules } from './cli/moduleGenerate';
 import { runSiteCreate } from './cli/siteCreate';
 import { runSiteDelete } from './cli/siteDelete';
 import { runSiteEnvSync } from './cli/siteEnvSync';
-import { runSiteEnvYamlSync } from './cli/siteEnvYamlSync';
-import { runSiteEnvYamlSync } from './cli/siteEnvYamlSync';
+import { runSiteEnvYamlSync, runSiteEnvPreview } from './cli/siteEnvYamlSync';
 import { runSitePkgSync } from './cli/sitePkgSync';
 import { runSitePkgAdd } from './cli/sitePkgAdd';
 import { runSiteDeployInit } from './cli/siteDeployInit';
@@ -1126,6 +1125,43 @@ const argv = yargs(hideBin(process.argv))
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
         updatePackage: args['update-package'] !== false,
+      });
+    }
+  )
+  .command(
+    'site:env:preview [name]',
+    'Preview generated env outputs (no files written)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('app', {
+          type: 'string',
+          describe: 'Path to app folder (overrides site spec target)',
+        })
+        .option('env', {
+          type: 'string',
+          describe: 'Path to env.yaml (defaults to <app>/env.yaml)',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteEnvPreview({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        appPath: args.app ? String(args.app) : undefined,
+        envPath: args.env ? String(args.env) : undefined,
       });
     }
   )
