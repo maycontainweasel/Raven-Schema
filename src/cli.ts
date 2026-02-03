@@ -60,6 +60,7 @@ import { runSitePkgAdd } from './cli/sitePkgAdd';
 import { runSiteDeployInit } from './cli/siteDeployInit';
 import { runSiteDeploySsl } from './cli/siteDeploySsl';
 import { runSiteDeploy } from './cli/siteDeploy';
+import { runSitePm2Logs } from './cli/sitePm2Logs';
 import { runSiteAdopt } from './cli/siteAdopt';
 import { runSiteMigrate } from './cli/siteMigrate';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
@@ -1004,6 +1005,68 @@ const argv = yargs(hideBin(process.argv))
         resetRemote: args['reset-remote'] === true,
         resetOnly: args['reset-only'] === true,
         from: args.from ? String(args.from) : undefined,
+      });
+    }
+  )
+  .command(
+    'site:pm2:logs [name]',
+    'Download PM2 logs for a site',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host (default from deploy.host)',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user (optional)',
+        })
+        .option('pm2-name', {
+          type: 'string',
+          describe: 'PM2 process name (default from deploy.pm2Name or deploy.remoteName)',
+        })
+        .option('lines', {
+          type: 'number',
+          describe: 'Tail last N lines (default 200, 0 for full file)',
+        })
+        .option('out', {
+          type: 'boolean',
+          describe: 'Only fetch stdout log',
+        })
+        .option('err', {
+          type: 'boolean',
+          describe: 'Only fetch stderr log',
+        })
+        .option('dir', {
+          type: 'string',
+          describe: 'Local output directory (default .deploy/logs/<slug>)',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSitePm2Logs({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        pm2Name: args['pm2-name'] ? String(args['pm2-name']) : undefined,
+        lines: typeof args.lines === 'number' ? args.lines : undefined,
+        out: args.out === true,
+        err: args.err === true,
+        dir: args.dir ? String(args.dir) : undefined,
       });
     }
   )

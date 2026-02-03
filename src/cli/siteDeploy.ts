@@ -825,6 +825,7 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
       `${buildPm2Command(resolvedAnswers.pm2Command, `delete ${resolvedAnswers.pm2Name}`)} >/dev/null 2>&1 || true`
     );
   }
+  await killPortIfInUse(sshTarget, resolvedAnswers.port);
   await runSsh(sshTarget, `rm -rf ${shellEscapePath(resolvedAnswers.appDir)} >/dev/null 2>&1 || true`);
   await runSsh(sshTarget, `sudo rm -f ${shellEscapePath(nginxPath)} >/dev/null 2>&1 || true`);
   const certName = resolvedAnswers.domain;
@@ -872,6 +873,40 @@ async function pruneEmptyParents(
   }
   const cmd = `find ${shellEscapePath(appParent)} -depth -type d -empty -delete`;
   await runSsh(target, cmd);
+}
+
+async function killPortIfInUse(target: string, port: number): Promise<void> {
+  if (!Number.isFinite(port) || port <= 0) return;
+  const inUse = await remotePortInUse(target, port);
+  if (!inUse) return;
+  const proceed = await promptYesNo(
+    `Port ${port} is still in use. Kill the process using this port?`,
+    false
+  );
+  if (!proceed) return;
+  if (await remoteCommandExists(target, 'fuser')) {
+    await runSsh(target, `sudo fuser -k ${port}/tcp >/dev/null 2>&1 || true`);
+    return;
+  }
+  if (await remoteCommandExists(target, 'lsof')) {
+    await runSsh(target, `sudo lsof -ti :${port} | xargs -r sudo kill -9`);
+    return;
+  }
+  console.warn('⚠️  Unable to kill port (fuser/lsof not found).');
+}
+
+async function remotePortInUse(target: string, port: number): Promise<boolean> {
+  if (await remoteCommandExists(target, 'ss')) {
+    const cmd = `ss -ltn | awk '{print $4}' | grep -q ':${port}$' && echo yes || echo no`;
+    const output = await runSshCapture(target, cmd);
+    return /\byes\b/.test(output);
+  }
+  if (await remoteCommandExists(target, 'netstat')) {
+    const cmd = `netstat -ltn | awk '{print $4}' | grep -q ':${port}$' && echo yes || echo no`;
+    const output = await runSshCapture(target, cmd);
+    return /\byes\b/.test(output);
+  }
+  return false;
 }
 
 async function remoteFileExists(target: string, remotePath: string): Promise<boolean> {

@@ -38,6 +38,8 @@ export async function generateTableTaxonomies(
 
     const edgeStatements: string[] = [];
     const functionBlocks: string[] = [];
+    const tableStatements: string[] = [];
+    const definedTables = new Set<string>();
 
     for (const taxonomy of taxonomies) {
       const cfg = normalizeTaxonomyConfig(taxonomy, tableModel, tableLabel);
@@ -51,6 +53,15 @@ export async function generateTableTaxonomies(
       functionBlocks.push(buildDetachTermFunction(cfg));
       functionBlocks.push(buildGetModelTermsFunction(cfg));
       functionBlocks.push(buildGetTableTermsFunction(cfg));
+
+      for (const model of [cfg.taxonomyModel, cfg.termModel]) {
+        if (!model || definedTables.has(model)) continue;
+        definedTables.add(model);
+        tableStatements.push(
+          `DEFINE TABLE OVERWRITE ${model} TYPE NORMAL SCHEMALESS PERMISSIONS FULL;`,
+          ''
+        );
+      }
     }
 
     const dir = getTableAssetDir(table, tablesByModel, outputRoot);
@@ -84,6 +95,21 @@ export async function generateTableTaxonomies(
         },
       });
       console.log(`🧬 Generated taxonomy functions: ${path.relative(process.cwd(), fnPath)}`);
+    }
+
+    if (tableStatements.length > 0) {
+      const tablePath = path.join(dir, `T_${tableModel}TaxonomyTables.surql`);
+      await writeGeneratedAsset({
+        filePath: tablePath,
+        content: tableStatements.join('\n'),
+        tracker,
+        meta: {
+          source: 'generated',
+          layer: 'tables',
+          table: tableModel,
+        },
+      });
+      console.log(`🧬 Generated taxonomy tables: ${path.relative(process.cwd(), tablePath)}`);
     }
   }
 
