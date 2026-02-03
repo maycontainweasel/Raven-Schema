@@ -827,6 +827,11 @@ function buildCommandExistsCheck(command: string): string {
   const cmd = command.split(/\s+/)[0];
   return [
     `command -v ${cmd} >/dev/null 2>&1 && echo yes`,
+    `test -x /usr/sbin/${cmd} >/dev/null 2>&1 && echo yes`,
+    `test -x /usr/local/sbin/${cmd} >/dev/null 2>&1 && echo yes`,
+    `test -x /usr/bin/${cmd} >/dev/null 2>&1 && echo yes`,
+    `test -x /usr/local/bin/${cmd} >/dev/null 2>&1 && echo yes`,
+    `test -x /snap/bin/${cmd} >/dev/null 2>&1 && echo yes`,
     `[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && command -v ${cmd} >/dev/null 2>&1 && echo yes`,
     `echo no`,
   ].join(' || ');
