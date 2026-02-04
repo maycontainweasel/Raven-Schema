@@ -1071,6 +1071,197 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:remove:remote [name]',
+    'Remove remote deploy resources (nginx/app/pm2) for a site',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host (default from deploy.host)',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user (optional)',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        })
+        .option('skip-audit', {
+          type: 'boolean',
+          describe: 'Skip remote dependency audit',
+        }),
+    async (args: any) => {
+      const name = String(args.name || args.n || args._?.[1] || '');
+      if (!name.trim()) {
+        throw new Error('Site name is required.');
+      }
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDeploy({
+        projectRoot,
+        name,
+        specPath: args.spec ? String(args.spec) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        yes: args.yes === true,
+        skipAudit: args['skip-audit'] === true,
+        resetRemote: true,
+        resetOnly: true,
+      });
+    }
+  )
+  .command(
+    'site:remove:local [name]',
+    'Remove local app/spec/nginx entries for a site',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('hostname', {
+          type: 'string',
+          describe: 'Hostname to remove from local nginx',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        })
+        .option('skip-restart', {
+          type: 'boolean',
+          describe: 'Skip nginx restart',
+        })
+        .option('remove-app', {
+          type: 'boolean',
+          describe: 'Remove the app folder too',
+        })
+        .option('keep-spec', {
+          type: 'boolean',
+          describe: 'Keep the site YAML spec',
+        })
+        .option('keep-nginx', {
+          type: 'boolean',
+          describe: 'Keep local nginx config/certs/hosts entries',
+        }),
+    async (args: any) => {
+      const name = String(args.name || args.n || args._?.[1] || '');
+      if (!name.trim()) {
+        throw new Error('Site name is required.');
+      }
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDelete({
+        projectRoot,
+        name,
+        specPath: args.spec ? String(args.spec) : undefined,
+        hostname: args.hostname ? String(args.hostname) : undefined,
+        yes: args.yes === true,
+        skipRestart: args['skip-restart'] === true,
+        removeApp: args['remove-app'],
+        keepSpec: args['keep-spec'],
+        keepNginx: args['keep-nginx'],
+      });
+    }
+  )
+  .command(
+    'site:remove [name]',
+    'Remove a site locally and/or on remote',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip confirmation prompts',
+        })
+        .option('skip-audit', {
+          type: 'boolean',
+          describe: 'Skip remote dependency audit',
+        }),
+    async (args: any) => {
+      const name = String(args.name || args.n || args._?.[1] || '');
+      if (!name.trim()) {
+        throw new Error('Site name is required.');
+      }
+      const projectRoot = path.resolve(__dirname, '..');
+
+      const yes = args.yes === true;
+      const removeRemote = yes
+        ? true
+        : (await (async () => {
+            const rl = readline.createInterface({ input, output });
+            const answer = await rl.question('Remove remote resources? (y/N) ');
+            rl.close();
+            return answer.trim().toLowerCase().startsWith('y');
+          })());
+
+      if (removeRemote) {
+        await runSiteDeploy({
+          projectRoot,
+          name,
+          specPath: args.spec ? String(args.spec) : undefined,
+          yes: yes,
+          skipAudit: args['skip-audit'] === true,
+          resetRemote: true,
+          resetOnly: true,
+        });
+      }
+
+      const removeLocal = yes
+        ? true
+        : (await (async () => {
+            const rl = readline.createInterface({ input, output });
+            const answer = await rl.question('Remove local app/spec/nginx entries? (y/N) ');
+            rl.close();
+            return answer.trim().toLowerCase().startsWith('y');
+          })());
+
+      if (removeLocal) {
+        await runSiteDelete({
+          projectRoot,
+          name,
+          specPath: args.spec ? String(args.spec) : undefined,
+          yes,
+        });
+      }
+    }
+  )
+  .command(
     'site:deploy:init [name]',
     'Initial SSH deployment setup (nginx + app folder + PM2)',
     (yargsBuilder: any) =>
