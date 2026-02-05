@@ -37,6 +37,11 @@ DEFINE FUNCTION OVERWRITE fn::createPost($payload: object) {
 	let $record = upsert $rid content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
 
+	let $record = if $record { $record } else {
+		let $fallback = select * from only $rid;
+		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
+	};
+
 	return if $record {
 		return $record;
 	} else {
@@ -93,7 +98,7 @@ DEFINE FUNCTION OVERWRITE fn::updatePost($PostID: any, $payload: object) {
 
 -- ---------- EVENTS ----------
 
--- File: E_Post.surql
+-- File: E_PostDelete.surql
 DEFINE EVENT OVERWRITE PostDelete ON TABLE p WHEN $event = "DELETE" THEN {
   let $id = $before.id;
   if !$id {

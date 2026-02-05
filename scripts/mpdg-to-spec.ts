@@ -789,7 +789,7 @@ export function parseFields(body: string): FieldDef[] {
     // Do not auto-promote required based on placeholder defaults; use explicit `!`.
 
     // Program-generated IDs generally shouldn't default to "".
-    if ((normalizedType.toLowerCase() === 'uniqueid' || normalizedType.toLowerCase() === 'md5') && finalDefault === '') {
+    if ((normalizedType.toLowerCase() === 'uniqueid' || normalizedType.toLowerCase() === 'md5' || normalizedType.toLowerCase() === 'uuid') && finalDefault === '') {
       finalDefault = undefined;
     }
 
@@ -1050,6 +1050,9 @@ function parseAngleProgram(raw: string): ParsedAngleProgram | null {
     if (typeName.toLowerCase() === 'password') {
       return { kind: 'type', typeName: 'password', options: { hash: inner } };
     }
+    if (typeName.toLowerCase() === 'uuid') {
+      return { kind: 'type', typeName: 'uuid', options: { version: inner } };
+    }
     let options: Record<string, any> | undefined;
     const innerKv = inner.match(/^([a-zA-Z_][\w-]*)\s*:\s*(.+)$/);
     if (innerKv && innerKv[1] && innerKv[2]) {
@@ -1187,6 +1190,11 @@ function normalizeProgramOptions(typeName: string, raw?: Record<string, any>): R
     return value !== undefined ? { value } : undefined;
   }
 
+  if (lowered === 'uuid') {
+    const version = normalizeUuidVersion(raw.version ?? raw.v ?? raw.type);
+    return version ? { version } : undefined;
+  }
+
   // Default: keep as-is, but normalize `{field: x}` objects to `$x` references.
   const normalized: Record<string, any> = {};
   for (const [k, v] of Object.entries(raw)) {
@@ -1225,6 +1233,15 @@ function normalizePasswordHash(value: string): string {
   if (lowered === 'argon2') return 'argon2';
   if (lowered === 'bcrypt') return 'bcrypt';
   return value;
+}
+
+function normalizeUuidVersion(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === '4' || raw === 'v4') return 'v4';
+  if (raw === '7' || raw === 'v7') return 'v7';
+  return raw;
 }
 
 type JsParseResult<T> = { value: T; rest: string };

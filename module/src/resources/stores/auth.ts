@@ -584,7 +584,6 @@ const baseUseAuthStore = defineStore('authstore', {
           const pathname = window.location.pathname
           
           if (pathname.startsWith('/dashboard')) return '/dashboard/api/auth/me'
-          if (pathname.startsWith('/s')) return '/s/api/auth/me'
           return '/api/auth/me'
         }
 
@@ -659,8 +658,6 @@ const baseUseAuthStore = defineStore('authstore', {
             console.log('🔐 [AUTH-STORE] Current pathname:', path)
             if (path.startsWith('/dashboard/')) {
               logoutEndpoint = '/dashboard/api/auth/logout'
-            } else if (path.startsWith('/s/')) {
-              logoutEndpoint = '/s/api/auth/logout'
             }
             // Default to /api/auth/logout for public app
           }

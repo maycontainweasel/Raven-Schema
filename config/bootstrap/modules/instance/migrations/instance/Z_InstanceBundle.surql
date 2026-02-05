@@ -33,6 +33,11 @@ DEFINE FUNCTION OVERWRITE fn::createInstance($payload: object) {
 	let $record = upsert $rid content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
 
+	let $record = if $record { $record } else {
+		let $fallback = select * from only $rid;
+		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
+	};
+
 	return if $record {
 		return $record;
 	} else {
@@ -105,7 +110,7 @@ DEFINE FUNCTION OVERWRITE fn::updateInstance($InstanceID: any, $payload: object)
 
 -- ---------- EVENTS ----------
 
--- File: E_Instance.surql
+-- File: E_InstanceDelete.surql
 DEFINE EVENT OVERWRITE InstanceDelete ON TABLE instance WHEN $event = "DELETE" THEN {
   let $id = $before.id;
   if !$id {
@@ -117,6 +122,7 @@ DEFINE EVENT OVERWRITE InstanceDelete ON TABLE instance WHEN $event = "DELETE" T
   fn::deleteEdgeFromIn($id, 'Instances', false);
 };
 
+-- File: E_InstancePostCreate.surql
 DEFINE EVENT OVERWRITE InstancePostCreate ON TABLE instance WHEN $event = "CREATE" THEN { let $RID = $after.id;
 if !type::is_record($RID) { throw "InstancePostCreate | invalid record id"; };
 
@@ -137,12 +143,14 @@ if($after.status == 'publish') {
   });
 } };
 
+-- File: E_InstancePostDelete.surql
 DEFINE EVENT OVERWRITE InstancePostDelete ON TABLE instance WHEN $event = "DELETE" THEN { let $RID = $before.id;
 if !type::is_record($RID) { throw "InstancePostDelete | invalid record id"; };
 let $PID = fn::PID($RID);
 fn::deleteEdge($PID, "Post", $RID, { boundId: true });
 fn::deletePost($PID, { skipExists: true }) };
 
+-- File: E_InstancePostUpdate.surql
 DEFINE EVENT OVERWRITE InstancePostUpdate ON TABLE instance WHEN $event = "UPDATE" THEN { let $RID = $after.id;
 if !type::is_record($RID) { throw "InstancePostUpdate | invalid record id"; };
 let $PID = fn::PID($RID);
@@ -160,6 +168,7 @@ if($after.status == "publish" and $before.status != "publish") {
   });
 } };
 
+-- File: E_InstancesCreate.surql
 DEFINE EVENT OVERWRITE InstancesCreate ON TABLE instance WHEN $event = "CREATE" THEN { if (type::is_array($after.instances) and array::len($after.instances) > 0) {
   let $RID = $after.id;
   if !type::is_record($RID) { throw "InstancesCreate | invalid record id"; };
@@ -170,10 +179,12 @@ DEFINE EVENT OVERWRITE InstancesCreate ON TABLE instance WHEN $event = "CREATE" 
   };
 } };
 
+-- File: E_InstancesDelete.surql
 DEFINE EVENT OVERWRITE InstancesDelete ON TABLE instance WHEN $event = "DELETE" THEN { let $RID = $before.id;
 if !type::is_record($RID) { throw "InstancesDelete | invalid record id"; };
 fn::clearEdgesForRecord($RID, "Instances") };
 
+-- File: E_InstancesUpdate.surql
 DEFINE EVENT OVERWRITE InstancesUpdate ON TABLE instance WHEN $event = "UPDATE" THEN { if ($after.instances != $before.instances) {
   let $RID = $after.id;
   if !type::is_record($RID) { throw "InstancesUpdate | invalid record id"; };

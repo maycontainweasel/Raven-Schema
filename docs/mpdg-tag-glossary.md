@@ -69,6 +69,17 @@ This is a working reference for the “program-like” tags used in `config/grap
   - `options.value: $email`
 - `default` is omitted when the default literal is `""` (uniqueId is program-generated).
 
+### `<uuid {...}>`
+- Examples:
+  - `uuid: "", <uuid<v4>> <assign>`
+  - `uuid: "", <uuid { version: v7 }>`
+- Spec output:
+  - `type: uuid`
+  - `options.version: v4 | v7`
+- Notes:
+  - If the default literal is `""`, the generator omits the default.
+  - When combined with `<assign>`, the create function will generate a UUID after payload merge.
+
 ### `<permalink<...>>`
 - Example:
   - `permalink: <permalink<$key>>`

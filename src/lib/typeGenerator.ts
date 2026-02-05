@@ -67,8 +67,15 @@ export async function generateTableTypes(options: GenerateTypesOptions): Promise
 
     const lines: string[] = [ZOD_IMPORT];
 
-    if (idBlocks?.imports?.length) {
-      lines.push(...idBlocks.imports);
+    const coreImports = new Set<string>();
+    if (idBlocks?.schema) {
+      coreImports.add('RecordID_z');
+    }
+    if (usesUuidField(filteredFields)) {
+      coreImports.add('uuid_z');
+    }
+    if (coreImports.size > 0) {
+      lines.push(`import { ${Array.from(coreImports).join(', ')} } from '../core';`);
     }
 
     lines.push('');
@@ -99,6 +106,8 @@ export const RecordID_z = z.object({
   tb: z.string(),
   id: z.any(),
 });
+
+export const uuid_z = z.string().uuid();
 
 export type RecordID = z.infer<typeof RecordID_z>;
 `;
@@ -134,6 +143,15 @@ function normalizeFields(rawFields: TableFieldEntry[]): NormalizedField[] {
       .filter(([, meta]) => !(meta as TableFieldMeta)?.transient)
       .map(([name, meta]) => normalizeField(name, meta as TableFieldMeta))
   );
+}
+
+function usesUuidField(fields: NormalizedField[]): boolean {
+  return fields.some((field) => {
+    const rawType = field.meta?.type;
+    const hasUuid = typeof rawType === 'string' && rawType.toLowerCase().startsWith('uuid');
+    if (hasUuid) return true;
+    return field.children.length > 0 && usesUuidField(field.children);
+  });
 }
 
 function normalizeField(name: string, meta: TableFieldMeta): NormalizedField {
@@ -230,6 +248,7 @@ function buildSingleType(typeSegment: string, field: NormalizedField): string {
   }
 
   if (lower === 'string') return 'z.string()';
+  if (lower === 'uuid' || lower.startsWith('uuid<')) return 'uuid_z';
   if (lower === 'bool' || lower === 'boolean') return 'z.boolean()';
   if (lower === 'int' || lower === 'integer') return 'z.number().int()';
   if (lower === 'number' || lower === 'float' || lower === 'decimal') return 'z.number()';

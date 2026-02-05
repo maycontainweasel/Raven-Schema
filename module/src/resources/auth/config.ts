@@ -39,7 +39,7 @@ export const defaultAuthConfig: AuthConfig = {
     maxAge: 7 * 24 * 60 * 60,
     domain: undefined,
   },
-  appPaths: ['/', '/dashboard/', '/s/', '/dashboard', '/s'],
+  appPaths: ['/', '/dashboard/', '/dashboard'],
   refreshInterval: 12 * 60 * 1000,
 }
 

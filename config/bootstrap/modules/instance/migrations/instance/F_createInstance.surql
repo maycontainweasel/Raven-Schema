@@ -26,6 +26,11 @@ DEFINE FUNCTION OVERWRITE fn::createInstance($payload: object) {
 	let $record = upsert $rid content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
 
+	let $record = if $record { $record } else {
+		let $fallback = select * from only $rid;
+		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
+	};
+
 	return if $record {
 		return $record;
 	} else {

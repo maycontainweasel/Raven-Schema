@@ -2212,11 +2212,12 @@ function buildAssignOverrides(fields: NormalizedField[], payloadVar: string): st
   const assigned = new Set<string>();
   const passwordHash = resolvePasswordHash(fields);
   if (passwordHash) {
-    assignments.push(`\t\tpassword: crypto::${passwordHash}::generate(${payloadVar}.password),`);
-    assigned.add('password');
+  assignments.push(`\t\tpassword: crypto::${passwordHash}::generate(${payloadVar}.password),`);
+  assigned.add('password');
   }
 
   assignments.push(...buildMd5Assignments(fields, payloadVar, assigned));
+  assignments.push(...buildUuidAssignments(fields, assigned));
   assignments.push(...buildExplicitAssignOverrides(fields, payloadVar, assigned));
   return assignments;
 }
@@ -2245,6 +2246,22 @@ function buildMd5Assignments(fields: NormalizedField[], payloadVar: string, assi
     } else {
       assignments.push(`\t\t${field.name}: crypto::md5(${JSON.stringify(md5Source)}),`);
     }
+    assigned.add(field.name);
+  }
+  return assignments;
+}
+
+function buildUuidAssignments(fields: NormalizedField[], assigned: Set<string>): string[] {
+  const assignments: string[] = [];
+  for (const field of fields) {
+    if (!shouldAssignField(field, 'uuid')) {
+      continue;
+    }
+    const uuidExpr = resolveUuidExpression(field.meta);
+    if (!uuidExpr) {
+      continue;
+    }
+    assignments.push(`\t\t${field.name}: ${uuidExpr},`);
     assigned.add(field.name);
   }
   return assignments;
@@ -2357,7 +2374,27 @@ function resolveMd5Source(meta: TableFieldMeta): string | null {
   return null;
 }
 
-function shouldAssignField(field: NormalizedField, typeHint: 'password' | 'md5'): boolean {
+function resolveUuidExpression(meta: TableFieldMeta): string | null {
+  const rawType = meta.type?.toLowerCase();
+  if (!rawType || !(rawType === 'uuid' || rawType.startsWith('uuid<'))) {
+    return null;
+  }
+
+  const options = meta.options as Record<string, unknown> | undefined;
+  const generator = typeof options?.generator === 'string' ? options.generator.trim() : '';
+  if (generator) {
+    return generator.endsWith(')') ? generator : `${generator}()`;
+  }
+
+  const versionRaw = options?.version ?? options?.v ?? options?.type;
+  const version = typeof versionRaw === 'string' ? versionRaw.trim().toLowerCase() : '';
+  if (version === 'v7' || version === '7') {
+    return 'rand::uuid_v7()';
+  }
+  return 'rand::uuid()';
+}
+
+function shouldAssignField(field: NormalizedField, typeHint: 'password' | 'md5' | 'uuid'): boolean {
   if (field.meta.assign === false) {
     return false;
   }

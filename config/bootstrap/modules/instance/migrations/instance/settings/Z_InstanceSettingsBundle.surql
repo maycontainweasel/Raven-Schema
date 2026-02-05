@@ -7,15 +7,21 @@
 -- File: F_createInstanceSettings.surql
 DEFINE FUNCTION OVERWRITE fn::createInstanceSettings($PARENT_ID: record<instance>, $payload: option<object>) {
 
-	if !type::is_record($PARENT_ID) || !record::exists($PARENT_ID) {
-		throw "createInstanceSettings | requires valid parent record";
-	};
-
 	let $payloadInput = if type::is_object($payload) {
 		$payload
 	} else {
 		{}
 	};
+
+	if !type::is_record($PARENT_ID) {
+		throw "createInstanceSettings | requires valid parent record";
+	};
+	if !$payloadInput.skipExists {
+		if !record::exists($PARENT_ID) {
+			throw "createInstanceSettings | requires valid parent record";
+		};
+	};
+	let $payloadInput = fn::objectRemove($payloadInput, ["skipExists"]);
 
 	let $defaultData = {
 		currencies: [],
@@ -28,6 +34,10 @@ DEFINE FUNCTION OVERWRITE fn::createInstanceSettings($PARENT_ID: record<instance
 
 	let $record = upsert $RID content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
+	let $record = if $record { $record } else {
+		let $fallback = select * from only $RID;
+		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
+	};
 	let $recordID = if $record.id { $record.id } else { $record };
 
 	if !$recordID {
@@ -91,7 +101,7 @@ DEFINE FUNCTION OVERWRITE fn::updateInstanceSettings($InstanceSettingsID: any, $
 
 -- ---------- EVENTS ----------
 
--- File: E_InstanceSettings.surql
+-- File: E_InstanceSettingsDelete.surql
 DEFINE EVENT OVERWRITE InstanceSettingsDelete ON TABLE instanceSettings WHEN $event = "DELETE" THEN {
   let $id = $before.id;
   if !$id {

@@ -10,7 +10,7 @@ const defaultAuthLayer: Required<AuthLayerConfig> = {
     cookieDomain: '',
     sessionDuration: 7 * 24 * 60 * 60,
     refreshInterval: 12 * 60 * 1000,
-    appPaths: ['/', '/dashboard/', '/s/', '/dashboard', '/s'],
+    appPaths: ['/', '/dashboard/', '/dashboard'],
     cookie: {
       httpOnly: true,
       secure: true,
