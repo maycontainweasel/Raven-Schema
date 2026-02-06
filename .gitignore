@@ -132,6 +132,7 @@ config/specs/*
 config/types/*
 config/typesense/*
 config/ui/*
+config/ui-back/*
 /sites/
 
 ## Files

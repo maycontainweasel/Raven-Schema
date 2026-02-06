@@ -4800,11 +4800,18 @@ async function promptToContinue(message: string): Promise<boolean> {
   if (!process.stdin.isTTY) {
     return true;
   }
-  const rl = readline.createInterface({ input, output });
-  const answer = await rl.question(`${message} [Y/n] `);
-  rl.close();
-  const normalized = answer.trim().toLowerCase();
-  return normalized === '' || normalized === 'y' || normalized === 'yes';
+  try {
+    const rl = readline.createInterface({ input, output });
+    const answer = await rl.question(`${message} [Y/n] `);
+    rl.close();
+    const normalized = answer.trim().toLowerCase();
+    return normalized === '' || normalized === 'y' || normalized === 'yes';
+  } catch (error: any) {
+    if (error?.code === 'EIO') {
+      return true;
+    }
+    throw error;
+  }
 }
 
 async function promptInput(label: string): Promise<string> {
