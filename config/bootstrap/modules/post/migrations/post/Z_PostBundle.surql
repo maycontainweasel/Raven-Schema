@@ -11,7 +11,7 @@ DEFINE FUNCTION OVERWRITE fn::createPost($payload: object) {
 		throw "createPost | payload is required";
 	};
 
-	if !$payload.id {
+	if $payload.id = NONE || $payload.id = null || (type::is_string($payload.id) && string::len($payload.id) = 0) {
 		throw "createPost | requires id";
 	};
 

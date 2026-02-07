@@ -6,7 +6,12 @@ import { generateResourceViews } from '../lib/resourceViewGenerator';
 import { generateTableIndexes } from '../lib/indexGenerator';
 import { generateTableEdges } from '../lib/edgeGenerator';
 import { writeTableBundles } from '../lib/tableBundleWriter';
-import { loadAppConfig, loadTableMigrations, resolveModuleOverridesDir } from '../lib/configLoader';
+import {
+  loadAppConfig,
+  loadTableMigrations,
+  resolveModuleOverridesDir,
+  resolveModulesConfig,
+} from '../lib/configLoader';
 import { normalizeCrudConfig } from '../lib/crudHelpers';
 import { generateTrpcRouters } from '../lib/routerGenerator';
 import type { TableMigrationConfig } from '../types';
@@ -76,9 +81,8 @@ export async function generateModules(options: ModuleGenerateOptions): Promise<v
       baseTables = [];
     }
 
-    const moduleNamesForRouters = Array.isArray(appConfig.modules) && appConfig.modules.length > 0
-      ? appConfig.modules
-      : modules;
+    const configuredModules = resolveModulesConfig(appConfig).enabled ?? [];
+    const moduleNamesForRouters = configuredModules.length > 0 ? configuredModules : modules;
     const moduleTablesForRouters: TableMigrationConfig[] = [];
 
     for (const mod of moduleNamesForRouters) {

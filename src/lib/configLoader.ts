@@ -128,7 +128,10 @@ function applyInstanceDefaults(
   instanceConfig?: InstanceDefaultsConfig
 ): void {
   if (!(table as any).instance) return;
-  if (instanceConfig?.active === false) return;
+  if (instanceConfig?.active === false) {
+    (table as any).instance = false;
+    return;
+  }
   const tableModel = table.table?.model ?? table.name;
   if (tableModel === 'instance') return;
 
@@ -529,9 +532,49 @@ function isPlainObject(value: any): value is Record<string, any> {
 }
 
 export function resolveModulesConfig(app: AppConfig): AppModulesConfig {
+  const rawModules = (app as any).modules;
+  const resolved: string[] = [];
+  const seen = new Set<string>();
+
+  if (Array.isArray(rawModules)) {
+    for (const entry of rawModules as unknown[]) {
+      if (typeof entry === 'string') {
+        const name = entry.trim();
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        resolved.push(name);
+        continue;
+      }
+
+      if (entry && typeof entry === 'object') {
+        const nameRaw =
+          typeof (entry as any).name === 'string'
+            ? (entry as any).name
+            : typeof (entry as any).module === 'string'
+              ? (entry as any).module
+              : '';
+        const name = String(nameRaw).trim();
+        if (!name) continue;
+        const active = (entry as any).active !== false && (entry as any).enabled !== false;
+        const key = name.toLowerCase();
+        if (!active) {
+          seen.add(key);
+          continue;
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        resolved.push(name);
+      }
+    }
+  }
+
+  const enabled = app.instance?.active === false
+    ? resolved.filter((name) => name.toLowerCase() !== 'instance')
+    : resolved;
+
   return {
-    enabled: Array.isArray((app as any).modules)
-      ? ((app as any).modules as unknown[]).map((m) => String(m)).filter(Boolean)
-      : [],
+    enabled,
   };
 }

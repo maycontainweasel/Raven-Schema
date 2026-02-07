@@ -6,6 +6,17 @@ import {
 } from './crudHelpers';
 
 export function attachChildBootstrapEvents(tables: TableMigrationConfig[]): void {
+  attachChildBootstrapEventsWithMode(tables, 'function');
+}
+
+export function attachChildBootstrapEventsWithMode(
+  tables: TableMigrationConfig[],
+  mode: 'function' | 'event' = 'function'
+): void {
+  if (mode !== 'event') {
+    return;
+  }
+
   const tablesByModel = new Map<string, TableMigrationConfig>();
   for (const table of tables) {
     const model = table.table?.model;

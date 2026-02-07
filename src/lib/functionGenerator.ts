@@ -5,6 +5,7 @@ import type {
   CrudDefinition,
   CrudOperationDefinition,
   CrudOperationOptions,
+  SubTableConfig,
   TableFieldEntry,
   TableFieldMeta,
   TableMigrationConfig,
@@ -36,7 +37,10 @@ interface GenerateFunctionsOptions {
   outputRoot: string;
   assetTracking?: AssetTrackingOptions;
   eventFileMode?: 'split' | 'table';
+  subtableCreateMode?: 'function' | 'event';
 }
+
+type SubtableCreateMode = 'function' | 'event';
 
 interface NormalizedHooks {
   preValidate: string[];
@@ -47,6 +51,8 @@ interface NormalizedHooks {
 
 export async function generateTableFunctions(options: GenerateFunctionsOptions): Promise<void> {
   const { tables, outputRoot } = options;
+  const subtableCreateMode: SubtableCreateMode =
+    options.subtableCreateMode === 'event' ? 'event' : 'function';
   await mkdir(outputRoot, { recursive: true });
   const tracker = await createAssetTracker(options.assetTracking);
 
@@ -89,7 +95,8 @@ export async function generateTableFunctions(options: GenerateFunctionsOptions):
         createName,
         tablesByModel,
         relationHooksByModel.get(table.table?.model ?? ''),
-        taxonomyHooksByModel.get(table.table?.model ?? '')
+        taxonomyHooksByModel.get(table.table?.model ?? ''),
+        subtableCreateMode
       );
       const prev = previousFilesByDir.get(tableDir)?.get(createPath);
       await writeGeneratedAsset({
@@ -335,7 +342,8 @@ function buildCreateFunctionContent(
   functionName: string,
   tablesByModel: Map<string, TableMigrationConfig>,
   relationHooks?: NormalizedRelation[],
-  taxonomyHooks?: NormalizedTaxonomy[]
+  taxonomyHooks?: NormalizedTaxonomy[],
+  subtableCreateMode: SubtableCreateMode = 'function'
 ): string {
   if (isSubTable(table)) {
     return buildSubtableCreateFunctionContent(
@@ -358,10 +366,15 @@ function buildCreateFunctionContent(
   }
   const defaultsObject = buildDefaultsObject(fields, '$payload');
   const assignOverrides = buildAssignOverrides(fields, '$payload');
+  const subtablePlans = buildSubtableCreatePlans(table, tablesByModel);
 
   const relationValidations = buildRelationValidations(relationHooks, '$payload', functionName, 'create');
   const taxonomyValidations = buildTaxonomyValidations(taxonomyHooks, '$payload', functionName, 'create');
   const validations = buildRequiredFieldValidations(requiredFields, '$payload', functionName);
+  const subtableValidations =
+    subtableCreateMode === 'function'
+      ? buildSubtableInputValidationLines(subtablePlans, functionName)
+      : [];
   const enumValidations = buildEnumValidationLines(fields, '$payload', functionName, {
     requiredOnly: true,
     onlyIfPresent: false,
@@ -396,13 +409,25 @@ function buildCreateFunctionContent(
     lines.push(...hooks.preValidate, '');
   }
 
+  const subtableCapture = buildSubtableInputCaptureLines(subtablePlans, '$payload');
+  if (subtableCapture.length > 0) {
+    lines.push(...subtableCapture, '');
+  }
+
   const payloadStrip = buildFieldPayloadStripLines(fields, '$payload');
   if (payloadStrip.length > 0) {
     lines.push(...payloadStrip, '');
   }
+  const subtablePayloadStrip = buildSubtablePayloadStripLines(subtablePlans, '$payload');
+  if (subtablePayloadStrip.length > 0) {
+    lines.push(...subtablePayloadStrip, '');
+  }
 
   if (validations.length > 0) {
     lines.push(...validations, '');
+  }
+  if (subtableValidations.length > 0) {
+    lines.push(...subtableValidations, '');
   }
   if (relationValidations.length > 0) {
     lines.push(...relationValidations, '');
@@ -482,17 +507,31 @@ function buildCreateFunctionContent(
       ''
     );
   }
+  lines.push(
+    `\tlet $recordID = if type::is_object(${creationBlock.recordVar}) && type::is_record(${creationBlock.recordVar}.id) {`,
+    `\t\t${creationBlock.recordVar}.id`,
+    `\t} else if type::is_record(${creationBlock.recordVar}) {`,
+    `\t\t${creationBlock.recordVar}`,
+    `\t} else {`,
+    `\t\tnull`,
+    `\t};`,
+    '',
+    `\tif !$recordID {`,
+    `\t\tthrow "${functionName} | failed to create ${tableModel}";`,
+    `\t};`,
+    ''
+  );
 
   const relationPost = buildRelationPostProcessLines(
     relationHooks,
-    creationBlock.recordIdExpr,
+    '$recordID',
     '$payload',
     'create',
     relationNormalize.length > 0
   );
   const taxonomyPost = buildTaxonomyPostProcessLines(
     taxonomyHooks,
-    creationBlock.recordIdExpr,
+    '$recordID',
     '$payload',
     'create',
     taxonomyNormalize.length > 0
@@ -506,10 +545,16 @@ function buildCreateFunctionContent(
   if (taxonomyPost.length > 0) {
     lines.push(...taxonomyPost, '');
   }
+  if (subtableCreateMode === 'function') {
+    const subtableCreateLines = buildSubtableCreateLines(subtablePlans, '$recordID');
+    if (subtableCreateLines.length > 0) {
+      lines.push(...subtableCreateLines, '');
+    }
+  }
 
   const successReturn =
     returnMode === 'id'
-      ? `${creationBlock.recordVar}['id']`
+      ? `$recordID`
       : `${creationBlock.recordVar}`;
 
   lines.push(
@@ -993,6 +1038,302 @@ function buildFieldPayloadStripLines(fields: NormalizedField[], payloadVar: stri
   if (ignored.length === 0) return [];
   const items = ignored.map((name) => `"${name}"`).join(', ');
   return [`\tlet ${payloadVar} = fn::objectRemove(${payloadVar}, [${items}]);`];
+}
+
+interface SubtableCreateInputConfig {
+  field: string;
+  many: boolean;
+  required: boolean;
+}
+
+interface ResolvedSubtableCreatePlan {
+  model: string;
+  tableType: 'subsingle' | 'submany';
+  input: SubtableCreateInputConfig;
+  autoCreate: boolean;
+  createFunctionName: string;
+  scalarField: string | null;
+  hasOrderField: boolean;
+}
+
+function buildSubtableCreatePlans(
+  table: TableMigrationConfig,
+  tablesByModel: Map<string, TableMigrationConfig>
+): ResolvedSubtableCreatePlan[] {
+  const entries = table.subTables ?? [];
+  if (entries.length === 0) return [];
+
+  const plans: ResolvedSubtableCreatePlan[] = [];
+
+  for (const entry of entries) {
+    const model = entry.model?.trim();
+    if (!model) continue;
+
+    const childTable =
+      tablesByModel.get(model) ??
+      Array.from(tablesByModel.values()).find(
+        (candidate) =>
+          candidate.table?.model === model ||
+          (entry.name && candidate.name?.toLowerCase() === entry.name.toLowerCase())
+      );
+    if (!childTable) continue;
+
+    const tableType = entry.tableType ?? childTable.tableType ?? 'subsingle';
+    if (tableType !== 'subsingle' && tableType !== 'submany') continue;
+
+    const crud = normalizeCrudConfig(childTable);
+    const createOperation = crud?.create;
+    if (!isOperationEnabled(createOperation)) continue;
+
+    const createFunctionName = resolveCrudFunctionName(
+      'create',
+      createOperation,
+      childTable,
+      tablesByModel
+    );
+    const input = normalizeSubtableCreateInput(entry, childTable, tableType);
+    const scalarField = resolveSubtablePayloadScalarField(childTable);
+    const hasOrderField = normalizeFields(childTable.fields).some((field) => field.name === 'order');
+    const autoCreate = entry.autoCreate !== false;
+
+    plans.push({
+      model,
+      tableType,
+      input,
+      autoCreate,
+      createFunctionName,
+      scalarField,
+      hasOrderField,
+    });
+  }
+
+  return plans;
+}
+
+function normalizeSubtableCreateInput(
+  entry: SubTableConfig,
+  childTable: TableMigrationConfig,
+  tableType: 'subsingle' | 'submany'
+): SubtableCreateInputConfig {
+  const defaultField = sanitizeCamel(
+    entry.name || childTable.name || entry.model || childTable.table?.model || 'subTable'
+  );
+  const defaultMany = tableType === 'submany';
+
+  let rawCreateInput: unknown;
+  if (entry.options && typeof entry.options === 'object') {
+    rawCreateInput = (entry.options as Record<string, unknown>).createInput;
+  }
+
+  if (typeof rawCreateInput === 'string') {
+    const field = rawCreateInput.trim();
+    return {
+      field: field || defaultField,
+      many: defaultMany,
+      required: false,
+    };
+  }
+
+  if (rawCreateInput && typeof rawCreateInput === 'object') {
+    const objectInput = rawCreateInput as Record<string, unknown>;
+    const rawField =
+      typeof objectInput.field === 'string'
+        ? objectInput.field
+        : typeof objectInput.key === 'string'
+          ? objectInput.key
+          : typeof objectInput.name === 'string'
+            ? objectInput.name
+            : '';
+    const field = rawField.trim() || defaultField;
+    return {
+      field,
+      many: typeof objectInput.many === 'boolean' ? objectInput.many : defaultMany,
+      required: Boolean(objectInput.required),
+    };
+  }
+
+  return {
+    field: defaultField,
+    many: defaultMany,
+    required: false,
+  };
+}
+
+function resolveSubtablePayloadScalarField(table: TableMigrationConfig): string | null {
+  const fields = normalizeFields(table.fields).filter((field) => field.name !== 'id');
+  if (fields.length === 0) return null;
+
+  const preferred = ['label', 'name', 'title', 'value', 'key'];
+  for (const key of preferred) {
+    const match = fields.find(
+      (field) => field.name === key && field.meta.ignorePayload !== true && field.meta.assign !== true
+    );
+    if (match) return match.name;
+  }
+
+  const required = fields.find(
+    (field) =>
+      field.meta.required === true &&
+      field.meta.ignorePayload !== true &&
+      field.meta.assign !== true &&
+      !String(field.meta.type ?? '').toLowerCase().startsWith('record<')
+  );
+  if (required) return required.name;
+
+  const fallback = fields.find(
+    (field) =>
+      field.meta.ignorePayload !== true &&
+      field.meta.assign !== true &&
+      !String(field.meta.type ?? '').toLowerCase().startsWith('record<')
+  );
+  return fallback?.name ?? null;
+}
+
+function subtableInputVarName(field: string): string {
+  const safe = field.replace(/[^a-zA-Z0-9_]/g, '_');
+  return `$subtable_${safe}`;
+}
+
+function buildSubtableInputCaptureLines(
+  plans: ResolvedSubtableCreatePlan[],
+  payloadVar: string
+): string[] {
+  if (plans.length === 0) return [];
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const plan of plans) {
+    const field = plan.input.field;
+    if (seen.has(field)) continue;
+    seen.add(field);
+    lines.push(`\tlet ${subtableInputVarName(field)} = ${payloadVar}.${field};`);
+  }
+  return lines;
+}
+
+function buildSubtablePayloadStripLines(
+  plans: ResolvedSubtableCreatePlan[],
+  payloadVar: string
+): string[] {
+  if (plans.length === 0) return [];
+  const fields = Array.from(new Set(plans.map((plan) => plan.input.field)));
+  if (fields.length === 0) return [];
+  const items = fields.map((name) => JSON.stringify(name)).join(', ');
+  return [`\tlet ${payloadVar} = fn::objectRemove(${payloadVar}, [${items}]);`];
+}
+
+function buildSubtableInputValidationLines(
+  plans: ResolvedSubtableCreatePlan[],
+  functionName: string
+): string[] {
+  const lines: string[] = [];
+  for (const plan of plans) {
+    if (!plan.input.required) continue;
+    const accessor = subtableInputVarName(plan.input.field);
+    const missingExpr = `${accessor} = NONE || ${accessor} = null || (type::is_string(${accessor}) && string::len(${accessor}) = 0)`;
+    lines.push(
+      `\tif ${missingExpr} {`,
+      `\t\tthrow "${functionName} | requires ${plan.input.field}";`,
+      `\t};`
+    );
+    if (plan.input.many) {
+      lines.push(
+        `\tif type::is_array(${accessor}) && array::len(${accessor}) = 0 {`,
+        `\t\tthrow "${functionName} | requires ${plan.input.field}";`,
+        `\t};`
+      );
+    }
+  }
+  return lines;
+}
+
+function buildSubtableCreateLines(
+  plans: ResolvedSubtableCreatePlan[],
+  parentRecordVar: string
+): string[] {
+  if (plans.length === 0) return [];
+  const lines: string[] = [];
+
+  for (const plan of plans) {
+    const inputVar = subtableInputVarName(plan.input.field);
+    const safeBase = `${plan.input.field}_${plan.model}`.replace(/[^a-zA-Z0-9_]/g, '_');
+    const itemVar = `$subtable_item_${safeBase}`;
+    const payloadVar = `$subtable_payload_${safeBase}`;
+    const indexVar = `$subtable_index_${safeBase}`;
+    const scalarPayloadExpr = buildSubtablePayloadExpression(itemVar, plan.scalarField);
+    const singlePayloadExpr = buildSubtablePayloadExpression(inputVar, plan.scalarField);
+
+    if (plan.tableType === 'submany') {
+      lines.push(`\tif type::is_array(${inputVar}) {`);
+      lines.push(`\t\tlet ${indexVar} = 0;`);
+      lines.push(`\t\tfor ${itemVar} in ${inputVar} {`);
+      lines.push(`\t\t\tlet ${payloadVar} = ${scalarPayloadExpr};`);
+      if (plan.hasOrderField) {
+        lines.push(
+          `\t\t\tlet ${payloadVar} = if ${payloadVar}.order = NONE {`,
+          `\t\t\t\tfn::objectAssign(${payloadVar}, { order: ${indexVar} })`,
+          `\t\t\t} else {`,
+          `\t\t\t\t${payloadVar}`,
+          `\t\t\t};`
+        );
+      }
+      lines.push(
+        `\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+      );
+      lines.push(`\t\t\tlet ${indexVar} = ${indexVar} + 1;`);
+      lines.push(`\t\t};`);
+      lines.push(`\t} else if type::is_object(${inputVar}) || ${inputVar} {`);
+      lines.push(`\t\tlet ${payloadVar} = ${singlePayloadExpr};`);
+      if (plan.hasOrderField) {
+        lines.push(
+          `\t\tlet ${payloadVar} = if ${payloadVar}.order = NONE {`,
+          `\t\t\tfn::objectAssign(${payloadVar}, { order: 0 })`,
+          `\t\t} else {`,
+          `\t\t\t${payloadVar}`,
+          `\t\t};`
+        );
+      }
+      lines.push(
+        `\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+      );
+      lines.push(`\t};`);
+      lines.push('');
+      continue;
+    }
+
+    lines.push(`\tif type::is_array(${inputVar}) {`);
+    lines.push(`\t\tif array::len(${inputVar}) > 0 {`);
+    lines.push(`\t\t\tlet ${itemVar} = array::first(${inputVar});`);
+    lines.push(`\t\t\tlet ${payloadVar} = ${scalarPayloadExpr};`);
+    lines.push(
+      `\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+    );
+    lines.push(`\t\t} else if ${plan.autoCreate ? 'true' : 'false'} {`);
+    lines.push(`\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, { skipExists: true });`);
+    lines.push(`\t\t};`);
+    lines.push(`\t} else if type::is_object(${inputVar}) || ${inputVar} {`);
+    lines.push(`\t\tlet ${payloadVar} = ${singlePayloadExpr};`);
+    lines.push(
+      `\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+    );
+    lines.push(`\t} else if ${plan.autoCreate ? 'true' : 'false'} {`);
+    lines.push(`\t\tfn::${plan.createFunctionName}(${parentRecordVar}, { skipExists: true });`);
+    lines.push(`\t};`);
+    lines.push('');
+  }
+
+  return lines;
+}
+
+function buildSubtablePayloadExpression(rawVar: string, scalarField: string | null): string {
+  if (!scalarField) {
+    return `if type::is_object(${rawVar}) { ${rawVar} } else { {} }`;
+  }
+  const key = formatObjectKey(scalarField);
+  return `if type::is_object(${rawVar}) { ${rawVar} } else if ${rawVar} = NONE || ${rawVar} = null { {} } else { { ${key}: ${rawVar} } }`;
+}
+
+function formatObjectKey(key: string): string {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : JSON.stringify(key);
 }
 
 function buildRelationNormalizationLines(
@@ -1545,7 +1886,7 @@ function buildSubtableCreateFunctionContent(
   const parentInfo = getParentInfo(table, tablesByModel);
   const parentModel = parentInfo?.parentModel;
 
-  const parentRecordType = parentModel ? `record<${parentModel}>` : 'record';
+  const parentRidModel = parentModel ?? 'record';
   const returnMode = operation.options?.return ?? 'id';
   const hooks = normalizeHooks(operation);
   const autoHooks = buildAutoHooks(table, 'create', '$recordID');
@@ -1553,7 +1894,7 @@ function buildSubtableCreateFunctionContent(
 
   const lines: string[] = [];
   lines.push(
-    `DEFINE FUNCTION OVERWRITE fn::${functionName}($PARENT_ID: ${parentRecordType}, $payload: option<object>) {`,
+    `DEFINE FUNCTION OVERWRITE fn::${functionName}($PARENT_ID: any, $payload: option<object>) {`,
     '',
     `	let $payloadInput = if type::is_object($payload) {`,
     `		$payload`,
@@ -1561,6 +1902,7 @@ function buildSubtableCreateFunctionContent(
     `		{}`,
     `	};`,
     '',
+	`	let $PARENT_ID = fn::ridParam("${parentRidModel}", $PARENT_ID);`,
 	`	if !type::is_record($PARENT_ID) {`,
 	`		throw "${functionName} | requires valid parent record";`,
 	`	};`,
@@ -2205,7 +2547,9 @@ function normalizeFields(rawFields: TableFieldEntry[] | undefined): NormalizedFi
 }
 
 function isInstanceEnabled(table: TableMigrationConfig): boolean {
-  if ((table as any).instance !== true) return false;
+  const instanceFlag = (table as any).instance;
+  if (instanceFlag === false || instanceFlag === null || instanceFlag === undefined) return false;
+  if (typeof instanceFlag === 'object' && instanceFlag.enabled === false) return false;
   const tableModel = table.table?.model ?? sanitizeCamel(table.name);
   if (tableModel === 'instance') return false;
   return true;

@@ -19,7 +19,7 @@ import { generateTableIndexes } from './lib/indexGenerator';
 import { generateResourceViews } from './lib/resourceViewGenerator';
 import { generateTableEdges } from './lib/edgeGenerator';
 import { writeTableBundles } from './lib/tableBundleWriter';
-import { attachChildBootstrapEvents } from './lib/subtableEvents';
+import { attachChildBootstrapEventsWithMode } from './lib/subtableEvents';
 import { generateTableTaxonomies } from './lib/taxonomyGenerator';
 import { generateTableRelations } from './lib/relationGenerator';
 import { generateRequestSchema } from './lib/requestSchemaGenerator';
@@ -2328,7 +2328,8 @@ export type AppRouter = typeof appRouter
         }
       }
 
-      attachChildBootstrapEvents(tables);
+      const subtableCreateMode = bundle.app.events?.subtableCreateMode ?? 'function';
+      attachChildBootstrapEventsWithMode(tables, subtableCreateMode);
 
       const outputRoot = path.resolve(projectRoot, 'config/migrations');
       await generateTableFunctions({
@@ -2336,6 +2337,7 @@ export type AppRouter = typeof appRouter
         outputRoot,
         assetTracking: { projectRoot },
         eventFileMode: bundle.app.events?.fileMode,
+        subtableCreateMode,
       });
       await generateTableTaxonomies({ tables, outputRoot, assetTracking: { projectRoot } });
     }
@@ -2426,7 +2428,8 @@ export type AppRouter = typeof appRouter
         }
       }
       warnMissingCrudOrRouter(tables);
-      attachChildBootstrapEvents(tables);
+      const subtableCreateMode = bundle.app.events?.subtableCreateMode ?? 'function';
+      attachChildBootstrapEventsWithMode(tables, subtableCreateMode);
 
       const projectFilter = parseList(args.project);
       const targetProjects = projectFilter
@@ -2652,6 +2655,7 @@ export type AppRouter = typeof appRouter
         outputRoot: migrationsOutputDir,
         assetTracking: { projectRoot },
         eventFileMode: bundle.app.events?.fileMode,
+        subtableCreateMode,
       });
 
       await generateTableEdges({
@@ -2764,7 +2768,7 @@ export type AppRouter = typeof appRouter
         })
         .option('with-schema-functions', {
           type: 'boolean',
-          describe: 'Import generated schema functions before seeds (default: true when --seed is enabled)',
+          describe: 'Import generated schema functions before seeds (default: false; opt-in)',
         })
         .option('module-sync', {
           type: 'string',
@@ -3664,10 +3668,7 @@ export type AppRouter = typeof appRouter
       const bundle = await loadConfigBundle(projectRoot);
       const onExisting = resolveOnExistingFlag(args['on-existing'], bundle.app.onExisting);
       const onlyChanged = resolveOnlyChanged(args['only-changed'], args.force, bundle.app.importFilters?.onlyChanged);
-      const importSchemaFunctions =
-        typeof args['with-schema-functions'] === 'boolean'
-          ? args['with-schema-functions']
-          : args.seed !== false;
+      const importSchemaFunctions = args['with-schema-functions'] === true;
       const fileFilters = bundle.app.importFilters?.files;
       const cleanupFilters = bundle.app.importFilters?.cleanup;
 
@@ -4014,6 +4015,8 @@ export type AppRouter = typeof appRouter
                 onlyChanged,
               });
             }
+          } else {
+            console.log('ℹ️  Skipping schema migration functions (enable with --with-schema-functions).');
           }
 
           if (args.seed !== false) {

@@ -70,6 +70,7 @@ export type SubTableStub = {
   model: string;
   description?: string;
   fields: FieldDef[];
+  options?: Record<string, any>;
   tableType?: 'subsingle' | 'submany';
   caps?: CapFlag;
   edges?: EdgeDef[];
@@ -2500,9 +2501,87 @@ async function writeTaxonomyTermTables(
   }
 }
 
+type SubtableInputBinding = {
+  field: FieldDef;
+  target: string;
+  many: boolean;
+  subtableIndex: number;
+};
+
+function extractSubtableInputBindings(fields: FieldDef[], subTables: SubTableStub[]): SubtableInputBinding[] {
+  if (!fields.length || !subTables.length) return [];
+
+  const bindings: SubtableInputBinding[] = [];
+  for (const field of fields) {
+    const parsed = parseSubtableInputType(field.type);
+    if (!parsed) continue;
+
+    const subtableIndex = resolveSubtableInputIndex(parsed.target, subTables);
+    if (subtableIndex === -1) {
+      console.warn(
+        `⚠️  Subtable input "${field.name}" targets "${parsed.target}" but no matching subtable was found.`
+      );
+      continue;
+    }
+
+    bindings.push({
+      field,
+      target: parsed.target,
+      many: parsed.many,
+      subtableIndex,
+    });
+  }
+
+  return bindings;
+}
+
+function parseSubtableInputType(rawType?: string): { target: string; many: boolean } | null {
+  if (!rawType) return null;
+  const compact = rawType.trim().replace(/\s+/g, '');
+  const keywordMatch = compact.match(/^(submany|subsingle|subtable\*?)<(.+)>$/i);
+  if (!keywordMatch || !keywordMatch[1] || !keywordMatch[2]) return null;
+  const keyword = keywordMatch[1].toLowerCase();
+  const keywordMany = keyword === 'submany' || keyword === 'subtable*';
+  let target = keywordMatch[2].trim();
+  let innerMany = false;
+  if (target.startsWith('*')) {
+    innerMany = true;
+    target = target.slice(1).trim();
+  }
+  if (!target) return null;
+  const many =
+    keyword === 'subsingle'
+      ? false
+      : keywordMany || innerMany;
+  return {
+    target,
+    many,
+  };
+}
+
+function resolveSubtableInputIndex(target: string, subTables: SubTableStub[]): number {
+  const targetLower = target.toLowerCase();
+  const targetModel = normalizeModelName(target).toLowerCase();
+  for (let i = 0; i < subTables.length; i++) {
+    const sub = subTables[i];
+    const model = normalizeModelName(sub.model).toLowerCase();
+    const label = sub.label.toLowerCase();
+    if (targetLower === label || targetLower === model || targetModel === model) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 function buildSpec(t: TableAst): any {
   const idField = t.fields.find((f) => f.isId);
-  const fields = t.fields.filter((f) => !f.isId);
+  const dataFields = t.fields.filter((f) => !f.isId);
+  const subtableInputBindings = extractSubtableInputBindings(dataFields, t.subTables ?? []);
+  const subtableInputFieldNames = new Set(subtableInputBindings.map((binding) => binding.field.name));
+  const fields = dataFields.filter((field) => !subtableInputFieldNames.has(field.name));
+  const subtableInputByIndex = new Map<number, SubtableInputBinding>(
+    subtableInputBindings.map((binding) => [binding.subtableIndex, binding])
+  );
   const tableType = t.tableType ?? (t.parentModel ? 'subsingle' : 'primary');
   let normalizedFields = fields;
   if (tableType === 'submany') {
@@ -2590,7 +2669,7 @@ function buildSpec(t: TableAst): any {
     };
   }
 
-  const indexes = collectIndexes(t);
+  const indexes = collectIndexes(t.model, fields);
   if (indexes.length) out.indexes = indexes;
 
   if (t.edges.length) {
@@ -2611,12 +2690,45 @@ function buildSpec(t: TableAst): any {
   }
 
   if (t.subTables.length) {
-    out.subTables = t.subTables.map((s) => ({
-      name: s.label,
-      model: s.model,
-      autoCreate: s.tableType === 'submany' ? false : true,
-      ...(s.tableType ? { tableType: s.tableType } : {}),
-    }));
+    out.subTables = t.subTables.map((s, index) => {
+      const binding = subtableInputByIndex.get(index);
+      const subtableType = s.tableType;
+      const inferredMany = subtableType === 'submany';
+      if (binding && binding.many !== inferredMany) {
+        console.warn(
+          `⚠️  Subtable input "${binding.field.name}" uses ${
+            binding.many ? 'many' : 'single'
+          } tag syntax but connection "${s.label}" is ${inferredMany ? 'submany' : 'subsingle'}. Using connection type.`
+        );
+      }
+      const createInput =
+        binding
+          ? {
+              field: binding.field.name,
+              many: inferredMany,
+              required: binding.field.required,
+            }
+          : undefined;
+      const existingOptions =
+        s.options && typeof s.options === 'object'
+          ? { ...s.options }
+          : {};
+      const options =
+        createInput
+          ? {
+              ...existingOptions,
+              createInput,
+            }
+          : existingOptions;
+
+      return {
+        name: s.label,
+        model: s.model,
+        autoCreate: s.tableType === 'submany' ? false : true,
+        ...(s.tableType ? { tableType: s.tableType } : {}),
+        ...(Object.keys(options).length > 0 ? { options } : {}),
+      };
+    });
   }
 
   if (t.caps.crud) {
@@ -4866,33 +4978,33 @@ function buildCrud(mask: string) {
   return crud;
 }
 
-function collectIndexes(t: TableAst) {
+function collectIndexes(tableModel: string, fields: FieldDef[]) {
   const out: any[] = [];
-  for (const f of t.fields) {
+  for (const f of fields) {
     for (const tag of f.tags) {
       if (tag.kind === 'unique') {
         out.push({
-          name: toPascal(`${t.model}_${f.name}_unique`),
+          name: toPascal(`${tableModel}_${f.name}_unique`),
           mode: 'OVERWRITE',
           fields: [f.name],
           unique: true,
         });
       } else if (tag.kind === 'index') {
         out.push({
-          name: toPascal(`${t.model}_${f.name}_idx`),
+          name: toPascal(`${tableModel}_${f.name}_idx`),
           mode: 'OVERWRITE',
           fields: [f.name],
         });
       } else if (tag.kind === 'count') {
         out.push({
-          name: toPascal(`${t.model}_${f.name}_count`),
+          name: toPascal(`${tableModel}_${f.name}_count`),
           mode: 'OVERWRITE',
           fields: [f.name],
           count: true,
         });
       } else if (tag.kind === 'fulltext') {
         out.push({
-          name: toPascal(`${t.model}_${f.name}_ft`),
+          name: toPascal(`${tableModel}_${f.name}_ft`),
           mode: 'OVERWRITE',
           fields: [f.name],
           fulltext: {

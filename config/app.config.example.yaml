@@ -240,7 +240,8 @@ graph:
 modules:
   - api
   - post
-  - instance
+  - name: instance
+    active: true
   - refreshViews
   - taxonomies
 

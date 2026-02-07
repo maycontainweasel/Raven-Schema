@@ -206,6 +206,12 @@ export interface EventsConfig {
    * - table: one file per table, containing all events
    */
   fileMode?: 'split' | 'table';
+  /**
+   * Where parent subtable bootstrap creation is handled.
+   * - function: create subtables explicitly in parent create functions (default)
+   * - event: create subtables via generated CREATE events
+   */
+  subtableCreateMode?: 'function' | 'event';
 }
 
 export interface UiConfig {
@@ -778,9 +784,20 @@ export interface CrudOperationHooks {
 export interface SubTableConfig {
   name: string;
   model: string;
-  options?: Record<string, unknown>;
+  options?: SubTableOptionsConfig;
   autoCreate?: boolean;
   tableType?: 'subsingle' | 'submany';
+}
+
+export interface SubTableOptionsConfig {
+  createInput?: string | SubTableCreateInputConfig;
+  [key: string]: unknown;
+}
+
+export interface SubTableCreateInputConfig {
+  field: string;
+  many?: boolean;
+  required?: boolean;
 }
 
 export type OnExistingMode = 'OVERWRITE' | 'IF NOT EXISTS' | 'NONE';

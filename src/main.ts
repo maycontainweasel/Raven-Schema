@@ -13,7 +13,7 @@ import { writeTableBundles } from './lib/tableBundleWriter';
 import { runTableEdges } from './lib/edgeRunner';
 import { runTableEvents } from './lib/eventRunner';
 import { runBootstrapFunctions, runBootstrapTables } from './lib/bootstrapRunner';
-import { attachChildBootstrapEvents } from './lib/subtableEvents';
+import { attachChildBootstrapEventsWithMode } from './lib/subtableEvents';
 import { generateTableTaxonomies } from './lib/taxonomyGenerator';
 import { generateTableRelations } from './lib/relationGenerator';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures } from './lib/schemaKitConfig';
@@ -89,7 +89,8 @@ async function main(): Promise<void> {
     `🗃️  Database target(s): ${databaseTargets.map((target) => target.name).join(', ')}`
   );
 
-  attachChildBootstrapEvents(tableMigrations);
+  const subtableCreateMode = app.events?.subtableCreateMode ?? 'function';
+  attachChildBootstrapEventsWithMode(tableMigrations, subtableCreateMode);
 
   console.log(`🗂️  Loaded ${tableMigrations.length} table definition(s) from ${app.paths.migrations}`);
 
@@ -191,6 +192,7 @@ async function main(): Promise<void> {
       tables: tableMigrations,
       outputRoot: migrationsOutputDir,
       assetTracking: { projectRoot },
+      subtableCreateMode,
     });
     await generateTableTaxonomies({
       tables: tableMigrations,
