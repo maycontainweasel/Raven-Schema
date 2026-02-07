@@ -619,7 +619,7 @@ let $RID = $before.id;
 if !type::is_record($RID) { throw "${eventName} | invalid record id"; };
 let $PID = fn::PID($RID);
 fn::deleteEdge($PID, "Post", $RID, { boundId: true });
-fn::deletePost($PID, { skipExists: true });`.trim();
+fn::deletePost($PID);`.trim();
 }
 
 function resolvePostCreatePayload(

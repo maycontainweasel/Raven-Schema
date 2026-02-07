@@ -2340,6 +2340,7 @@ export type AppRouter = typeof appRouter
         subtableCreateMode,
       });
       await generateTableTaxonomies({ tables, outputRoot, assetTracking: { projectRoot } });
+      await generateTableRelations({ tables, outputRoot, assetTracking: { projectRoot } });
     }
   )
   .command(
@@ -3668,7 +3669,6 @@ export type AppRouter = typeof appRouter
       const bundle = await loadConfigBundle(projectRoot);
       const onExisting = resolveOnExistingFlag(args['on-existing'], bundle.app.onExisting);
       const onlyChanged = resolveOnlyChanged(args['only-changed'], args.force, bundle.app.importFilters?.onlyChanged);
-      const importSchemaFunctions = args['with-schema-functions'] === true;
       const fileFilters = bundle.app.importFilters?.files;
       const cleanupFilters = bundle.app.importFilters?.cleanup;
 
@@ -3908,7 +3908,7 @@ export type AppRouter = typeof appRouter
         })
         .option('with-schema-functions', {
           type: 'boolean',
-          describe: 'Import generated schema functions before seeds (default: true when --seed is enabled)',
+          describe: 'Import generated schema functions before seeds (default: false; opt-in)',
         })
         .option('dry-run', {
           type: 'boolean',
@@ -3940,10 +3940,7 @@ export type AppRouter = typeof appRouter
       const targetDatabases = resolveDatabaseTargets(bundle.app, parseList(args.database));
       const onExisting = resolveOnExistingFlag(args['on-existing'], bundle.app.onExisting);
       const onlyChanged = resolveOnlyChanged(args['only-changed'], args.force, bundle.app.importFilters?.onlyChanged);
-      const importSchemaFunctions =
-        typeof args['with-schema-functions'] === 'boolean'
-          ? args['with-schema-functions']
-          : args.seed !== false;
+      const importSchemaFunctions = args['with-schema-functions'] === true;
 
       const cliModules = parseList(args.modules);
       const configModules = resolveModulesConfig(bundle.app).enabled ?? [];

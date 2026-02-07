@@ -113,8 +113,8 @@ function normalizeRelation(
   const functions = {
     attach: relation.functions?.attach ?? `attach${prefixRightLeft}`,
     detach: relation.functions?.detach ?? `detach${prefixRightLeft}`,
-    getLeft: relation.functions?.getLeft ?? `get${prefixRightLeft}s`,
-    getRight: relation.functions?.getRight ?? `get${prefixLeftRight}s`,
+    getLeft: relation.functions?.getLeft ?? `get${pluralize(prefixRightLeft)}`,
+    getRight: relation.functions?.getRight ?? `get${pluralize(prefixLeftRight)}`,
   };
 
   return {
@@ -187,6 +187,12 @@ function formatRelation(rel: NormalizedRelation): string {
 function pluralize(value: string): string {
   if (!value) return value;
   if (value.endsWith('s')) return value;
+  if (/[sxz]$/i.test(value) || /(ch|sh)$/i.test(value)) {
+    return `${value}es`;
+  }
+  if (/[^aeiou]y$/i.test(value)) {
+    return `${value.slice(0, -1)}ies`;
+  }
   return `${value}s`;
 }
 
