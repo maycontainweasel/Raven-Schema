@@ -4,7 +4,7 @@ import { hideBin } from 'yargs/helpers';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { rm, stat } from 'fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'fs/promises';
 import readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
 import { spawn } from 'child_process';
@@ -55,7 +55,6 @@ import { runSiteCreate } from './cli/siteCreate';
 import { runSiteDelete } from './cli/siteDelete';
 import { runSiteEnvSync } from './cli/siteEnvSync';
 import { runSiteEnvYamlSync, runSiteEnvPreview } from './cli/siteEnvYamlSync';
-import { runSitePkgSync } from './cli/sitePkgSync';
 import { runSitePkgAdd } from './cli/sitePkgAdd';
 import { runSiteDeployInit } from './cli/siteDeployInit';
 import { runSiteDeploySsl } from './cli/siteDeploySsl';
@@ -92,9 +91,9 @@ import { DEFAULT_ASSET_RECORD_ID } from './lib/assetTracker';
 import { connectSurreal } from './lib/surrealClient';
 import { normalizeCrudConfig } from './lib/crudHelpers';
 import { normalizeOnExisting } from './lib/onExisting';
+import { getTableAssetDir } from './lib/tableAssetPaths';
 import { buildTableFileNameCandidates, matchesTableKey, toKebabCase, toPascalCase } from './cli/util';
 import YAML from 'yaml';
-import { readFile, writeFile, readdir, rm, mkdir } from 'fs/promises';
 import type { TableMigrationConfig } from './types';
 import type { AppConfig, AppDatabaseConfig, ProjectPathsConfig } from './types';
 
@@ -2391,6 +2390,11 @@ export type AppRouter = typeof appRouter
           default: true,
           describe: 'Clear generated schema-kit module assets before generation',
         })
+        .option('fresh', {
+          type: 'boolean',
+          default: false,
+          describe: 'Prune stale generated assets so outputs exactly match the current effective specs',
+        })
         .option('sync-graph', {
           type: 'boolean',
           describe: 'Sync graph.mpdg to specs before generation',
@@ -2428,6 +2432,11 @@ export type AppRouter = typeof appRouter
       const targetProjects = projectFilter
         ? bundle.app.paths.projects.filter((proj) => projectFilter.has(proj.name))
         : bundle.app.paths.projects;
+      const freshRequested = args.fresh === true;
+      const freshEnabled = freshRequested && !targetName;
+      if (freshRequested && targetName) {
+        console.warn('⚠️  --fresh is ignored when targeting a single table (--name). Run without --name for full pruning.');
+      }
 
       const projectRootDir = path.resolve(projectRoot);
       const migrationsOutputDir = path.resolve(projectRootDir, 'config/migrations');
@@ -2443,10 +2452,16 @@ export type AppRouter = typeof appRouter
         bundle.app.layers?.sync ??
         'auto';
       const syncLayersEnabled = args['sync-layers'] !== false;
+      if (freshEnabled) {
+        await pruneMigrationDirectoriesToMatchSpecs(migrationTables, migrationsOutputDir);
+      }
       if (syncLayersEnabled) {
         await writeAuthLayerConfig({ projectRoot: projectRootDir, app: bundle.app });
       }
-      if (args['clear-module'] !== false) {
+      if (freshEnabled && args['clear-module'] === false) {
+        console.warn('⚠️  --fresh forces module cleanup; ignoring --no-clear-module.');
+      }
+      if (freshEnabled || args['clear-module'] !== false) {
         await clearModuleGeneratedAssets({
           moduleRoot: path.resolve(projectRootDir, moduleSource),
           runtime: true,
@@ -2495,7 +2510,7 @@ export type AppRouter = typeof appRouter
       let typesGenerated = 0;
       for (const project of targetProjects) {
         if (project.generated?.types) {
-          const pruneStaleTypes = bundle.app.graph?.spec?.pruneStale !== false;
+          const pruneStaleTypes = freshEnabled || bundle.app.graph?.spec?.pruneStale !== false;
           await generateTableTypes({
             tables,
             outputRoot: path.resolve(projectRootDir, project.generated.types),
@@ -2532,6 +2547,7 @@ export type AppRouter = typeof appRouter
             requestSchemaImportPath: requestSchemaImport,
             typesenseCollectionsImportPath: typesenseCollectionsImport,
             includeRedisRouter,
+            pruneStaleWrappers: freshEnabled,
           });
           routersGenerated += 1;
         }
@@ -5362,6 +5378,71 @@ function mergeTableLists(
     }
   }
   return Array.from(byModel.values());
+}
+
+async function pruneMigrationDirectoriesToMatchSpecs(
+  migrationTables: TableMigrationConfig[],
+  migrationsOutputDir: string
+): Promise<void> {
+  await mkdir(migrationsOutputDir, { recursive: true });
+
+  const tablesByModel = new Map<string, TableMigrationConfig>();
+  for (const table of migrationTables) {
+    const model = table.table?.model;
+    if (model) {
+      tablesByModel.set(model, table);
+    }
+  }
+
+  const keepDirs = new Set<string>();
+  for (const table of migrationTables) {
+    const relative = normalizePosixRelative(getTableAssetDir(table, tablesByModel, ''));
+    if (!relative) continue;
+    const parts = relative.split('/').filter(Boolean);
+    let cursor = '';
+    for (const part of parts) {
+      cursor = cursor ? path.posix.join(cursor, part) : part;
+      keepDirs.add(cursor);
+    }
+  }
+
+  const removed: string[] = [];
+  await pruneUnexpectedMigrationDirs(migrationsOutputDir, '', keepDirs, removed);
+  if (removed.length > 0) {
+    const preview = removed.slice(0, 5).join(', ');
+    const overflow = removed.length > 5 ? ` (+${removed.length - 5} more)` : '';
+    const noun = removed.length === 1 ? 'directory' : 'directories';
+    console.log(`🧹 Fresh mode pruned ${removed.length} stale migration ${noun}: ${preview}${overflow}`);
+  }
+}
+
+async function pruneUnexpectedMigrationDirs(
+  rootDir: string,
+  relativeDir: string,
+  keepDirs: Set<string>,
+  removed: string[]
+): Promise<void> {
+  const currentDir = relativeDir ? path.join(rootDir, ...relativeDir.split('/')) : rootDir;
+  const entries = await readdir(currentDir, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const childRelative = relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name;
+    if (!keepDirs.has(childRelative)) {
+      const childPath = path.join(rootDir, ...childRelative.split('/'));
+      await rm(childPath, { recursive: true, force: true });
+      removed.push(childRelative);
+      continue;
+    }
+    await pruneUnexpectedMigrationDirs(rootDir, childRelative, keepDirs, removed);
+  }
+}
+
+function normalizePosixRelative(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
 }
 
 async function syncGraphSpecsIfNeeded(options: {

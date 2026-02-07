@@ -1,4 +1,4 @@
-import { access, mkdir, rm, writeFile, readFile } from 'fs/promises';
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type {
@@ -31,6 +31,7 @@ interface GenerateTrpcRoutersOptions {
   typesenseCollectionsImportPath?: string;
   includeRedisRouter?: boolean;
   includeApiAttemptRouter?: boolean;
+  pruneStaleWrappers?: boolean;
 }
 
 interface GeneratedRouterInfo {
@@ -58,6 +59,7 @@ export async function generateTrpcRouters(
     typesenseCollectionsImportPath,
     includeRedisRouter = false,
     includeApiAttemptRouter = true,
+    pruneStaleWrappers = false,
   } = options;
   const generatedDir = path.join(outputRoot, 'generated');
 
@@ -191,6 +193,9 @@ export async function generateTrpcRouters(
 
   await writeGeneratedIndex(generatedDir, routerInfos);
   await ensureRouterWrappers(outputRoot, routerInfos, contextImport);
+  if (pruneStaleWrappers) {
+    await pruneRouterWrappers(outputRoot, routerInfos);
+  }
 }
 
 async function buildAdminRouterFile(options: {
@@ -3381,6 +3386,80 @@ async function ensureRouterWrappers(
     await writeFile(wrapperPath, stub, 'utf-8');
     console.log(`🧩 Created router wrapper stub: ${path.relative(process.cwd(), wrapperPath)}`);
   }
+}
+
+async function pruneRouterWrappers(
+  routersRoot: string,
+  routerInfos: GeneratedRouterInfo[]
+): Promise<void> {
+  const expectedBasePaths = new Set(routerInfos.map((info) => info.basePath.replace(/\\/g, '/')));
+  const removed: string[] = [];
+  await pruneRouterWrapperFiles(routersRoot, '', expectedBasePaths, removed);
+  await pruneEmptyRouterWrapperDirs(routersRoot, '');
+  if (removed.length > 0) {
+    const preview = removed.slice(0, 5).join(', ');
+    const overflow = removed.length > 5 ? ` (+${removed.length - 5} more)` : '';
+    const noun = removed.length === 1 ? 'wrapper' : 'wrappers';
+    console.log(`🧹 Fresh mode pruned ${removed.length} stale router ${noun}: ${preview}${overflow}`);
+  }
+}
+
+async function pruneRouterWrapperFiles(
+  routersRoot: string,
+  relativeDir: string,
+  expectedBasePaths: Set<string>,
+  removed: string[]
+): Promise<void> {
+  const dirPath = relativeDir ? path.join(routersRoot, ...relativeDir.split('/')) : routersRoot;
+  const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    const childRelative = relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name;
+    if (entry.isDirectory()) {
+      if (entry.name === 'generated') continue;
+      await pruneRouterWrapperFiles(routersRoot, childRelative, expectedBasePaths, removed);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+
+    const basePath = childRelative.slice(0, -3);
+    if (expectedBasePaths.has(basePath)) continue;
+    if (isProtectedRouterFile(childRelative)) continue;
+
+    const filePath = path.join(routersRoot, ...childRelative.split('/'));
+    const content = await readFile(filePath, 'utf-8').catch(() => null);
+    if (!content || !looksLikeSchemaWrapper(content)) continue;
+
+    await rm(filePath, { force: true });
+    removed.push(childRelative);
+  }
+}
+
+async function pruneEmptyRouterWrapperDirs(routersRoot: string, relativeDir: string): Promise<void> {
+  const dirPath = relativeDir ? path.join(routersRoot, ...relativeDir.split('/')) : routersRoot;
+  const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === 'generated') continue;
+    const childRelative = relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name;
+    await pruneEmptyRouterWrapperDirs(routersRoot, childRelative);
+  }
+
+  if (!relativeDir) return;
+  const remaining = await readdir(dirPath, { withFileTypes: true }).catch(() => []);
+  if (remaining.length === 0) {
+    await rm(dirPath, { recursive: true, force: true });
+  }
+}
+
+function isProtectedRouterFile(relativeFilePath: string): boolean {
+  const base = path.posix.basename(relativeFilePath);
+  return base === '_app.ts' || base === 'api.ts' || base === 'index.ts' || base === 'context.ts';
+}
+
+function looksLikeSchemaWrapper(source: string): boolean {
+  return /from\s+['"]\.{1,2}\/generated\//.test(source) && /\bt\.mergeRouters\(/.test(source);
 }
 
 function replaceContextImport(source: string, contextImport: string): string {

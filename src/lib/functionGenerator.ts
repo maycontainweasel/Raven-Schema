@@ -361,9 +361,7 @@ function buildCreateFunctionContent(
 
   const relationValidations = buildRelationValidations(relationHooks, '$payload', functionName, 'create');
   const taxonomyValidations = buildTaxonomyValidations(taxonomyHooks, '$payload', functionName, 'create');
-  const validations = requiredFields.map(
-    (field) => `\tif !$payload.${field} {\n\t\tthrow "${functionName} | requires ${field}";\n\t};`
-  );
+  const validations = buildRequiredFieldValidations(requiredFields, '$payload', functionName);
   const enumValidations = buildEnumValidationLines(fields, '$payload', functionName, {
     requiredOnly: true,
     onlyIfPresent: false,
@@ -1458,7 +1456,7 @@ function buildTaxonomyTermExpression(
     return `type::record('${model}', fn::stringID([${args.join(', ')}]))`;
   }
 
-  const fieldMatch = normalized.match(/^<\\s*field\\s*:\\s*([a-zA-Z0-9_.]+)\\s*>$/i);
+  const fieldMatch = normalized.match(/^<\s*field\s*:\s*([a-zA-Z0-9_.]+)\s*>$/i);
   if (fieldMatch && fieldMatch[1]) {
     return `type::record('${model}', ${payloadVar}.${fieldMatch[1].trim()})`;
   }
@@ -1471,7 +1469,10 @@ function normalizeTermId(termId: string, tableModel: string, taxonomyKey: string
   const stringId = parseStringIdSpec(trimmed);
   if (stringId && stringId.fn === 'stringID' && stringId.args.length === 3) {
     const [a, b, c] = stringId.args;
-    const fieldKeyMatch = /^<\\s*field\\s*:\\s*key\\s*>$/i.test(c);
+    if (!c) {
+      return termId;
+    }
+    const fieldKeyMatch = /^<\s*field\s*:\s*key\s*>$/i.test(c);
     if (a === tableModel && b === taxonomyKey && fieldKeyMatch) {
       return `<field:key>`;
     }
@@ -1480,7 +1481,7 @@ function normalizeTermId(termId: string, tableModel: string, taxonomyKey: string
 }
 
 function parseStringIdSpec(value: string): { fn: 'stringID' | 'stringRIDs'; args: string[] } | null {
-  const match = value.match(/^(stringID|stringRIDs)\\s*<(.+)>$/i);
+  const match = value.match(/^(stringID|stringRIDs)\s*<(.+)>$/i);
   if (!match || !match[1] || !match[2]) return null;
   const fn = match[1].toLowerCase() === 'stringrids' ? 'stringRIDs' : 'stringID';
   const args = match[2]
@@ -1497,7 +1498,7 @@ function normalizeIdToken(value: string): string {
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
     const inner = trimmed.slice(1, -1).trim();
-    const fieldMatch = inner.match(/^<\\s*field\\s*:\\s*([a-zA-Z0-9_.]+)\\s*>$/i);
+    const fieldMatch = inner.match(/^<\s*field\s*:\s*([a-zA-Z0-9_.]+)\s*>$/i);
     if (fieldMatch) return inner;
     const stringId = parseStringIdSpec(inner);
     if (stringId) return inner;
@@ -1507,7 +1508,7 @@ function normalizeIdToken(value: string): string {
 
 function resolveIdToken(token: string, payloadVar: string): string {
   const trimmed = token.trim();
-  const fieldMatch = trimmed.match(/<\\s*field\\s*:\\s*([a-zA-Z0-9_.]+)\\s*>/i);
+  const fieldMatch = trimmed.match(/<\s*field\s*:\s*([a-zA-Z0-9_.]+)\s*>/i);
   if (fieldMatch && fieldMatch[1]) {
     return `${payloadVar}.${fieldMatch[1].trim()}`;
   }
@@ -1539,7 +1540,7 @@ function buildSubtableCreateFunctionContent(
     if (idx !== -1) requiredFields.splice(idx, 1);
   }
   const defaultsObject = buildDefaultsObject(fields, '$payloadInput', '$PARENT_ID');
-  const assignOverrides = buildAssignOverrides(fields, '$payload');
+  const assignOverrides = buildAssignOverrides(fields, '$payload', '$PARENT_ID');
 
   const parentInfo = getParentInfo(table, tablesByModel);
   const parentModel = parentInfo?.parentModel;
@@ -1581,15 +1582,14 @@ function buildSubtableCreateFunctionContent(
     lines.push(...payloadStrip, '');
   }
 
-  if (requiredFields.length > 0) {
-    for (const field of requiredFields) {
-      lines.push(
-        `	if !$payloadInput.${field} {`,
-        `		throw "${functionName} | requires ${field}";`,
-        `	};`,
-        ''
-      );
-    }
+  const requiredValidations = buildRequiredFieldValidations(
+    requiredFields,
+    '$payloadInput',
+    functionName,
+    '\t'
+  );
+  if (requiredValidations.length > 0) {
+    lines.push(...requiredValidations, '');
   }
 
   const enumValidations = buildEnumValidationLines(fields, '$payloadInput', functionName, {
@@ -1813,6 +1813,25 @@ function collectRequiredFields(fields: NormalizedField[], options?: CrudOperatio
     }
   }
   return Array.from(required.values());
+}
+
+function buildRequiredFieldValidations(
+  requiredFields: string[],
+  payloadVar: string,
+  functionName: string,
+  indent = '\t'
+): string[] {
+  const lines: string[] = [];
+  for (const field of requiredFields) {
+    const accessor = `${payloadVar}.${field}`;
+    const missingExpr = `${accessor} = NONE || ${accessor} = null || (type::is_string(${accessor}) && string::len(${accessor}) = 0)`;
+    lines.push(
+      `${indent}if ${missingExpr} {`,
+      `${indent}\tthrow "${functionName} | requires ${field}";`,
+      `${indent}};`
+    );
+  }
+  return lines;
 }
 
 interface CreationBlock {
@@ -2093,7 +2112,7 @@ function resolveDefaultValue(meta: TableFieldMeta): string {
     const children = Object.entries(meta.fields).map(([name, child]) =>
       normalizeField(name, child as TableFieldMeta)
     );
-    return buildObjectLiteral(children, 0);
+    return buildObjectLiteral(children, '$payload', 0);
   }
 
   const primarySegment = meta.type?.split('|')[0]?.trim().toLowerCase() ?? 'string';
@@ -2207,7 +2226,11 @@ function resolvePasswordHash(fields: NormalizedField[]): string | null {
   return 'argon2';
 }
 
-function buildAssignOverrides(fields: NormalizedField[], payloadVar: string): string[] {
+function buildAssignOverrides(
+  fields: NormalizedField[],
+  payloadVar: string,
+  parentVar?: string
+): string[] {
   const assignments: string[] = [];
   const assigned = new Set<string>();
   const passwordHash = resolvePasswordHash(fields);
@@ -2218,7 +2241,7 @@ function buildAssignOverrides(fields: NormalizedField[], payloadVar: string): st
 
   assignments.push(...buildMd5Assignments(fields, payloadVar, assigned));
   assignments.push(...buildUuidAssignments(fields, assigned));
-  assignments.push(...buildExplicitAssignOverrides(fields, payloadVar, assigned));
+  assignments.push(...buildExplicitAssignOverrides(fields, payloadVar, assigned, parentVar));
   return assignments;
 }
 
@@ -2270,7 +2293,8 @@ function buildUuidAssignments(fields: NormalizedField[], assigned: Set<string>):
 function buildExplicitAssignOverrides(
   fields: NormalizedField[],
   payloadVar: string,
-  assigned: Set<string>
+  assigned: Set<string>,
+  parentVar?: string
 ): string[] {
   const assignments: string[] = [];
   for (const field of fields) {
@@ -2286,7 +2310,7 @@ function buildExplicitAssignOverrides(
     const recordModel = extractRecordModel(field.meta.type);
     if (recordModel) {
       const accessor = `${payloadVar}.${field.name}`;
-      const fallbackExpr = resolveDefaultExpression(field.meta.default, payloadVar);
+      const fallbackExpr = resolveDefaultExpression(field.meta.default, payloadVar, parentVar);
       if (!fallbackExpr) {
         continue;
       }
@@ -2300,7 +2324,7 @@ function buildExplicitAssignOverrides(
     }
     let expression: string;
     if (typeof field.meta.default === 'string') {
-      const substituted = replaceFieldReferences(field.meta.default, payloadVar);
+      const substituted = replaceFieldReferences(field.meta.default, payloadVar, parentVar);
       expression = serializeSurrealLiteral(substituted, 0);
     } else {
       expression = serializeSurrealLiteral(field.meta.default, 0);
