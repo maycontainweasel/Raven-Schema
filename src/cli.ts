@@ -16,6 +16,7 @@ import { runSitePkgSync } from './cli/sitePkgSync';
 import { loadAppConfig, loadConfigBundle, loadTableMigrations, resolveModuleOverridesDir } from './lib/configLoader';
 import { generateTableFunctions } from './lib/functionGenerator';
 import { generateTableIndexes } from './lib/indexGenerator';
+import { generateIndexUtilityFunctions } from './lib/indexUtilityGenerator';
 import { generateResourceViews } from './lib/resourceViewGenerator';
 import { generateTableEdges } from './lib/edgeGenerator';
 import { writeTableBundles } from './lib/tableBundleWriter';
@@ -2698,6 +2699,18 @@ export type AppRouter = typeof appRouter
       await generateTableIndexes({
         tables: migrationTables,
         outputRoot: migrationsOutputDir,
+        assetTracking: { projectRoot },
+      });
+
+      const activeModules = resolveModulesConfig(bundle.app).enabled ?? [];
+      const modulesRoot = bundle.app.paths.modules
+        ? path.resolve(projectRootDir, bundle.app.paths.modules)
+        : path.resolve(projectRootDir, 'config/bootstrap/modules');
+      await generateIndexUtilityFunctions({
+        projectRoot: projectRootDir,
+        migrationsRoot: migrationsOutputDir,
+        modulesRoot,
+        modules: activeModules,
         assetTracking: { projectRoot },
       });
 

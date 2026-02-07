@@ -14,6 +14,7 @@ import {
 } from '../lib/configLoader';
 import { normalizeCrudConfig } from '../lib/crudHelpers';
 import { generateTrpcRouters } from '../lib/routerGenerator';
+import { generateIndexUtilityFunctions } from '../lib/indexUtilityGenerator';
 import type { TableMigrationConfig } from '../types';
 import { removeEmptyDirs } from '../lib/fsUtils';
 
@@ -138,6 +139,17 @@ export async function generateModules(options: ModuleGenerateOptions): Promise<v
       });
     }
   }
+
+  const activeModules = appConfig
+    ? (resolveModulesConfig(appConfig).enabled ?? [])
+    : modules;
+  await generateIndexUtilityFunctions({
+    projectRoot,
+    migrationsRoot: path.resolve(projectRoot, 'config/migrations'),
+    modulesRoot,
+    modules: activeModules,
+    assetTracking: { projectRoot },
+  });
 }
 
 async function flattenSingleTableDir(root: string): Promise<void> {
