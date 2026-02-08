@@ -83,6 +83,8 @@ config/imports.config.yaml
 config/nginx.yaml
 config/sync.yaml
 
+config/bootstrap/functions/utility/initTaxonomies.surql
+
 # Graph + generated artifacts (per-project or generated)
 config/graph.ts
 config/graph.mmd
