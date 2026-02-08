@@ -14,6 +14,7 @@ interface NginxConfig {
   defaultListenPort?: number;
   defaultProxyPort?: number;
   restartCommand?: string;
+  nginxSudo?: boolean;
   mkcertCommand?: string;
 }
 
@@ -25,6 +26,7 @@ export interface ResolvedNginxConfig {
   defaultListenPort: number;
   defaultProxyPort: number;
   restartCommand: string;
+  nginxSudo: boolean;
   mkcertCommand: string;
 }
 
@@ -95,6 +97,7 @@ const DEFAULT_CONFIG: Required<Pick<
   | 'defaultListenPort'
   | 'defaultProxyPort'
   | 'restartCommand'
+  | 'nginxSudo'
   | 'mkcertCommand'
 >> = {
   serversPath: '/opt/homebrew/etc/nginx/servers',
@@ -104,6 +107,7 @@ const DEFAULT_CONFIG: Required<Pick<
   defaultListenPort: 4443,
   defaultProxyPort: 3000,
   restartCommand: 'nginx -t && brew services restart nginx',
+  nginxSudo: false,
   mkcertCommand: 'mkcert',
 };
 
@@ -142,6 +146,7 @@ export async function resolveNginxConfig(
     defaultListenPort: config.defaultListenPort,
     defaultProxyPort: config.defaultProxyPort,
     restartCommand: config.restartCommand,
+    nginxSudo: Boolean(config.nginxSudo),
     mkcertCommand: config.mkcertCommand,
   };
 }
@@ -273,6 +278,7 @@ export async function runNginxSetup(args: NginxSetupArgs, projectRoot: string): 
   const hostsPath = resolvePathMaybeHome(args.hostsPath ?? config.hostsPath, projectRoot);
   const templatePath = resolvePathMaybeHome(args.templatePath ?? config.templatePath, projectRoot);
   const restartCommand = args.restartCommand ?? config.restartCommand ?? DEFAULT_CONFIG.restartCommand;
+  const nginxSudo = (config.nginxSudo ?? DEFAULT_CONFIG.nginxSudo) === true;
   const mkcertCommand = args.mkcertCommand ?? config.mkcertCommand ?? DEFAULT_CONFIG.mkcertCommand;
 
   try {
@@ -330,8 +336,9 @@ export async function runNginxSetup(args: NginxSetupArgs, projectRoot: string): 
   }
 
   if (!args.skipRestart) {
-    console.log(`\nRestarting nginx with: ${restartCommand} (sudo required)...`);
-    await runShellCommand(`sudo ${restartCommand}`);
+    const restartCmd = nginxSudo ? `sudo ${restartCommand}` : restartCommand;
+    console.log(`\nRestarting nginx with: ${restartCmd}...`);
+    await runShellCommand(restartCmd);
   }
 
   console.log('\n✅ Nginx setup complete.');

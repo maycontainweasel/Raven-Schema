@@ -36,6 +36,7 @@ interface DeployAnswers {
   pm2Command: string;
   nginxSitesEnabled: string;
   restartCommand: string;
+  nginxSudo: boolean;
   overwriteNginx: boolean;
   overwriteApp: boolean;
   startPm2: boolean;
@@ -203,8 +204,8 @@ export async function runSiteDeployInit(options: {
   }
 
   console.log('🔧 Testing nginx config...');
-  await runSsh(sshTarget, 'sudo nginx -t');
-  await runSsh(sshTarget, `sudo ${answers.restartCommand}`);
+  await runSsh(sshTarget, maybeWithSudo('nginx -t', answers.nginxSudo));
+  await runSsh(sshTarget, maybeWithSudo(answers.restartCommand, answers.nginxSudo));
 
   if (answers.startPm2) {
     const pm2Available = await remoteCommandExists(sshTarget, answers.pm2Command);
@@ -251,6 +252,7 @@ export async function runSiteDeployInit(options: {
       pm2Command: answers.pm2Command,
       nginxSitesEnabled: answers.nginxSitesEnabled,
       restartCommand: answers.restartCommand,
+      nginxSudo: answers.nginxSudo,
       overwriteNginx: answers.overwriteNginx,
       overwriteApp: answers.overwriteApp,
       startPm2: answers.startPm2,
@@ -406,6 +408,7 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
+  const nginxSudo = (deploy as any).nginxSudo ?? false;
   const overwriteNginx = Boolean((deploy as any).overwriteNginx ?? false);
   const overwriteApp = Boolean((deploy as any).overwriteApp ?? false);
   const startPm2 = (deploy as any).startPm2 ?? true;
@@ -423,6 +426,7 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
     pm2Command,
     nginxSitesEnabled,
     restartCommand,
+    nginxSudo: Boolean(nginxSudo),
     overwriteNginx,
     overwriteApp,
     startPm2,
@@ -661,6 +665,10 @@ async function remotePortInUse(target: string, port: number): Promise<boolean> {
   const cmd = `ss -ltn | awk '{print $4}' | grep -q ':${port}$' && echo yes || echo no`;
   const output = await runSshCapture(target, cmd);
   return output.trim() === 'yes';
+}
+
+function maybeWithSudo(command: string, useSudo: boolean): string {
+  return useSudo ? `sudo ${command}` : command;
 }
 
 async function remoteCommandExists(target: string, command: string): Promise<boolean> {

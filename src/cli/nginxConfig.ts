@@ -10,6 +10,7 @@ templatePath: ./config/nginx.template.conf
 defaultListenPort: 4443
 defaultProxyPort: 3000
 restartCommand: "nginx -t && brew services restart nginx"
+nginxSudo: false
 mkcertCommand: "mkcert"
 `;
 

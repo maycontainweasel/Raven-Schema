@@ -24,6 +24,7 @@ interface DeploySslAnswers {
   redirect: boolean;
   nginxSitesEnabled: string;
   restartCommand: string;
+  nginxSudo: boolean;
 }
 
 const execFileAsync = promisify(execFile);
@@ -67,8 +68,8 @@ export async function runSiteDeploySsl(options: {
   await runSsh(sshTarget, `sudo certbot ${certbotArgs}`);
 
   console.log('🔧 Testing nginx config...');
-  await runSsh(sshTarget, 'sudo nginx -t');
-  await runSsh(sshTarget, `sudo ${answers.restartCommand}`);
+  await runSsh(sshTarget, maybeWithSudo('nginx -t', answers.nginxSudo));
+  await runSsh(sshTarget, maybeWithSudo(answers.restartCommand, answers.nginxSudo));
 
   console.log('✅ SSL setup complete.');
   console.log(`🌐 URL: https://${answers.domain}`);
@@ -144,6 +145,7 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeploySslAnswers {
   const redirect = ssl.redirect ?? false;
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
+  const nginxSudo = (deploy as any).nginxSudo ?? false;
   return {
     host,
     user,
@@ -152,6 +154,7 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeploySslAnswers {
     redirect: Boolean(redirect),
     nginxSitesEnabled,
     restartCommand,
+    nginxSudo: Boolean(nginxSudo),
   };
 }
 
@@ -232,6 +235,10 @@ async function runSshCapture(target: string, command: string): Promise<string> {
 
 function shellEscapePath(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function maybeWithSudo(command: string, useSudo: boolean): string {
+  return useSudo ? `sudo ${command}` : command;
 }
 
 function buildRemoteCommand(command: string): string {

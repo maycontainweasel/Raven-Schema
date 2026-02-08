@@ -32,6 +32,7 @@ interface DeployAnswers {
   pm2Command: string;
   nginxSitesEnabled: string;
   restartCommand: string;
+  nginxSudo: boolean;
   restartNginx: boolean;
   rsyncDelete: boolean;
   buildCommand: string;
@@ -347,6 +348,7 @@ function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAn
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
+  const nginxSudo = (deploy as any).nginxSudo ?? false;
   const restartNginx = (deploy as any).restartNginx ?? false;
   const rsyncDelete = (deploy as any).rsyncDelete ?? true;
   const buildCommand = (deploy as any).buildCommand ?? 'pnpm run build';
@@ -364,6 +366,7 @@ function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAn
     pm2Command,
     nginxSitesEnabled,
     restartCommand,
+    nginxSudo: Boolean(nginxSudo),
     restartNginx: Boolean(restartNginx),
     rsyncDelete: Boolean(rsyncDelete),
     buildCommand,
@@ -706,7 +709,10 @@ async function runDeployStep(
 
   if (resolvedAnswers.restartNginx) {
     console.log('🔁 Restarting nginx...');
-    await runSsh(sshTarget, `sudo ${resolvedAnswers.restartCommand}`);
+    await runSsh(
+      sshTarget,
+      maybeWithSudo(resolvedAnswers.restartCommand, resolvedAnswers.nginxSudo)
+    );
   }
 
   console.log('✅ Deploy complete.');
@@ -835,9 +841,16 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
   );
   await pruneEmptyParents(sshTarget, resolvedAnswers.appDir, resolvedAnswers.remoteBase);
   console.log('🔧 Testing nginx config...');
-  await runSsh(sshTarget, 'sudo nginx -t');
-  await runSsh(sshTarget, `sudo ${resolvedAnswers.restartCommand}`);
+  await runSsh(sshTarget, maybeWithSudo('nginx -t', resolvedAnswers.nginxSudo));
+  await runSsh(
+    sshTarget,
+    maybeWithSudo(resolvedAnswers.restartCommand, resolvedAnswers.nginxSudo)
+  );
   console.log('✅ Remote reset complete.');
+}
+
+function maybeWithSudo(command: string, useSudo: boolean): string {
+  return useSudo ? `sudo ${command}` : command;
 }
 
 async function assertSafeRemotePath(target: string, appDir: string): Promise<void> {

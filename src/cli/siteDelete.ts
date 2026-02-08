@@ -126,7 +126,10 @@ export async function runSiteDelete(options: {
   if (!options.skipRestart && !options.keepNginx) {
     const restart = options.yes ? true : await promptYesNo('Restart nginx now?', true);
     if (restart) {
-      await runShellCommand(`sudo ${resolved.restartCommand}`);
+      const restartCommand = resolved.nginxSudo
+        ? `sudo ${resolved.restartCommand}`
+        : resolved.restartCommand;
+      await runShellCommand(restartCommand);
     }
   }
 
