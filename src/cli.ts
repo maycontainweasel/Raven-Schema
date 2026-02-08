@@ -678,6 +678,197 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:helios:setup [name]',
+    'Configure Helios baseline (layer + Uno setup fragment)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('attributify', {
+          type: 'boolean',
+          describe: 'Enable @unocss/preset-attributify in generated Helios Uno config',
+        })
+        .option('icons', {
+          type: 'boolean',
+          describe: 'Enable @unocss/preset-icons in generated Helios Uno config',
+        })
+        .option('icon-pack', {
+          type: 'string',
+          describe: 'Iconify collection name (defaults to lucide)',
+        })
+        .option('variant-group', {
+          type: 'boolean',
+          describe: 'Enable @unocss/transformer-variant-group in generated Helios Uno config',
+        })
+        .option('yes', {
+          type: 'boolean',
+          default: false,
+          describe: 'Use defaults and skip prompts',
+        })
+        .option('no-sync', {
+          type: 'boolean',
+          describe: 'Skip syncing layer files into the app',
+        })
+        .option('no-packages', {
+          type: 'boolean',
+          describe: 'Skip package.json sync',
+        })
+        .option('no-install', {
+          type: 'boolean',
+          describe: 'Skip pnpm install after syncing packages',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      let rawName = args.name || args.n || args._?.[1];
+      if (!rawName && args._?.[2]) {
+        rawName = args._[2];
+      }
+
+      const { bundle, specEntry, project, appRoot, repoRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: rawName ? String(rawName) : '',
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+
+      const currentLayers = Array.isArray(specEntry.spec.layers)
+        ? specEntry.spec.layers.map((layer) => String(layer))
+        : [];
+      const nextLayers = uniqueLayers([...currentLayers, 'helios']);
+      const hadHelios = currentLayers.includes('helios');
+      specEntry.spec.layers = nextLayers;
+
+      const layerDefaults = await collectLayerNuxtDefaults(projectRoot, nextLayers);
+      const baseConfig = (specEntry.spec.nuxtConfig && typeof specEntry.spec.nuxtConfig === 'object'
+        && !Array.isArray(specEntry.spec.nuxtConfig))
+        ? (specEntry.spec.nuxtConfig as Record<string, unknown>)
+        : {};
+      const mergedConfig = mergeOverride(layerDefaults.config, baseConfig);
+      if (layerDefaults.modules.length > 0) {
+        if (!Array.isArray(mergedConfig.modules) || mergedConfig.modules.length === 0) {
+          mergedConfig.modules = layerDefaults.modules;
+        } else {
+          mergedConfig.modules = mergeModuleList(mergedConfig.modules, layerDefaults.modules);
+        }
+      }
+      specEntry.spec.nuxtConfig = mergedConfig;
+
+      const useDefaults = args.yes === true || !process.stdin.isTTY;
+      const resolvedAttributify = typeof args.attributify === 'boolean'
+        ? args.attributify
+        : (useDefaults ? true : await promptYesNo('Enable Uno Attributify preset?', true));
+      const resolvedIcons = typeof args.icons === 'boolean'
+        ? args.icons
+        : (useDefaults ? true : await promptYesNo('Enable Uno Icons preset?', true));
+      const resolvedVariantGroup = typeof args['variant-group'] === 'boolean'
+        ? args['variant-group']
+        : (useDefaults ? true : await promptYesNo('Enable Uno variant-group transformer?', true));
+
+      const defaultIconPack = 'lucide';
+      let iconPackInput = typeof args['icon-pack'] === 'string'
+        ? String(args['icon-pack'])
+        : defaultIconPack;
+      if (resolvedIcons && !useDefaults && typeof args['icon-pack'] !== 'string') {
+        const typed = await promptInput(`Icon pack (${defaultIconPack})`);
+        if (typed.trim()) {
+          iconPackInput = typed;
+        }
+      }
+      const resolvedIconPack = normalizeIconCollection(iconPackInput, defaultIconPack);
+
+      const setupPayload = {
+        attributify: resolvedAttributify,
+        icons: resolvedIcons,
+        iconCollection: resolvedIconPack,
+        variantGroup: resolvedVariantGroup,
+      };
+
+      const typeFragmentDefault = {
+        baseFontPx: 16,
+        typeRatio: 1.2,
+        gridRatio: 1.4,
+        spaceRatio: 1.25,
+        minStep: -2,
+        maxStep: 6,
+        step: 0.25,
+        brandColor: '#2858ff',
+      };
+
+      const setupFragmentPath = path.join(appRoot, 'app/helios/fragments/setup.json');
+      const typeFragmentPath = path.join(appRoot, 'app/helios/fragments/type.json');
+      await mkdir(path.dirname(setupFragmentPath), { recursive: true });
+      await writeFile(setupFragmentPath, JSON.stringify(setupPayload, null, 2), 'utf-8');
+
+      const existingTypeRaw = await readFile(typeFragmentPath, 'utf-8').catch(() => null);
+      if (!existingTypeRaw) {
+        await mkdir(path.dirname(typeFragmentPath), { recursive: true });
+        await writeFile(typeFragmentPath, JSON.stringify(typeFragmentDefault, null, 2), 'utf-8');
+      }
+
+      if (resolvedIcons && resolvedIconPack !== defaultIconPack) {
+        const specAny = specEntry.spec as any;
+        const packages = (specAny.packages && typeof specAny.packages === 'object' && !Array.isArray(specAny.packages))
+          ? specAny.packages
+          : {};
+        const devDependencies = (packages.devDependencies && typeof packages.devDependencies === 'object'
+          && !Array.isArray(packages.devDependencies))
+          ? packages.devDependencies
+          : {};
+        devDependencies[`@iconify-json/${resolvedIconPack}`] = 'latest';
+        specAny.packages = {
+          ...packages,
+          devDependencies,
+        };
+      }
+
+      await writeSiteSpec(specEntry.path, specEntry.spec);
+      const effectiveConfig = await buildSiteNuxtConfig({
+        projectRoot,
+        spec: specEntry.spec,
+        appRoot,
+      });
+      await writeGeneratedNuxtConfig(appRoot, effectiveConfig);
+
+      if (args['no-sync'] !== true) {
+        await syncProjectLayers({
+          projectRoot,
+          app: bundle.app,
+          project,
+          mode: 'auto',
+          log: true,
+        });
+      }
+
+      if (args['no-packages'] !== true) {
+        await runSitePkgSync({
+          projectRoot,
+          name: specEntry.spec.slug,
+          appPath: appRoot,
+          specPath: specEntry.path,
+        });
+        if (args['no-install'] !== true) {
+          await runChildProcess('pnpm', ['-C', repoRoot, '--filter', specEntry.spec.slug, 'install'], repoRoot);
+        }
+      }
+
+      console.log(
+        `✅ Helios setup completed for ${specEntry.spec.slug} (${hadHelios ? 'layer already present' : 'layer added'}).`
+      );
+      console.log(`🧩 Setup fragment: ${path.relative(repoRoot, setupFragmentPath)}`);
+      console.log(`✍️  Open /helios and click Commit to regenerate app/helios/generated + app/helios/scss artifacts.`);
+    }
+  )
+  .command(
     'site:layers:remove [name] <layers..>',
     'Remove layers from a site and sync packages/layers',
     (yargsBuilder: any) =>
@@ -4422,6 +4613,14 @@ function normalizeLayerArgs(raw: unknown): string[] {
     }
   }
   return uniqueLayers(out);
+}
+
+function normalizeIconCollection(raw: unknown, fallback = 'lucide'): string {
+  const cleaned = String(raw ?? fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '');
+  return cleaned || fallback;
 }
 
 function uniqueLayers(values: string[]): string[] {

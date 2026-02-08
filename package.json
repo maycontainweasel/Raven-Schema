@@ -52,6 +52,7 @@
     "site:layers:status": "tsx src/cli.ts site:layers:status",
     "site:layers:add": "tsx src/cli.ts site:layers:add",
     "site:layers:remove": "tsx src/cli.ts site:layers:remove",
+    "site:helios:setup": "tsx src/cli.ts site:helios:setup",
     "layers:status": "tsx src/cli.ts site:layers:status",
     "layers:add": "tsx src/cli.ts site:layers:add",
     "layers:remove": "tsx src/cli.ts site:layers:remove",

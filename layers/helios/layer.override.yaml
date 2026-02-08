@@ -1,0 +1,8 @@
+# Layer overrides (per-app).
+# Copy this file into the app layer folder if you need project-specific overrides.
+#
+# nuxtConfig:
+#   runtimeConfig:
+#     public:
+#       helios:
+#         settingsFile: app/helios/generated/type.settings.json

@@ -1,0 +1,14 @@
+name: helios
+version: 0.1.0
+description: Helios baseline manager (typography-first) for app-owned UnoCSS/SCSS artifacts.
+tags:
+  - design-system
+  - unocss
+  - typography
+modules:
+  - "@unocss/nuxt"
+nuxtConfig:
+  unocss:
+    nuxtLayers: true
+    preflight: true
+    configFile: "./uno.config.ts"

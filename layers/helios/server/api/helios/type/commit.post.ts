@@ -1,0 +1,472 @@
+import { promises as fs } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { defineEventHandler, readBody } from 'h3'
+
+type HeliosTypeConfig = {
+  baseFontPx: number
+  typeRatio: number
+  gridRatio: number
+  spaceRatio: number
+  minStep: number
+  maxStep: number
+  step: number
+  brandColor: string
+}
+
+type HeliosSetupConfig = {
+  attributify: boolean
+  icons: boolean
+  iconCollection: string
+  variantGroup: boolean
+}
+
+const defaultConfig: HeliosTypeConfig = {
+  baseFontPx: 16,
+  typeRatio: 1.2,
+  gridRatio: 1.4,
+  spaceRatio: 1.25,
+  minStep: -2,
+  maxStep: 6,
+  step: 0.25,
+  brandColor: '#2858ff',
+}
+
+const defaultSetup: HeliosSetupConfig = {
+  attributify: true,
+  icons: true,
+  iconCollection: 'lucide',
+  variantGroup: true,
+}
+
+const normalize = (value: any): HeliosTypeConfig => {
+  const next: HeliosTypeConfig = {
+    baseFontPx: Number(value?.baseFontPx ?? defaultConfig.baseFontPx),
+    typeRatio: Number(value?.typeRatio ?? defaultConfig.typeRatio),
+    gridRatio: Number(value?.gridRatio ?? defaultConfig.gridRatio),
+    spaceRatio: Number(value?.spaceRatio ?? defaultConfig.spaceRatio),
+    minStep: Number(value?.minStep ?? defaultConfig.minStep),
+    maxStep: Number(value?.maxStep ?? defaultConfig.maxStep),
+    step: Number(value?.step ?? defaultConfig.step),
+    brandColor: String(value?.brandColor ?? defaultConfig.brandColor),
+  }
+
+  if (!Number.isFinite(next.baseFontPx) || next.baseFontPx < 8) next.baseFontPx = defaultConfig.baseFontPx
+  if (!Number.isFinite(next.typeRatio) || next.typeRatio <= 1) next.typeRatio = defaultConfig.typeRatio
+  if (!Number.isFinite(next.gridRatio) || next.gridRatio <= 0.5) next.gridRatio = defaultConfig.gridRatio
+  if (!Number.isFinite(next.spaceRatio) || next.spaceRatio <= 1) next.spaceRatio = defaultConfig.spaceRatio
+  if (!Number.isFinite(next.minStep)) next.minStep = defaultConfig.minStep
+  if (!Number.isFinite(next.maxStep)) next.maxStep = defaultConfig.maxStep
+  if (next.maxStep <= next.minStep) {
+    next.minStep = defaultConfig.minStep
+    next.maxStep = defaultConfig.maxStep
+  }
+  if (!Number.isFinite(next.step) || next.step <= 0) next.step = defaultConfig.step
+
+  const brand = next.brandColor.trim()
+  next.brandColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(brand)
+    ? brand
+    : defaultConfig.brandColor
+
+  return next
+}
+
+const normalizeSetup = (value: any): HeliosSetupConfig => {
+  const iconCollection = String(value?.iconCollection ?? defaultSetup.iconCollection)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+
+  return {
+    attributify: value?.attributify !== false,
+    icons: value?.icons !== false,
+    iconCollection: iconCollection || defaultSetup.iconCollection,
+    variantGroup: value?.variantGroup !== false,
+  }
+}
+
+const formatScaleKey = (raw: number) => {
+  const sign = raw < 0 ? '-' : ''
+  const absolute = Math.abs(raw)
+  if (absolute % 1 === 0) return `${sign}${absolute}`
+  const fixed = absolute.toFixed(2)
+  const [intPart, fracRaw] = fixed.split('.')
+  const frac = fracRaw.replace(/0+$/, '')
+  const normalized = `${intPart}${frac.padEnd(2, '0')}`
+  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized
+  return `${sign}${padded}`
+}
+
+const buildTokensScss = (config: HeliosTypeConfig) => {
+  const lines: string[] = []
+  lines.push(':root {')
+  lines.push(`  font-size: ${((config.baseFontPx / 16) * 100).toFixed(4)}%;`)
+  lines.push(`  --bf: ${config.baseFontPx};`)
+  lines.push(`  --tr: ${config.typeRatio};`)
+  lines.push(`  --gr: ${config.gridRatio};`)
+  lines.push(`  --sr: ${config.spaceRatio};`)
+  lines.push(`  --ds-brand: ${config.brandColor};`)
+  lines.push(`  --lh-0: ${config.gridRatio.toFixed(6)}rem;`)
+  lines.push(`  --lh-1: ${(config.gridRatio * 2).toFixed(6)}rem;`)
+
+  for (let i = config.minStep; i <= config.maxStep; i += config.step) {
+    const step = Number(i.toFixed(2))
+    const key = formatScaleKey(step)
+    const fsRem = Math.pow(config.typeRatio, step)
+    const gridRem = config.gridRatio * step
+    const spaceRem = Math.pow(config.spaceRatio, step)
+    const lineRem = config.gridRatio * (step + 1)
+    lines.push(`  --fs-${key}: ${fsRem.toFixed(6)}rem;`)
+    lines.push(`  --v-${key}: ${gridRem.toFixed(6)}rem;`)
+    lines.push(`  --sp-${key}: ${spaceRem.toFixed(6)}rem;`)
+    lines.push(`  --lh-${key}: ${lineRem.toFixed(6)}rem;`)
+  }
+
+  lines.push('}')
+  lines.push('')
+  return lines.join('\n')
+}
+
+const buildTypographyScss = () => {
+  return [
+    'h1 { font-size: var(--fs-6); line-height: var(--lh-1); }',
+    'h2 { font-size: var(--fs-5); line-height: var(--lh-1); }',
+    'h3 { font-size: var(--fs-4); line-height: var(--lh-1); }',
+    'h4 { font-size: var(--fs-3); line-height: var(--lh-0); }',
+    'h5 { font-size: var(--fs-2); line-height: var(--lh-0); }',
+    'h6 { font-size: var(--fs-1); line-height: var(--lh-0); }',
+    'p, li { font-size: var(--fs-0); line-height: var(--lh-0); }',
+    'small { font-size: var(--fs--1); line-height: var(--lh-0); }',
+    '',
+    '.type-default :is(p, li, h1, h2, h3, h4, h5, h6) {',
+    '  margin: 0;',
+    '}',
+  ].join('\n')
+}
+
+const buildScssEntry = () => {
+  return ['@use "tokens";', '@use "type";', ''].join('\n')
+}
+
+const buildUnoGenerated = (config: HeliosTypeConfig, setup: HeliosSetupConfig) => {
+  const presetEntries = [
+    '    presetWind4({',
+    '      preflights: {',
+    '        reset: true,',
+    '        theme: true,',
+    '      },',
+    '    }),',
+  ]
+  if (setup.icons) {
+    presetEntries.push(
+      '    presetIcons({',
+      '      extraProperties: {',
+      "        display: 'inline-block',",
+      "        'vertical-align': 'middle',",
+      '      },',
+      '    }),'
+    )
+  }
+  if (setup.attributify) {
+    presetEntries.push('    presetAttributify(),')
+  }
+
+  return [
+    "import { defineConfig, presetAttributify, presetIcons, presetWind4 } from 'unocss'",
+    "import transformerVariantGroup from '@unocss/transformer-variant-group'",
+    '',
+    'const formatScaleKey = (raw: string) => {',
+    '  const value = Number(raw)',
+    '  if (!Number.isFinite(value)) return raw',
+    "  const sign = value < 0 ? '-' : ''",
+    '  const absoluteValue = Math.abs(value)',
+    '  if (absoluteValue % 1 === 0) return `${sign}${absoluteValue}`',
+    '  const fixed = absoluteValue.toFixed(2)',
+    "  const [intPart, fracRaw] = fixed.split('.')",
+    "  const frac = fracRaw.replace(/0+$/, '')",
+    "  const normalized = `${intPart}${frac.padEnd(2, '0')}`",
+    "  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized",
+    '  return `${sign}${padded}`',
+    '}',
+    '',
+    'export default defineConfig({',
+    '  presets: [',
+    ...presetEntries,
+    '  ],',
+    setup.variantGroup
+      ? '  transformers: [transformerVariantGroup()],'
+      : '  transformers: [],',
+    '  shortcuts: {',
+    "    'type-h1': 'f-6 lh-1 font-700',",
+    "    'type-h2': 'f-5 lh-1 font-600',",
+    "    'type-h3': 'f-4 lh-1 font-600',",
+    "    'type-body': 'f-0 lh-0',",
+    "    'type-small': 'f--1 lh-0',",
+    "    'chip-brand': 'inline-flex items-center rounded-full px-3 py-1 text-sm font-600 text-white bg-heliosbrand',",
+    '  },',
+    '  rules: [',
+    "    [/^f-(-?[\\d.]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],",
+    "    [/^lh-(-?[\\d.]+)$/, ([, value]) => ({ 'line-height': `var(--lh-${formatScaleKey(value)})` })],",
+    "    [/^v-(-?[\\d.]+)$/, ([, value]) => ({ height: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^gp-(-?[\\d.]+)$/, ([, value]) => ({ padding: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^gm-(-?[\\d.]+)$/, ([, value]) => ({ margin: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^gg-(-?[\\d.]+)$/, ([, value]) => ({ gap: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^sp-(-?[\\d.]+)$/, ([, value]) => ({ padding: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spt-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spr-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spb-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spl-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spx-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})`, 'padding-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spy-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})`, 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sm-(-?[\\d.]+)$/, ([, value]) => ({ margin: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smt-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smr-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smb-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sml-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smx-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})`, 'margin-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smy-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})`, 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sg-(-?[\\d.]+)$/, ([, value]) => ({ gap: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sw-(-?[\\d.]+)$/, ([, value]) => ({ width: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sh-(-?[\\d.]+)$/, ([, value]) => ({ height: `var(--sp-${formatScaleKey(value)})` })],",
+    '  ],',
+    '  theme: {',
+    '    colors: {',
+      `      heliosbrand: '${config.brandColor}',`,
+    "      brand: 'var(--ds-brand, #2858ff)',",
+    "      ink: 'var(--ds-text, #0f172a)',",
+    '    },',
+    '  },',
+    '})',
+    '',
+  ].join('\n')
+}
+
+const ensureDir = async (filePath: string) => {
+  await fs.mkdir(dirname(filePath), { recursive: true })
+}
+
+const ensureNuxtAdditions = async (rootDir: string): Promise<string[]> => {
+  const notes: string[] = []
+  const filePath = resolve(rootDir, 'nuxt.config.additions.ts')
+  const cssEntry = "'~/helios/scss/index.scss'"
+  const moduleEntry = "'@unocss/nuxt'"
+
+  let source = ''
+  try {
+    source = await fs.readFile(filePath, 'utf-8')
+  }
+  catch {
+    const created = [
+      '// Local overrides for arrays like modules/css/transpile.',
+      '// This file is safe to edit and will be merged into the generated config.',
+      'export default {',
+      `  modules: [${moduleEntry}],`,
+      `  css: [${cssEntry}],`,
+      '  unocss: {',
+      '    preflight: true,',
+      '    nuxtLayers: true,',
+      "    configFile: './uno.config.ts',",
+      '  },',
+      '}',
+      '',
+    ].join('\n')
+    await fs.writeFile(filePath, created, 'utf-8')
+    notes.push('Created nuxt.config.additions.ts with Helios defaults.')
+    return notes
+  }
+
+  let updated = source
+
+  if (!updated.includes(moduleEntry)) {
+    const modulesMatch = updated.match(/modules\s*:\s*\[([\s\S]*?)\]/m)
+    if (modulesMatch) {
+      const full = modulesMatch[0]
+      const inner = modulesMatch[1].trim()
+      const nextInner = inner.length > 0 ? `${inner},\n    ${moduleEntry}` : moduleEntry
+      updated = updated.replace(full, `modules: [\n    ${nextInner}\n  ]`)
+    }
+    else if (updated.includes('export default {')) {
+      updated = updated.replace('export default {', `export default {\n  modules: [${moduleEntry}],`)
+    }
+  }
+
+  if (!updated.includes(cssEntry)) {
+    const cssMatch = updated.match(/css\s*:\s*\[([\s\S]*?)\]/m)
+    if (cssMatch) {
+      const full = cssMatch[0]
+      const inner = cssMatch[1].trim()
+      const nextInner = inner.length > 0 ? `${inner},\n    ${cssEntry}` : cssEntry
+      updated = updated.replace(full, `css: [\n    ${nextInner}\n  ]`)
+    }
+    else if (updated.includes('export default {')) {
+      updated = updated.replace('export default {', `export default {\n  css: [${cssEntry}],`)
+    }
+  }
+
+  if (!updated.includes('preflight: true') || !updated.includes("configFile: './uno.config.ts'")) {
+    if (updated.includes('unocss: {')) {
+      updated = updated.replace(
+        /unocss\s*:\s*\{([\s\S]*?)\}/m,
+        `unocss: {\n    preflight: true,\n    nuxtLayers: true,\n    configFile: './uno.config.ts',\n  }`
+      )
+    }
+    else if (updated.includes('export default {')) {
+      updated = updated.replace(
+        'export default {',
+        `export default {\n  unocss: {\n    preflight: true,\n    nuxtLayers: true,\n    configFile: './uno.config.ts',\n  },`
+      )
+    }
+  }
+
+  if (updated !== source) {
+    await fs.writeFile(filePath, updated, 'utf-8')
+    notes.push('Updated nuxt.config.additions.ts with Helios defaults.')
+  }
+
+  return notes
+}
+
+const ensureUnoConfigBridge = async (rootDir: string): Promise<string[]> => {
+  const notes: string[] = []
+  const filePath = resolve(rootDir, 'uno.config.ts')
+  const marker = "app/helios/generated/uno.generated.ts"
+
+  let source = ''
+  try {
+    source = await fs.readFile(filePath, 'utf-8')
+  }
+  catch {
+    const created = [
+      "import { existsSync } from 'node:fs'",
+      "import { mergeConfigs } from '@unocss/core'",
+      "import base from './.nuxt/uno.config.mjs'",
+      '',
+      "const heliosPath = new URL('./app/helios/generated/uno.generated.ts', import.meta.url)",
+      "const overridesPath = new URL('./uno.overrides.config.ts', import.meta.url)",
+      '',
+      'let heliosGenerated: any = {}',
+      'if (existsSync(heliosPath)) {',
+      '  try {',
+      "    const mod = await import('./app/helios/generated/uno.generated.ts')",
+      '    heliosGenerated = mod.default ?? {}',
+      '  } catch {',
+      '    heliosGenerated = {}',
+      '  }',
+      '}',
+      '',
+      'let overrides: any = {}',
+      'if (existsSync(overridesPath)) {',
+      '  try {',
+      "    const mod = await import('./uno.overrides.config.ts')",
+      '    overrides = mod.default ?? {}',
+      '  } catch {',
+      '    overrides = {}',
+      '  }',
+      '}',
+      '',
+      'export default mergeConfigs([base, heliosGenerated, overrides])',
+      '',
+    ].join('\n')
+    await fs.writeFile(filePath, created, 'utf-8')
+    notes.push('Created uno.config.ts bridge for Helios generated config.')
+    return notes
+  }
+
+  if (source.includes(marker)) {
+    return notes
+  }
+
+  const mergePattern = 'mergeConfigs([base, overrides])'
+  if (!source.includes(mergePattern)) {
+    notes.push('Could not auto-patch uno.config.ts merge list; add Helios generated merge manually.')
+    return notes
+  }
+
+  let updated = source.replace(mergePattern, 'mergeConfigs([base, heliosGenerated, overrides])')
+
+  if (!updated.includes("const heliosPath = new URL('./app/helios/generated/uno.generated.ts', import.meta.url)")) {
+    const insertBlock = [
+      "const heliosPath = new URL('./app/helios/generated/uno.generated.ts', import.meta.url)",
+      '',
+      'let heliosGenerated: any = {}',
+      'if (existsSync(heliosPath)) {',
+      '  try {',
+      "    const mod = await import('./app/helios/generated/uno.generated.ts')",
+      '    heliosGenerated = mod.default ?? {}',
+      '  } catch {',
+      '    heliosGenerated = {}',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    const anchor = 'let overrides: any = {}'
+    if (updated.includes(anchor)) {
+      updated = updated.replace(anchor, `${insertBlock}${anchor}`)
+    }
+    else {
+      notes.push('Could not find standard override block in uno.config.ts; Helios bridge block not inserted.')
+    }
+  }
+
+  await fs.writeFile(filePath, updated, 'utf-8')
+  notes.push('Updated uno.config.ts to include Helios generated config.')
+  return notes
+}
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event)
+  const config = normalize(body?.config)
+  const rootDir = process.cwd()
+  const setupFragmentFile = resolve(rootDir, 'app/helios/fragments/setup.json')
+
+  let setup = defaultSetup
+  try {
+    const setupRaw = await fs.readFile(setupFragmentFile, 'utf-8')
+    setup = normalizeSetup(JSON.parse(setupRaw))
+  }
+  catch {
+    setup = defaultSetup
+  }
+
+  const fragmentFile = resolve(rootDir, 'app/helios/fragments/type.json')
+  const settingsFile = resolve(rootDir, 'app/helios/generated/type.settings.json')
+  const tokensScssFile = resolve(rootDir, 'app/helios/scss/_tokens.scss')
+  const typeScssFile = resolve(rootDir, 'app/helios/scss/_type.scss')
+  const indexScssFile = resolve(rootDir, 'app/helios/scss/index.scss')
+  const unoGeneratedFile = resolve(rootDir, 'app/helios/generated/uno.generated.ts')
+
+  await ensureDir(fragmentFile)
+  await ensureDir(setupFragmentFile)
+  await ensureDir(settingsFile)
+  await ensureDir(tokensScssFile)
+  await ensureDir(typeScssFile)
+  await ensureDir(indexScssFile)
+  await ensureDir(unoGeneratedFile)
+
+  await fs.writeFile(fragmentFile, JSON.stringify(config, null, 2), 'utf-8')
+  await fs.writeFile(setupFragmentFile, JSON.stringify(setup, null, 2), 'utf-8')
+  await fs.writeFile(settingsFile, JSON.stringify({ version: 1, savedAt: new Date().toISOString(), config }, null, 2), 'utf-8')
+  await fs.writeFile(tokensScssFile, buildTokensScss(config), 'utf-8')
+  await fs.writeFile(typeScssFile, buildTypographyScss(), 'utf-8')
+  await fs.writeFile(indexScssFile, buildScssEntry(), 'utf-8')
+  await fs.writeFile(unoGeneratedFile, buildUnoGenerated(config, setup), 'utf-8')
+
+  const notes = [
+    ...(await ensureNuxtAdditions(rootDir)),
+    ...(await ensureUnoConfigBridge(rootDir)),
+  ]
+
+  return {
+    ok: true,
+    files: [
+      'app/helios/fragments/type.json',
+      'app/helios/fragments/setup.json',
+      'app/helios/generated/type.settings.json',
+      'app/helios/generated/uno.generated.ts',
+      'app/helios/scss/_tokens.scss',
+      'app/helios/scss/_type.scss',
+      'app/helios/scss/index.scss',
+    ],
+    notes,
+  }
+})
