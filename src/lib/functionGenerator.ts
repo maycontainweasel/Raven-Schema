@@ -352,7 +352,8 @@ function buildCreateFunctionContent(
       functionName,
       tablesByModel,
       relationHooks,
-      taxonomyHooks
+      taxonomyHooks,
+      subtableCreateMode
     );
   }
 
@@ -1870,7 +1871,8 @@ function buildSubtableCreateFunctionContent(
   functionName: string,
   tablesByModel: Map<string, TableMigrationConfig>,
   relationHooks?: NormalizedRelation[],
-  taxonomyHooks?: NormalizedTaxonomy[]
+  taxonomyHooks?: NormalizedTaxonomy[],
+  subtableCreateMode: SubtableCreateMode = 'function'
 ): string {
   const tableModel = table.table?.model ?? sanitizeCamel(table.name);
   const fields = normalizeFields(table.fields);
@@ -1880,17 +1882,24 @@ function buildSubtableCreateFunctionContent(
     const idx = requiredFields.indexOf('instances');
     if (idx !== -1) requiredFields.splice(idx, 1);
   }
+  const subtablePlans = buildSubtableCreatePlans(table, tablesByModel);
+  const subtableValidations =
+    subtableCreateMode === 'function'
+      ? buildSubtableInputValidationLines(subtablePlans, functionName)
+      : [];
   const defaultsObject = buildDefaultsObject(fields, '$payloadInput', '$PARENT_ID');
   const assignOverrides = buildAssignOverrides(fields, '$payload', '$PARENT_ID');
 
   const parentInfo = getParentInfo(table, tablesByModel);
   const parentModel = parentInfo?.parentModel;
+  const parentPayloadField = resolveParentPayloadField(fields, parentModel);
 
   const parentRidModel = parentModel ?? 'record';
   const returnMode = operation.options?.return ?? 'id';
   const hooks = normalizeHooks(operation);
   const autoHooks = buildAutoHooks(table, 'create', '$recordID');
   const postProcessHooks = [...hooks.postProcess, ...autoHooks.postProcess];
+  const parentFallbackExpr = parentPayloadField ? `$payloadInput.${parentPayloadField}` : 'NONE';
 
   const lines: string[] = [];
   lines.push(
@@ -1898,11 +1907,21 @@ function buildSubtableCreateFunctionContent(
     '',
     `	let $payloadInput = if type::is_object($payload) {`,
     `		$payload`,
+    `	} else if type::is_object($PARENT_ID) && !type::is_record($PARENT_ID) {`,
+    `		$PARENT_ID`,
     `	} else {`,
     `		{}`,
     `	};`,
     '',
-	`	let $PARENT_ID = fn::ridParam("${parentRidModel}", $PARENT_ID);`,
+    `	let $parentInput = if type::is_record($PARENT_ID) {`,
+    `		$PARENT_ID`,
+    `	} else if !type::is_object($PARENT_ID) && $PARENT_ID != NONE && $PARENT_ID != null && (!type::is_string($PARENT_ID) || string::len($PARENT_ID) > 0) {`,
+    `		$PARENT_ID`,
+    `	} else {`,
+    `		${parentFallbackExpr}`,
+    `	};`,
+    '',
+	`	let $PARENT_ID = fn::ridParam("${parentRidModel}", $parentInput);`,
 	`	if !type::is_record($PARENT_ID) {`,
 	`		throw "${functionName} | requires valid parent record";`,
 	`	};`,
@@ -1919,9 +1938,18 @@ function buildSubtableCreateFunctionContent(
     lines.push(...hooks.preValidate, '');
   }
 
+  const subtableCapture = buildSubtableInputCaptureLines(subtablePlans, '$payloadInput');
+  if (subtableCapture.length > 0) {
+    lines.push(...subtableCapture, '');
+  }
+
   const payloadStrip = buildFieldPayloadStripLines(fields, '$payloadInput');
   if (payloadStrip.length > 0) {
     lines.push(...payloadStrip, '');
+  }
+  const subtablePayloadStrip = buildSubtablePayloadStripLines(subtablePlans, '$payloadInput');
+  if (subtablePayloadStrip.length > 0) {
+    lines.push(...subtablePayloadStrip, '');
   }
 
   const requiredValidations = buildRequiredFieldValidations(
@@ -1932,6 +1960,9 @@ function buildSubtableCreateFunctionContent(
   );
   if (requiredValidations.length > 0) {
     lines.push(...requiredValidations, '');
+  }
+  if (subtableValidations.length > 0) {
+    lines.push(...subtableValidations, '');
   }
 
   const enumValidations = buildEnumValidationLines(fields, '$payloadInput', functionName, {
@@ -2038,6 +2069,13 @@ function buildSubtableCreateFunctionContent(
     lines.push(...postProcessHooks, '');
   }
 
+  if (subtableCreateMode === 'function') {
+    const subtableCreateLines = buildSubtableCreateLines(subtablePlans, '$recordID');
+    if (subtableCreateLines.length > 0) {
+      lines.push(...subtableCreateLines, '');
+    }
+  }
+
   const successReturn =
     returnMode === 'record'
       ? `select * from $recordID`
@@ -2056,6 +2094,38 @@ function buildSubtableCreateFunctionContent(
 interface ParentInfo {
   parentModel: string;
   relations: Array<{ table: string }>;
+}
+
+function resolveParentPayloadField(
+  fields: NormalizedField[],
+  parentModel?: string
+): string | null {
+  if (!parentModel) return null;
+
+  const targetModel = parentModel.trim().toLowerCase();
+  if (!targetModel) return null;
+
+  const recordFields = fields.filter((field) => {
+    const model = extractRecordModel(field.meta.type);
+    return model?.toLowerCase() === targetModel;
+  });
+  if (recordFields.length === 0) return null;
+
+  const withParentDefault = recordFields.find(
+    (field) =>
+      field.meta.assign === true &&
+      typeof field.meta.default === 'string' &&
+      /\$parent\b/i.test(field.meta.default)
+  );
+  if (withParentDefault) return withParentDefault.name;
+
+  const exactName = recordFields.find((field) => field.name.toLowerCase() === targetModel);
+  if (exactName) return exactName.name;
+
+  const assignField = recordFields.find((field) => field.meta.assign === true);
+  if (assignField) return assignField.name;
+
+  return recordFields[0]?.name ?? null;
 }
 
 function getParentInfo(
@@ -2660,7 +2730,9 @@ function buildExplicitAssignOverrides(
       }
       const inner = stripTypeThingArg(fallbackExpr, recordModel) ?? fallbackExpr;
       const fallback =
-        isEmptyDefaultLiteral(inner) ? 'null' : `type::record("${recordModel}", ${inner})`;
+        isEmptyDefaultLiteral(inner)
+          ? 'null'
+          : `if type::is_record(${inner}) { ${inner} } else { type::record("${recordModel}", ${inner}) }`;
       const expression = `if type::is_record(${accessor}) { ${accessor} } else if ${accessor} { type::record("${recordModel}", ${accessor}) } else { ${fallback} }`;
       assignments.push(`\t\t${field.name}: ${expression},`);
       assigned.add(field.name);
