@@ -1,0 +1,6 @@
+# Layer overrides (per-app).
+# Example:
+# nuxtConfig:
+#   public:
+#     fields:
+#       fragmentsDir: app/fields/fragments

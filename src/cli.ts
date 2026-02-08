@@ -4620,7 +4620,11 @@ function normalizeIconCollection(raw: unknown, fallback = 'lucide'): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '');
-  return cleaned || fallback;
+  if (!cleaned) return fallback;
+  if (cleaned === 'y' || cleaned === 'yes' || cleaned === 'n' || cleaned === 'no') {
+    return fallback;
+  }
+  return cleaned;
 }
 
 function uniqueLayers(values: string[]): string[] {

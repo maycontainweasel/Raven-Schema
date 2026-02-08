@@ -1,0 +1,8 @@
+name: fields
+version: 0.1.0
+description: Helios Fields component engine layer (Ark UI + UnoCSS deployment workflow).
+tags:
+  - fields
+  - components
+  - ark-ui
+  - unocss

@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { defineEventHandler, readBody } from 'h3'
+import { buildColorsScss, getEnabledColorMap, normalizeColorPalettes } from './colors'
+import { buildSemanticScss, buildSemanticShortcuts, createDefaultThemeSettings, normalizeThemeSettings } from './themes'
 
 type HeliosTypeConfig = {
   baseFontPx: number
@@ -11,6 +13,14 @@ type HeliosTypeConfig = {
   maxStep: number
   step: number
   brandColor: string
+}
+
+type HeliosBreakpointConfig = {
+  id: string
+  label: string
+  minWidth: number
+  maxWidth: number | null
+  config: HeliosTypeConfig
 }
 
 type HeliosSetupConfig = {
@@ -31,6 +41,13 @@ const defaultConfig: HeliosTypeConfig = {
   brandColor: '#2858ff',
 }
 
+const defaultBreakpointRanges = [
+  { id: 'mobile', label: 'Mobile', minWidth: 0, maxWidth: 500 },
+  { id: 'tablet', label: 'Tablet', minWidth: 500, maxWidth: 1024 },
+  { id: 'laptop', label: 'Laptop', minWidth: 1024, maxWidth: 1366 },
+  { id: 'desktop', label: 'Desktop', minWidth: 1366, maxWidth: null as number | null },
+]
+
 const defaultSetup: HeliosSetupConfig = {
   attributify: true,
   icons: true,
@@ -38,36 +55,139 @@ const defaultSetup: HeliosSetupConfig = {
   variantGroup: true,
 }
 
-const normalize = (value: any): HeliosTypeConfig => {
+const sanitizeId = (value: unknown, fallback = 'breakpoint') => {
+  const token = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return token || fallback
+}
+
+const normalizeConfig = (value: any, fallback: HeliosTypeConfig = defaultConfig): HeliosTypeConfig => {
   const next: HeliosTypeConfig = {
-    baseFontPx: Number(value?.baseFontPx ?? defaultConfig.baseFontPx),
-    typeRatio: Number(value?.typeRatio ?? defaultConfig.typeRatio),
-    gridRatio: Number(value?.gridRatio ?? defaultConfig.gridRatio),
-    spaceRatio: Number(value?.spaceRatio ?? defaultConfig.spaceRatio),
-    minStep: Number(value?.minStep ?? defaultConfig.minStep),
-    maxStep: Number(value?.maxStep ?? defaultConfig.maxStep),
-    step: Number(value?.step ?? defaultConfig.step),
-    brandColor: String(value?.brandColor ?? defaultConfig.brandColor),
+    baseFontPx: Number(value?.baseFontPx ?? fallback.baseFontPx),
+    typeRatio: Number(value?.typeRatio ?? fallback.typeRatio),
+    gridRatio: Number(value?.gridRatio ?? fallback.gridRatio),
+    spaceRatio: Number(value?.spaceRatio ?? fallback.spaceRatio),
+    minStep: Number(value?.minStep ?? fallback.minStep),
+    maxStep: Number(value?.maxStep ?? fallback.maxStep),
+    step: Number(value?.step ?? fallback.step),
+    brandColor: String(value?.brandColor ?? fallback.brandColor),
   }
 
-  if (!Number.isFinite(next.baseFontPx) || next.baseFontPx < 8) next.baseFontPx = defaultConfig.baseFontPx
-  if (!Number.isFinite(next.typeRatio) || next.typeRatio <= 1) next.typeRatio = defaultConfig.typeRatio
-  if (!Number.isFinite(next.gridRatio) || next.gridRatio <= 0.5) next.gridRatio = defaultConfig.gridRatio
-  if (!Number.isFinite(next.spaceRatio) || next.spaceRatio <= 1) next.spaceRatio = defaultConfig.spaceRatio
-  if (!Number.isFinite(next.minStep)) next.minStep = defaultConfig.minStep
-  if (!Number.isFinite(next.maxStep)) next.maxStep = defaultConfig.maxStep
+  if (!Number.isFinite(next.baseFontPx) || next.baseFontPx < 8) next.baseFontPx = fallback.baseFontPx
+  if (!Number.isFinite(next.typeRatio) || next.typeRatio <= 1) next.typeRatio = fallback.typeRatio
+  if (!Number.isFinite(next.gridRatio) || next.gridRatio <= 0.5) next.gridRatio = fallback.gridRatio
+  if (!Number.isFinite(next.spaceRatio) || next.spaceRatio <= 1) next.spaceRatio = fallback.spaceRatio
+  if (!Number.isFinite(next.minStep)) next.minStep = fallback.minStep
+  if (!Number.isFinite(next.maxStep)) next.maxStep = fallback.maxStep
   if (next.maxStep <= next.minStep) {
-    next.minStep = defaultConfig.minStep
-    next.maxStep = defaultConfig.maxStep
+    next.minStep = fallback.minStep
+    next.maxStep = fallback.maxStep
   }
-  if (!Number.isFinite(next.step) || next.step <= 0) next.step = defaultConfig.step
+  if (!Number.isFinite(next.step) || next.step <= 0) next.step = fallback.step
 
-  const brand = next.brandColor.trim()
+  const brand = String(value?.brandColor ?? fallback.brandColor).trim()
   next.brandColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(brand)
     ? brand
-    : defaultConfig.brandColor
+    : fallback.brandColor
 
   return next
+}
+
+const createDefaultBreakpoints = (baseConfig: HeliosTypeConfig): HeliosBreakpointConfig[] => {
+  return defaultBreakpointRanges.map((entry) => ({
+    id: entry.id,
+    label: entry.label,
+    minWidth: entry.minWidth,
+    maxWidth: entry.maxWidth,
+    config: normalizeConfig(baseConfig, baseConfig),
+  }))
+}
+
+const normalizeBreakpoints = (
+  value: unknown,
+  baseConfig: HeliosTypeConfig
+): HeliosBreakpointConfig[] => {
+  if (!Array.isArray(value) || value.length === 0) {
+    return createDefaultBreakpoints(baseConfig)
+  }
+
+  const normalized: HeliosBreakpointConfig[] = value
+    .map((entry: any, index) => {
+      if (!entry || typeof entry !== 'object') return null
+      const fallbackDefault = defaultBreakpointRanges[defaultBreakpointRanges.length - 1]!
+      const fallback = defaultBreakpointRanges[index] ?? fallbackDefault
+      const minWidthRaw = Number(entry.minWidth)
+      const minWidth = Number.isFinite(minWidthRaw) && minWidthRaw >= 0
+        ? Math.round(minWidthRaw)
+        : fallback.minWidth
+
+      const maxRaw = entry.maxWidth
+      const maxWidth = maxRaw === null || maxRaw === '' || maxRaw === undefined
+        ? null
+        : Number.isFinite(Number(maxRaw))
+          ? Math.round(Number(maxRaw))
+          : fallback.maxWidth
+
+      const safeMaxWidth = maxWidth !== null && maxWidth <= minWidth ? null : maxWidth
+      const id = sanitizeId(entry.id ?? fallback.id, `${fallback.id}-${index + 1}`)
+      const label = String(entry.label ?? fallback.label).trim() || fallback.label
+
+      return {
+        id,
+        label,
+        minWidth,
+        maxWidth: safeMaxWidth,
+        config: normalizeConfig(entry.config, baseConfig),
+      }
+    })
+    .filter((entry): entry is HeliosBreakpointConfig => Boolean(entry))
+
+  if (normalized.length === 0) {
+    return createDefaultBreakpoints(baseConfig)
+  }
+
+  const seen = new Set<string>()
+  const deduped = normalized.map((entry, index) => {
+    let id = entry.id
+    while (seen.has(id)) {
+      id = `${entry.id}-${index + 1}`
+    }
+    seen.add(id)
+    return { ...entry, id }
+  })
+
+  deduped.sort((a, b) => a.minWidth - b.minWidth)
+
+  if (deduped[0]) deduped[0].minWidth = 0
+
+  for (let index = 1; index < deduped.length; index += 1) {
+    const previous = deduped[index - 1]
+    const current = deduped[index]
+    if (!previous || !current) continue
+    const minimumAllowed = previous.minWidth + 1
+    if (current.minWidth < minimumAllowed) current.minWidth = minimumAllowed
+  }
+
+  for (let index = 0; index < deduped.length; index += 1) {
+    const current = deduped[index]
+    if (!current) continue
+
+    if (current.maxWidth !== null && current.maxWidth <= current.minWidth) {
+      current.maxWidth = null
+    }
+
+    const next = deduped[index + 1]
+    if (!next) continue
+
+    if (current.maxWidth === null || current.maxWidth > next.minWidth) {
+      current.maxWidth = next.minWidth
+    }
+  }
+
+  return deduped
 }
 
 const normalizeSetup = (value: any): HeliosSetupConfig => {
@@ -89,24 +209,23 @@ const formatScaleKey = (raw: number) => {
   const absolute = Math.abs(raw)
   if (absolute % 1 === 0) return `${sign}${absolute}`
   const fixed = absolute.toFixed(2)
-  const [intPart, fracRaw] = fixed.split('.')
+  const [intPart, fracRaw = ''] = fixed.split('.')
   const frac = fracRaw.replace(/0+$/, '')
   const normalized = `${intPart}${frac.padEnd(2, '0')}`
   const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized
   return `${sign}${padded}`
 }
 
-const buildTokensScss = (config: HeliosTypeConfig) => {
+const buildTokenLines = (config: HeliosTypeConfig, indent = '  ') => {
   const lines: string[] = []
-  lines.push(':root {')
-  lines.push(`  font-size: ${((config.baseFontPx / 16) * 100).toFixed(4)}%;`)
-  lines.push(`  --bf: ${config.baseFontPx};`)
-  lines.push(`  --tr: ${config.typeRatio};`)
-  lines.push(`  --gr: ${config.gridRatio};`)
-  lines.push(`  --sr: ${config.spaceRatio};`)
-  lines.push(`  --ds-brand: ${config.brandColor};`)
-  lines.push(`  --lh-0: ${config.gridRatio.toFixed(6)}rem;`)
-  lines.push(`  --lh-1: ${(config.gridRatio * 2).toFixed(6)}rem;`)
+  lines.push(`${indent}font-size: ${((config.baseFontPx / 16) * 100).toFixed(4)}%;`)
+  lines.push(`${indent}--bf: ${config.baseFontPx};`)
+  lines.push(`${indent}--tr: ${config.typeRatio};`)
+  lines.push(`${indent}--gr: ${config.gridRatio};`)
+  lines.push(`${indent}--sr: ${config.spaceRatio};`)
+  lines.push(`${indent}--ds-brand: ${config.brandColor};`)
+  lines.push(`${indent}--lh-0: ${config.gridRatio.toFixed(6)}rem;`)
+  lines.push(`${indent}--lh-1: ${(config.gridRatio * 2).toFixed(6)}rem;`)
 
   for (let i = config.minStep; i <= config.maxStep; i += config.step) {
     const step = Number(i.toFixed(2))
@@ -115,14 +234,34 @@ const buildTokensScss = (config: HeliosTypeConfig) => {
     const gridRem = config.gridRatio * step
     const spaceRem = Math.pow(config.spaceRatio, step)
     const lineRem = config.gridRatio * (step + 1)
-    lines.push(`  --fs-${key}: ${fsRem.toFixed(6)}rem;`)
-    lines.push(`  --v-${key}: ${gridRem.toFixed(6)}rem;`)
-    lines.push(`  --sp-${key}: ${spaceRem.toFixed(6)}rem;`)
-    lines.push(`  --lh-${key}: ${lineRem.toFixed(6)}rem;`)
+    lines.push(`${indent}--fs-${key}: ${fsRem.toFixed(6)}rem;`)
+    lines.push(`${indent}--v-${key}: ${gridRem.toFixed(6)}rem;`)
+    lines.push(`${indent}--sp-${key}: ${spaceRem.toFixed(6)}rem;`)
+    lines.push(`${indent}--lh-${key}: ${lineRem.toFixed(6)}rem;`)
   }
 
+  return lines
+}
+
+const buildTokensScss = (breakpoints: HeliosBreakpointConfig[]) => {
+  const sorted = [...breakpoints].sort((a, b) => a.minWidth - b.minWidth)
+  const base = sorted[0] ?? createDefaultBreakpoints(defaultConfig)[0]!
+
+  const lines: string[] = []
+  lines.push(':root {')
+  lines.push(...buildTokenLines(base.config, '  '))
   lines.push('}')
   lines.push('')
+
+  for (const breakpoint of sorted.slice(1)) {
+    lines.push(`@media (min-width: ${breakpoint.minWidth}px) {`)
+    lines.push('  :root {')
+    lines.push(...buildTokenLines(breakpoint.config, '    '))
+    lines.push('  }')
+    lines.push('}')
+    lines.push('')
+  }
+
   return lines.join('\n')
 }
 
@@ -144,10 +283,25 @@ const buildTypographyScss = () => {
 }
 
 const buildScssEntry = () => {
-  return ['@use "tokens";', '@use "type";', ''].join('\n')
+  return ['@use "tokens";', '@use "type";', '@use "colors";', '@use "semantic";', ''].join('\n')
 }
 
-const buildUnoGenerated = (config: HeliosTypeConfig, setup: HeliosSetupConfig) => {
+const sanitizeThemeKey = (value: string, fallback: string) => {
+  const cleaned = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^([^a-z_])/, '_$1')
+  return cleaned || fallback
+}
+
+const buildUnoGenerated = (
+  config: HeliosTypeConfig,
+  setup: HeliosSetupConfig,
+  breakpoints: HeliosBreakpointConfig[],
+  palettes: ReturnType<typeof normalizeColorPalettes>,
+  themeSettings: ReturnType<typeof normalizeThemeSettings>
+) => {
   const presetEntries = [
     '    presetWind4({',
     '      preflights: {',
@@ -170,9 +324,22 @@ const buildUnoGenerated = (config: HeliosTypeConfig, setup: HeliosSetupConfig) =
     presetEntries.push('    presetAttributify(),')
   }
 
+  const sortedBreakpoints = [...breakpoints].sort((a, b) => a.minWidth - b.minWidth)
+  const breakpointEntries = sortedBreakpoints
+    .filter((entry) => entry.minWidth > 0)
+    .map((entry, index) => {
+      const key = sanitizeThemeKey(entry.id, `bp_${index + 1}`)
+      return `      ${key}: '${Math.round(entry.minWidth)}px',`
+    })
+  const selectedThemeColors = getEnabledColorMap(palettes)
+  const semanticShortcuts = buildSemanticShortcuts(themeSettings)
+
   return [
     "import { defineConfig, presetAttributify, presetIcons, presetWind4 } from 'unocss'",
     "import transformerVariantGroup from '@unocss/transformer-variant-group'",
+    '',
+    `const heliosPaletteColors = ${JSON.stringify(selectedThemeColors)}`,
+    `const heliosSemanticShortcuts = ${JSON.stringify(semanticShortcuts)}`,
     '',
     'const formatScaleKey = (raw: string) => {',
     '  const value = Number(raw)',
@@ -181,7 +348,7 @@ const buildUnoGenerated = (config: HeliosTypeConfig, setup: HeliosSetupConfig) =
     '  const absoluteValue = Math.abs(value)',
     '  if (absoluteValue % 1 === 0) return `${sign}${absoluteValue}`',
     '  const fixed = absoluteValue.toFixed(2)',
-    "  const [intPart, fracRaw] = fixed.split('.')",
+    "  const [intPart, fracRaw = ''] = fixed.split('.')",
     "  const frac = fracRaw.replace(/0+$/, '')",
     "  const normalized = `${intPart}${frac.padEnd(2, '0')}`",
     "  const padded = intPart === '0' ? normalized.padStart(2, '0') : normalized",
@@ -196,41 +363,46 @@ const buildUnoGenerated = (config: HeliosTypeConfig, setup: HeliosSetupConfig) =
       ? '  transformers: [transformerVariantGroup()],'
       : '  transformers: [],',
     '  shortcuts: {',
+    '    ...heliosSemanticShortcuts,',
     "    'type-h1': 'f-6 lh-1 font-700',",
     "    'type-h2': 'f-5 lh-1 font-600',",
     "    'type-h3': 'f-4 lh-1 font-600',",
     "    'type-body': 'f-0 lh-0',",
     "    'type-small': 'f--1 lh-0',",
-    "    'chip-brand': 'inline-flex items-center rounded-full px-3 py-1 text-sm font-600 text-white bg-heliosbrand',",
+    "    'chip-brand': 'inline-flex items-center rounded-full px-3 py-1 text-sm font-600 text-white bg-brand',",
     '  },',
     '  rules: [',
-    "    [/^f-(-?[\\d.]+)$/, ([, value]) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],",
-    "    [/^lh-(-?[\\d.]+)$/, ([, value]) => ({ 'line-height': `var(--lh-${formatScaleKey(value)})` })],",
-    "    [/^v-(-?[\\d.]+)$/, ([, value]) => ({ height: `var(--v-${formatScaleKey(value)})` })],",
-    "    [/^gp-(-?[\\d.]+)$/, ([, value]) => ({ padding: `var(--v-${formatScaleKey(value)})` })],",
-    "    [/^gm-(-?[\\d.]+)$/, ([, value]) => ({ margin: `var(--v-${formatScaleKey(value)})` })],",
-    "    [/^gg-(-?[\\d.]+)$/, ([, value]) => ({ gap: `var(--v-${formatScaleKey(value)})` })],",
-    "    [/^sp-(-?[\\d.]+)$/, ([, value]) => ({ padding: `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^spt-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^spr-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-right': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^spb-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^spl-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^spx-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})`, 'padding-right': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^spy-(-?[\\d.]+)$/, ([, value]) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})`, 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^sm-(-?[\\d.]+)$/, ([, value]) => ({ margin: `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^smt-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^smr-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-right': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^smb-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^sml-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^smx-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})`, 'margin-right': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^smy-(-?[\\d.]+)$/, ([, value]) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})`, 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^sg-(-?[\\d.]+)$/, ([, value]) => ({ gap: `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^sw-(-?[\\d.]+)$/, ([, value]) => ({ width: `var(--sp-${formatScaleKey(value)})` })],",
-    "    [/^sh-(-?[\\d.]+)$/, ([, value]) => ({ height: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^f-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'font-size': `var(--fs-${formatScaleKey(value)})` })],",
+    "    [/^lh-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'line-height': `var(--lh-${formatScaleKey(value)})` })],",
+    "    [/^v-(-?[\\d.]+)$/, ([, value = '0']) => ({ height: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^gp-(-?[\\d.]+)$/, ([, value = '0']) => ({ padding: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^gm-(-?[\\d.]+)$/, ([, value = '0']) => ({ margin: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^gg-(-?[\\d.]+)$/, ([, value = '0']) => ({ gap: `var(--v-${formatScaleKey(value)})` })],",
+    "    [/^sp-(-?[\\d.]+)$/, ([, value = '0']) => ({ padding: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spt-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spr-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'padding-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spb-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spl-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spx-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'padding-left': `var(--sp-${formatScaleKey(value)})`, 'padding-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^spy-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'padding-top': `var(--sp-${formatScaleKey(value)})`, 'padding-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sm-(-?[\\d.]+)$/, ([, value = '0']) => ({ margin: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smt-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smr-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'margin-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smb-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sml-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smx-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'margin-left': `var(--sp-${formatScaleKey(value)})`, 'margin-right': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^smy-(-?[\\d.]+)$/, ([, value = '0']) => ({ 'margin-top': `var(--sp-${formatScaleKey(value)})`, 'margin-bottom': `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sg-(-?[\\d.]+)$/, ([, value = '0']) => ({ gap: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sw-(-?[\\d.]+)$/, ([, value = '0']) => ({ width: `var(--sp-${formatScaleKey(value)})` })],",
+    "    [/^sh-(-?[\\d.]+)$/, ([, value = '0']) => ({ height: `var(--sp-${formatScaleKey(value)})` })],",
     '  ],',
     '  theme: {',
+    '    breakpoints: {',
+    ...(breakpointEntries.length > 0 ? breakpointEntries : ["      md: '768px',"]),
+    '    },',
     '    colors: {',
-      `      heliosbrand: '${config.brandColor}',`,
+    '      ...heliosPaletteColors,',
+    `      heliosbrand: '${config.brandColor}',`,
     "      brand: 'var(--ds-brand, #2858ff)',",
     "      ink: 'var(--ds-text, #0f172a)',",
     '    },',
@@ -249,6 +421,7 @@ const ensureNuxtAdditions = async (rootDir: string): Promise<string[]> => {
   const filePath = resolve(rootDir, 'nuxt.config.additions.ts')
   const cssEntry = "'~/helios/scss/index.scss'"
   const moduleEntry = "'@unocss/nuxt'"
+  const piniaModuleEntry = "'@pinia/nuxt'"
 
   let source = ''
   try {
@@ -259,7 +432,7 @@ const ensureNuxtAdditions = async (rootDir: string): Promise<string[]> => {
       '// Local overrides for arrays like modules/css/transpile.',
       '// This file is safe to edit and will be merged into the generated config.',
       'export default {',
-      `  modules: [${moduleEntry}],`,
+      `  modules: [${moduleEntry}, ${piniaModuleEntry}],`,
       `  css: [${cssEntry}],`,
       '  unocss: {',
       '    preflight: true,',
@@ -280,7 +453,7 @@ const ensureNuxtAdditions = async (rootDir: string): Promise<string[]> => {
     const modulesMatch = updated.match(/modules\s*:\s*\[([\s\S]*?)\]/m)
     if (modulesMatch) {
       const full = modulesMatch[0]
-      const inner = modulesMatch[1].trim()
+      const inner = (modulesMatch[1] ?? '').trim()
       const nextInner = inner.length > 0 ? `${inner},\n    ${moduleEntry}` : moduleEntry
       updated = updated.replace(full, `modules: [\n    ${nextInner}\n  ]`)
     }
@@ -289,11 +462,24 @@ const ensureNuxtAdditions = async (rootDir: string): Promise<string[]> => {
     }
   }
 
+  if (!updated.includes(piniaModuleEntry)) {
+    const modulesMatch = updated.match(/modules\s*:\s*\[([\s\S]*?)\]/m)
+    if (modulesMatch) {
+      const full = modulesMatch[0]
+      const inner = (modulesMatch[1] ?? '').trim()
+      const nextInner = inner.length > 0 ? `${inner},\n    ${piniaModuleEntry}` : piniaModuleEntry
+      updated = updated.replace(full, `modules: [\n    ${nextInner}\n  ]`)
+    }
+    else if (updated.includes('export default {')) {
+      updated = updated.replace('export default {', `export default {\n  modules: [${piniaModuleEntry}],`)
+    }
+  }
+
   if (!updated.includes(cssEntry)) {
     const cssMatch = updated.match(/css\s*:\s*\[([\s\S]*?)\]/m)
     if (cssMatch) {
       const full = cssMatch[0]
-      const inner = cssMatch[1].trim()
+      const inner = (cssMatch[1] ?? '').trim()
       const nextInner = inner.length > 0 ? `${inner},\n    ${cssEntry}` : cssEntry
       updated = updated.replace(full, `css: [\n    ${nextInner}\n  ]`)
     }
@@ -415,9 +601,38 @@ const ensureUnoConfigBridge = async (rootDir: string): Promise<string[]> => {
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const config = normalize(body?.config)
+  const requestedConfig = normalizeConfig(body?.config, defaultConfig)
+  const breakpoints = normalizeBreakpoints(body?.breakpoints, requestedConfig)
+  const baseConfig = breakpoints[0]?.config ?? requestedConfig
   const rootDir = process.cwd()
+  const colorFragmentFile = resolve(rootDir, 'app/helios/fragments/colors.json')
+  const colorSettingsFile = resolve(rootDir, 'app/helios/generated/colors.settings.json')
+  const themeFragmentFile = resolve(rootDir, 'app/helios/fragments/theme.json')
+  const themeSettingsFile = resolve(rootDir, 'app/helios/generated/theme.settings.json')
   const setupFragmentFile = resolve(rootDir, 'app/helios/fragments/setup.json')
+  let palettes = normalizeColorPalettes(body?.colors)
+  let themes = normalizeThemeSettings(body?.themes)
+
+  if (body?.colors === undefined) {
+    try {
+      const savedColors = await fs.readFile(colorFragmentFile, 'utf-8')
+      const savedColorsParsed = JSON.parse(savedColors)
+      palettes = normalizeColorPalettes(savedColorsParsed?.palettes ?? savedColorsParsed)
+    }
+    catch {
+      palettes = normalizeColorPalettes(null)
+    }
+  }
+
+  if (body?.themes === undefined) {
+    try {
+      const savedThemes = await fs.readFile(themeFragmentFile, 'utf-8')
+      themes = normalizeThemeSettings(JSON.parse(savedThemes))
+    }
+    catch {
+      themes = createDefaultThemeSettings()
+    }
+  }
 
   let setup = defaultSetup
   try {
@@ -432,24 +647,58 @@ export default defineEventHandler(async (event) => {
   const settingsFile = resolve(rootDir, 'app/helios/generated/type.settings.json')
   const tokensScssFile = resolve(rootDir, 'app/helios/scss/_tokens.scss')
   const typeScssFile = resolve(rootDir, 'app/helios/scss/_type.scss')
+  const colorsScssFile = resolve(rootDir, 'app/helios/scss/_colors.scss')
+  const semanticScssFile = resolve(rootDir, 'app/helios/scss/_semantic.scss')
   const indexScssFile = resolve(rootDir, 'app/helios/scss/index.scss')
   const unoGeneratedFile = resolve(rootDir, 'app/helios/generated/uno.generated.ts')
 
   await ensureDir(fragmentFile)
+  await ensureDir(colorFragmentFile)
+  await ensureDir(themeFragmentFile)
   await ensureDir(setupFragmentFile)
   await ensureDir(settingsFile)
+  await ensureDir(colorSettingsFile)
+  await ensureDir(themeSettingsFile)
   await ensureDir(tokensScssFile)
   await ensureDir(typeScssFile)
+  await ensureDir(colorsScssFile)
+  await ensureDir(semanticScssFile)
   await ensureDir(indexScssFile)
   await ensureDir(unoGeneratedFile)
 
-  await fs.writeFile(fragmentFile, JSON.stringify(config, null, 2), 'utf-8')
+  const typePayload = {
+    version: 2,
+    config: baseConfig,
+    breakpoints,
+    colors: palettes,
+    themes,
+  }
+
+  await fs.writeFile(fragmentFile, JSON.stringify(typePayload, null, 2), 'utf-8')
+  await fs.writeFile(colorFragmentFile, JSON.stringify({ version: 1, palettes }, null, 2), 'utf-8')
+  await fs.writeFile(themeFragmentFile, JSON.stringify(themes, null, 2), 'utf-8')
   await fs.writeFile(setupFragmentFile, JSON.stringify(setup, null, 2), 'utf-8')
-  await fs.writeFile(settingsFile, JSON.stringify({ version: 1, savedAt: new Date().toISOString(), config }, null, 2), 'utf-8')
-  await fs.writeFile(tokensScssFile, buildTokensScss(config), 'utf-8')
+  await fs.writeFile(
+    settingsFile,
+    JSON.stringify({ version: 2, savedAt: new Date().toISOString(), config: baseConfig, breakpoints, colors: palettes, themes }, null, 2),
+    'utf-8'
+  )
+  await fs.writeFile(
+    colorSettingsFile,
+    JSON.stringify({ version: 1, savedAt: new Date().toISOString(), palettes }, null, 2),
+    'utf-8'
+  )
+  await fs.writeFile(
+    themeSettingsFile,
+    JSON.stringify({ version: 1, savedAt: new Date().toISOString(), ...themes }, null, 2),
+    'utf-8'
+  )
+  await fs.writeFile(tokensScssFile, buildTokensScss(breakpoints), 'utf-8')
   await fs.writeFile(typeScssFile, buildTypographyScss(), 'utf-8')
+  await fs.writeFile(colorsScssFile, buildColorsScss(palettes), 'utf-8')
+  await fs.writeFile(semanticScssFile, buildSemanticScss(themes, palettes), 'utf-8')
   await fs.writeFile(indexScssFile, buildScssEntry(), 'utf-8')
-  await fs.writeFile(unoGeneratedFile, buildUnoGenerated(config, setup), 'utf-8')
+  await fs.writeFile(unoGeneratedFile, buildUnoGenerated(baseConfig, setup, breakpoints, palettes, themes), 'utf-8')
 
   const notes = [
     ...(await ensureNuxtAdditions(rootDir)),
@@ -460,11 +709,17 @@ export default defineEventHandler(async (event) => {
     ok: true,
     files: [
       'app/helios/fragments/type.json',
+      'app/helios/fragments/colors.json',
+      'app/helios/fragments/theme.json',
       'app/helios/fragments/setup.json',
       'app/helios/generated/type.settings.json',
+      'app/helios/generated/colors.settings.json',
+      'app/helios/generated/theme.settings.json',
       'app/helios/generated/uno.generated.ts',
       'app/helios/scss/_tokens.scss',
       'app/helios/scss/_type.scss',
+      'app/helios/scss/_colors.scss',
+      'app/helios/scss/_semantic.scss',
       'app/helios/scss/index.scss',
     ],
     notes,

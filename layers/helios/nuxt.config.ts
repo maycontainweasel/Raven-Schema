@@ -2,6 +2,7 @@ export default defineNuxtConfig({
   $meta: {
     name: 'helios',
   },
+  modules: ['@pinia/nuxt'],
   runtimeConfig: {
     public: {
       helios: {
