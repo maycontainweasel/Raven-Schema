@@ -149,6 +149,8 @@ config/graph.mpdg
 config/graph.mmd
 config/graph.ts
 
+config/bootstrap/functions/utility/initTaxonomies.surql
+
 
 
 
