@@ -495,6 +495,158 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:layers:push [name]',
+    'Push layer source from apps/schema/layers into app(s)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Optional project name to push',
+          type: 'string',
+        })
+        .option('project', {
+          alias: 'p',
+          type: 'string',
+          describe: 'Comma-separated list of project names to push',
+        })
+        .option('layers-sync', {
+          type: 'string',
+          choices: ['auto', 'force', 'off'],
+          describe: 'Override layer sync mode for this run',
+        })
+        .option('log', {
+          type: 'boolean',
+          default: true,
+          describe: 'Log layer push status',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      const positional = String(args.name ?? extractFirstPositionalArg(args) ?? '');
+      const inferredProject = extractCliOptionValue(args, ['--project', '-p']);
+      const projectFilter = parseList(args.project ?? inferredProject ?? positional);
+      const targetProjects = projectFilter
+        ? bundle.app.paths.projects.filter((proj) => projectFilter.has(proj.name))
+        : bundle.app.paths.projects;
+
+      if (targetProjects.length === 0) {
+        console.warn('⚠️  No matching projects found to push layers.');
+        return;
+      }
+
+      const mode =
+        (args['layers-sync'] as 'auto' | 'force' | 'off' | undefined) ??
+        bundle.app.layers?.sync ??
+        'auto';
+
+      await writeAuthLayerConfig({ projectRoot, app: bundle.app });
+
+      for (const project of targetProjects) {
+        await syncProjectLayers({
+          projectRoot,
+          app: bundle.app,
+          project,
+          mode,
+          log: args.log !== false,
+        });
+      }
+    }
+  )
+  .command(
+    'site:layers:pull [name]',
+    'Pull layer copies from app(s) back into apps/schema/layers',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Optional project name to pull from',
+          type: 'string',
+        })
+        .option('project', {
+          alias: 'p',
+          type: 'string',
+          describe: 'Comma-separated list of project names to pull from',
+        })
+        .option('layers', {
+          type: 'string',
+          describe: 'Comma-separated layer names to pull (defaults to each site configured layers)',
+        })
+        .option('delete', {
+          type: 'boolean',
+          default: false,
+          describe: 'Delete files in apps/schema/layers/<layer> that do not exist in app copy',
+        })
+        .option('log', {
+          type: 'boolean',
+          default: true,
+          describe: 'Log layer pull status',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      const positional = String(args.name ?? extractFirstPositionalArg(args) ?? '');
+      const inferredProject = extractCliOptionValue(args, ['--project', '-p']);
+      const inferredLayers = extractCliOptionValue(args, ['--layers']);
+      const projectFilter = parseList(args.project ?? inferredProject ?? positional);
+      const explicitLayers = parseList(args.layers ?? inferredLayers);
+      const targetProjects = projectFilter
+        ? bundle.app.paths.projects.filter((proj) => projectFilter.has(proj.name))
+        : bundle.app.paths.projects;
+
+      if (targetProjects.length === 0) {
+        console.warn('⚠️  No matching projects found to pull layers from.');
+        return;
+      }
+
+      const sourceRoot = path.resolve(projectRoot, bundle.app.layers?.source ?? 'layers');
+      await mkdir(sourceRoot, { recursive: true });
+      const deleteMissing = args.delete === true;
+      const log = args.log !== false;
+
+      for (const project of targetProjects) {
+        if (!project.nuxtProjectRoot) {
+          console.warn(`⚠️  Project ${project.name} has no nuxtProjectRoot; skipping.`);
+          continue;
+        }
+
+        const appRoot = path.resolve(projectRoot, project.nuxtProjectRoot);
+        const specEntry = await loadSiteSpec(projectRoot, project);
+        const configuredLayers = Array.isArray(specEntry?.spec.layers)
+          ? specEntry!.spec.layers.map((layer) => String(layer))
+          : resolveLayerList(bundle.app, project);
+
+        const layersToPull = explicitLayers
+          ? Array.from(explicitLayers)
+          : configuredLayers;
+
+        if (layersToPull.length === 0) {
+          if (log) {
+            console.log(`ℹ️  No layers configured for ${project.name}; skipping.`);
+          }
+          continue;
+        }
+
+        for (const layerName of layersToPull) {
+          const sourceDir = path.join(appRoot, 'layers', layerName);
+          const sourceStat = await stat(sourceDir).catch(() => null);
+          if (!sourceStat?.isDirectory()) {
+            console.warn(`⚠️  Layer copy not found: ${sourceDir}`);
+            continue;
+          }
+
+          const targetDir = path.join(sourceRoot, layerName);
+          await copyLayerForPull({
+            sourceDir,
+            targetDir,
+            deleteMissing,
+          });
+
+          if (log) {
+            console.log(`⬇️  Pulled layer: ${project.name} -> ${layerName}`);
+          }
+        }
+      }
+    }
+  )
+  .command(
     'site:layers:status [name]',
     'Show configured and available layers for a site',
     (yargsBuilder: any) =>
@@ -5117,6 +5269,52 @@ function ensureSchemaCoreLayer(layers: string[]): string[] {
   return next;
 }
 
+async function copyLayerForPull(options: {
+  sourceDir: string;
+  targetDir: string;
+  deleteMissing: boolean;
+}): Promise<void> {
+  const { sourceDir, targetDir, deleteMissing } = options;
+  await mkdir(targetDir, { recursive: true });
+
+  const sourceEntries = await readdir(sourceDir, { withFileTypes: true });
+  const retainedNames = new Set<string>();
+
+  for (const entry of sourceEntries) {
+    if (entry.name === '.layer.hash') continue;
+
+    retainedNames.add(entry.name);
+    const from = path.join(sourceDir, entry.name);
+    const to = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyLayerForPull({
+        sourceDir: from,
+        targetDir: to,
+        deleteMissing,
+      });
+      continue;
+    }
+
+    if (entry.isFile()) {
+      const content = await readFile(from);
+      await writeFile(to, content);
+    }
+  }
+
+  if (!deleteMissing) return;
+
+  const targetEntries = await readdir(targetDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of targetEntries) {
+    if (entry.name === '.layer.hash') {
+      await rm(path.join(targetDir, entry.name), { force: true });
+      continue;
+    }
+    if (retainedNames.has(entry.name)) continue;
+    await rm(path.join(targetDir, entry.name), { recursive: true, force: true });
+  }
+}
+
 const execFileAsync = promisify(execFile);
 
 async function maybeGenerateRouterManifest(projectRootDir: string, project: ProjectPathsConfig) {
@@ -5474,6 +5672,51 @@ function getRequiredFieldNames(table: TableMigrationConfig): string[] {
     }
   }
   return Array.from(names);
+}
+
+function extractFirstPositionalArg(args: any): string | null {
+  const tokens = Array.isArray(args?._) ? args._.map((entry: unknown) => String(entry)) : [];
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index]?.trim();
+    if (!token || token === '--') continue;
+    if (token.startsWith('-')) {
+      if (
+        token === '--project'
+        || token === '-p'
+        || token === '--layers'
+      ) {
+        index += 1;
+      }
+      continue;
+    }
+    return token;
+  }
+  return null;
+}
+
+function extractCliOptionValue(args: any, flags: string[]): string | null {
+  const tokens = Array.isArray(args?._) ? args._.map((entry: unknown) => String(entry)) : [];
+
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token || token === '--') continue;
+
+    for (const flag of flags) {
+      const prefixed = `${flag}=`;
+      if (token.startsWith(prefixed)) {
+        const value = token.slice(prefixed.length).trim();
+        if (value) return value;
+      }
+    }
+
+    if (!flags.includes(token)) continue;
+
+    const next = tokens[index + 1];
+    if (!next || next === '--' || next.startsWith('-')) continue;
+    return next.trim();
+  }
+
+  return null;
 }
 
 function parseList(value?: string): Set<string> | null {

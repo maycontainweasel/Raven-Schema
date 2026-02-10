@@ -181,6 +181,18 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:layers:sync`
   - `pnpm -C apps/schema run site:layers:sync -- --project admin`
 
+- `site:layers:push [name]`  
+  Push layer source from `apps/schema/layers` into app layer copies (`apps/<site>/layers`).  
+  Examples:
+  - `pnpm -C apps/schema run site:layers:push heliosadmin`
+  - `pnpm -C apps/schema run site:layers:push -- --project heliosadmin --layers-sync force`
+
+- `site:layers:pull [name]`  
+  Pull app layer copies back into `apps/schema/layers` (useful if edits were made in an app copy).  
+  Examples:
+  - `pnpm -C apps/schema run site:layers:pull heliosadmin`
+  - `pnpm -C apps/schema run site:layers:pull -- --project heliosadmin --layers helios-ui,helios-admin --delete`
+
 - `site:layers:status [name]`  
   Show configured and available layers for a site (plus `layers.lock.json` if present).  
   Examples:
