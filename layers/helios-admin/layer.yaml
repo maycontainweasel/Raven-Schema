@@ -1,0 +1,8 @@
+name: helios-admin
+version: 0.1.0
+description: Helios admin engine layer (routes, fields, model management, admin APIs).
+tags:
+  - admin
+  - ui
+  - schema
+  - models

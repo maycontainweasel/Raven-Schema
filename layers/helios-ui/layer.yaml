@@ -1,0 +1,8 @@
+name: helios-ui
+version: 0.1.0
+description: Helios UI primitives layer (Ark UI and shared field components).
+tags:
+  - ui
+  - fields
+  - ark-ui
+  - components
