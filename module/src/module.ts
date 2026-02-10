@@ -431,11 +431,23 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
       // Ensure more specific aliases are matched before the base @schema alias.
       .sort((a, b) => b.find.length - a.find.length)
 
+    const toAliasEntries = (alias: unknown) => {
+      if (Array.isArray(alias)) {
+        return alias
+      }
+      if (alias && typeof alias === 'object') {
+        return Object.entries(alias as Record<string, string>).map(([find, replacement]) => ({
+          find,
+          replacement,
+        }))
+      }
+      return []
+    }
+
     if (aliasConfig) {
       nuxt.options.alias ||= {}
       nuxt.options.vite ||= {}
       nuxt.options.vite.resolve ||= {}
-      nuxt.options.vite.resolve.alias ||= []
       nuxt.options.nitro ||= {}
       nuxt.options.nitro.alias ||= {}
 
@@ -449,7 +461,7 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
       }
 
       nuxt.options.vite.resolve.alias = [
-        ...(Array.isArray(nuxt.options.vite.resolve.alias) ? nuxt.options.vite.resolve.alias : []),
+        ...toAliasEntries(nuxt.options.vite.resolve.alias),
         ...aliasEntries,
       ]
     }
@@ -457,9 +469,8 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
     // Ensure aliases are injected into the final Vite/Nitro configs.
     nuxt.hook('vite:extendConfig', (config) => {
       config.resolve ||= {}
-      const existing = config.resolve.alias
       const entries = [
-        ...(Array.isArray(existing) ? existing : []),
+        ...toAliasEntries(config.resolve.alias),
         ...aliasEntries,
       ]
       config.resolve.alias = entries
