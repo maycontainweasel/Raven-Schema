@@ -84,6 +84,7 @@ export async function runSiteDeployInit(options: {
   overwriteNginx?: boolean;
   overwriteApp?: boolean;
   startPm2?: boolean;
+  remoteNginxSudo?: boolean;
 }): Promise<void> {
   const projectRoot = options.projectRoot;
   const repoRoot = path.resolve(projectRoot, '..', '..');
@@ -252,7 +253,7 @@ export async function runSiteDeployInit(options: {
       pm2Command: answers.pm2Command,
       nginxSitesEnabled: answers.nginxSitesEnabled,
       restartCommand: answers.restartCommand,
-      nginxSudo: answers.nginxSudo,
+      remoteNginxSudo: answers.nginxSudo,
       overwriteNginx: answers.overwriteNginx,
       overwriteApp: answers.overwriteApp,
       startPm2: answers.startPm2,
@@ -269,6 +270,7 @@ export async function runSiteDeployInit(options: {
     } else {
       (nextDeploy as any).appDir = answers.appDir;
     }
+    delete (nextDeploy as any).nginxSudo;
     (nextDeploy as any).ssl = sslConfig;
     const nextSpec = { ...specEntry.spec, deploy: nextDeploy };
     await writeFile(specEntry.path, YAML.stringify(nextSpec), 'utf-8');
@@ -408,7 +410,8 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeployAnswers {
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
-  const nginxSudo = (deploy as any).nginxSudo ?? false;
+  const remoteNginxSudo = (deploy as any).remoteNginxSudo;
+  const nginxSudo = remoteNginxSudo ?? true;
   const overwriteNginx = Boolean((deploy as any).overwriteNginx ?? false);
   const overwriteApp = Boolean((deploy as any).overwriteApp ?? false);
   const startPm2 = (deploy as any).startPm2 ?? true;
@@ -447,6 +450,7 @@ async function collectAnswers(
     overwriteNginx?: boolean;
     overwriteApp?: boolean;
     startPm2?: boolean;
+    remoteNginxSudo?: boolean;
   },
   defaults: DeployAnswers
 ): Promise<DeployAnswers> {
@@ -482,6 +486,7 @@ async function collectAnswers(
       overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
       overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
       startPm2: options.startPm2 ?? defaults.startPm2,
+      nginxSudo: options.remoteNginxSudo ?? defaults.nginxSudo,
     };
   }
   if (!process.stdin.isTTY) {
@@ -516,6 +521,7 @@ async function collectAnswers(
       overwriteNginx: options.overwriteNginx ?? defaults.overwriteNginx,
       overwriteApp: options.overwriteApp ?? defaults.overwriteApp,
       startPm2: options.startPm2 ?? defaults.startPm2,
+      nginxSudo: options.remoteNginxSudo ?? defaults.nginxSudo,
     };
   }
 
@@ -554,6 +560,7 @@ async function collectAnswers(
   const overwriteNginx = options.overwriteNginx ?? await promptYesNo('Overwrite nginx config if it exists?', false);
   const overwriteApp = options.overwriteApp ?? await promptYesNo('Overwrite app folder if it exists?', false);
   const startPm2 = options.startPm2 ?? await promptYesNo('Start PM2 with ecosystem.config.cjs?', true);
+  const nginxSudo = options.remoteNginxSudo ?? await promptYesNo('Use sudo for remote nginx commands?', defaults.nginxSudo);
 
   return {
     ...defaults,
@@ -569,6 +576,7 @@ async function collectAnswers(
     overwriteNginx,
     overwriteApp,
     startPm2,
+    nginxSudo,
   };
 }
 

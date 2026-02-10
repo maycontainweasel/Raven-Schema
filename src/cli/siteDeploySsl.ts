@@ -38,6 +38,7 @@ export async function runSiteDeploySsl(options: {
   domain?: string;
   email?: string;
   redirect?: boolean;
+  remoteNginxSudo?: boolean;
   yes?: boolean;
 }): Promise<void> {
   const projectRoot = options.projectRoot;
@@ -65,7 +66,7 @@ export async function runSiteDeploySsl(options: {
   const certbotArgs = buildCertbotArgs(answers.domain, answers.email, answers.redirect);
 
   console.log('🔐 Requesting SSL certificate via certbot...');
-  await runSsh(sshTarget, `sudo certbot ${certbotArgs}`);
+  await runSsh(sshTarget, maybeWithSudo(`certbot ${certbotArgs}`, answers.nginxSudo));
 
   console.log('🔧 Testing nginx config...');
   await runSsh(sshTarget, maybeWithSudo('nginx -t', answers.nginxSudo));
@@ -145,7 +146,8 @@ function deriveDefaults(spec: SiteSpec | null, slug: string): DeploySslAnswers {
   const redirect = ssl.redirect ?? false;
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
-  const nginxSudo = (deploy as any).nginxSudo ?? false;
+  const remoteNginxSudo = (deploy as any).remoteNginxSudo;
+  const nginxSudo = remoteNginxSudo ?? true;
   return {
     host,
     user,
@@ -165,6 +167,7 @@ async function collectAnswers(
     domain?: string;
     email?: string;
     redirect?: boolean;
+    remoteNginxSudo?: boolean;
     yes?: boolean;
   },
   defaults: DeploySslAnswers
@@ -183,6 +186,7 @@ async function collectAnswers(
       domain,
       email,
       redirect: options.redirect ?? defaults.redirect,
+      nginxSudo: options.remoteNginxSudo ?? defaults.nginxSudo,
     };
   }
 
@@ -200,6 +204,7 @@ async function collectAnswers(
     domain,
     email,
     redirect,
+    nginxSudo: options.remoteNginxSudo ?? defaults.nginxSudo,
   };
 }
 

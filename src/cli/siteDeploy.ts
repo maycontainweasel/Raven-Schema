@@ -86,6 +86,7 @@ export async function runSiteDeploy(options: {
   yes?: boolean;
   skipVerify?: boolean;
   skipAudit?: boolean;
+  remoteNginxSudo?: boolean;
   reset?: boolean;
   resetRemote?: boolean;
   resetOnly?: boolean;
@@ -118,6 +119,7 @@ export async function runSiteDeploy(options: {
       remotePath: options.remotePath,
       overwriteNginx: options.overwriteNginx,
       overwriteApp: options.overwriteApp,
+      remoteNginxSudo: options.remoteNginxSudo,
       yes: initYes,
       skipAudit: options.skipAudit,
     });
@@ -203,6 +205,7 @@ export async function runSiteDeploy(options: {
       remotePath: options.remotePath,
       overwriteNginx: options.overwriteNginx,
       overwriteApp: options.overwriteApp,
+      remoteNginxSudo: options.remoteNginxSudo,
       yes: initYes,
       skipAudit: options.skipAudit,
     });
@@ -242,7 +245,9 @@ export async function runSiteDeploy(options: {
   if (fromIndex <= stepIndex('ssl') && hasSslEnabled(context.spec.deploy)) {
     console.log('🔐 SSL enabled in site config. Running certbot...');
     const certPath = `/etc/letsencrypt/live/${context.resolvedAnswers.domain}/fullchain.pem`;
-    const certExists = await remoteFileExists(context.sshTarget, certPath, { sudo: true });
+    const certExists = await remoteFileExists(context.sshTarget, certPath, {
+      sudo: context.resolvedAnswers.nginxSudo,
+    });
     if (!certExists) {
       let sslConfig = getSslConfig(context.spec.deploy);
       let email = sslConfig?.email;
@@ -276,6 +281,7 @@ export async function runSiteDeploy(options: {
         domain: context.answers.domain,
         email,
         redirect: sslConfig?.redirect,
+        remoteNginxSudo: options.remoteNginxSudo ?? context.resolvedAnswers.nginxSudo,
         yes: options.yes ?? canSkipPrompts,
       });
     }
@@ -348,7 +354,8 @@ function deriveDefaults(spec: SiteSpec, slug: string, appRoot: string): DeployAn
   const pm2Command = (deploy as any).pm2Command ?? 'pm2';
   const nginxSitesEnabled = (deploy as any).nginxSitesEnabled ?? '/etc/nginx/sites-enabled';
   const restartCommand = (deploy as any).restartCommand ?? 'systemctl reload nginx';
-  const nginxSudo = (deploy as any).nginxSudo ?? false;
+  const remoteNginxSudo = (deploy as any).remoteNginxSudo;
+  const nginxSudo = remoteNginxSudo ?? true;
   const restartNginx = (deploy as any).restartNginx ?? false;
   const rsyncDelete = (deploy as any).rsyncDelete ?? true;
   const buildCommand = (deploy as any).buildCommand ?? 'pnpm run build';
@@ -385,6 +392,7 @@ function resolveAnswers(options: {
   buildCommand?: string;
   rsyncDelete?: boolean;
   restartNginx?: boolean;
+  remoteNginxSudo?: boolean;
 }, defaults: DeployAnswers): DeployAnswers {
   const host = options.host ?? defaults.host;
   const domain = options.domain ?? defaults.domain;
@@ -416,6 +424,7 @@ function resolveAnswers(options: {
     buildCommand: options.buildCommand ?? defaults.buildCommand,
     rsyncDelete: options.rsyncDelete ?? defaults.rsyncDelete,
     restartNginx: options.restartNginx ?? defaults.restartNginx,
+    nginxSudo: options.remoteNginxSudo ?? defaults.nginxSudo,
   };
 }
 
@@ -831,13 +840,16 @@ async function resetRemoteResources(context: DeployContext): Promise<void> {
       `${buildPm2Command(resolvedAnswers.pm2Command, `delete ${resolvedAnswers.pm2Name}`)} >/dev/null 2>&1 || true`
     );
   }
-  await killPortIfInUse(sshTarget, resolvedAnswers.port);
+  await killPortIfInUse(sshTarget, resolvedAnswers.port, resolvedAnswers.nginxSudo);
   await runSsh(sshTarget, `rm -rf ${shellEscapePath(resolvedAnswers.appDir)} >/dev/null 2>&1 || true`);
-  await runSsh(sshTarget, `sudo rm -f ${shellEscapePath(nginxPath)} >/dev/null 2>&1 || true`);
+  await runSsh(
+    sshTarget,
+    `${maybeWithSudo(`rm -f ${shellEscapePath(nginxPath)} >/dev/null 2>&1 || true`, resolvedAnswers.nginxSudo)}`
+  );
   const certName = resolvedAnswers.domain;
   await runSsh(
     sshTarget,
-    `sudo rm -rf /etc/letsencrypt/live/${certName} /etc/letsencrypt/archive/${certName} /etc/letsencrypt/renewal/${certName}.conf >/dev/null 2>&1 || true`
+    `${maybeWithSudo(`rm -rf /etc/letsencrypt/live/${certName} /etc/letsencrypt/archive/${certName} /etc/letsencrypt/renewal/${certName}.conf >/dev/null 2>&1 || true`, resolvedAnswers.nginxSudo)}`
   );
   await pruneEmptyParents(sshTarget, resolvedAnswers.appDir, resolvedAnswers.remoteBase);
   console.log('🔧 Testing nginx config...');
@@ -888,7 +900,7 @@ async function pruneEmptyParents(
   await runSsh(target, cmd);
 }
 
-async function killPortIfInUse(target: string, port: number): Promise<void> {
+async function killPortIfInUse(target: string, port: number, useSudo: boolean): Promise<void> {
   if (!Number.isFinite(port) || port <= 0) return;
   const inUse = await remotePortInUse(target, port);
   if (!inUse) return;
@@ -898,11 +910,12 @@ async function killPortIfInUse(target: string, port: number): Promise<void> {
   );
   if (!proceed) return;
   if (await remoteCommandExists(target, 'fuser')) {
-    await runSsh(target, `sudo fuser -k ${port}/tcp >/dev/null 2>&1 || true`);
+    await runSsh(target, `${maybeWithSudo(`fuser -k ${port}/tcp >/dev/null 2>&1 || true`, useSudo)}`);
     return;
   }
   if (await remoteCommandExists(target, 'lsof')) {
-    await runSsh(target, `sudo lsof -ti :${port} | xargs -r sudo kill -9`);
+    const killCmd = `lsof -ti :${port} | xargs -r kill -9`;
+    await runSsh(target, `${maybeWithSudo(killCmd, useSudo)}`);
     return;
   }
   console.warn('⚠️  Unable to kill port (fuser/lsof not found).');

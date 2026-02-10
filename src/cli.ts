@@ -150,6 +150,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Remote path under base directory (e.g. dmo/public)',
         })
+        .option('remote-nginx-sudo', {
+          type: 'boolean',
+          describe: 'Use sudo for remote nginx/certbot commands (default true)',
+        })
         .option('overwrite-nginx', {
           type: 'boolean',
           describe: 'Overwrite nginx config if it exists',
@@ -185,6 +189,7 @@ const argv = yargs(hideBin(process.argv))
         remoteBase: args['remote-base'] ? String(args['remote-base']) : undefined,
         remoteRoot: args['remote-root'] ? String(args['remote-root']) : undefined,
         remotePath: args['remote-path'] ? String(args['remote-path']) : undefined,
+        remoteNginxSudo: args['remote-nginx-sudo'],
         overwriteNginx: args['overwrite-nginx'],
         overwriteApp: args['overwrite-app'],
         startPm2: args['start-pm2'],
@@ -325,6 +330,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Redirect HTTP to HTTPS',
         })
+        .option('remote-nginx-sudo', {
+          type: 'boolean',
+          describe: 'Use sudo for remote nginx/certbot commands (default true)',
+        })
         .option('yes', {
           type: 'boolean',
           default: false,
@@ -341,6 +350,7 @@ const argv = yargs(hideBin(process.argv))
         domain: args.domain ? String(args.domain) : undefined,
         email: args.email ? String(args.email) : undefined,
         redirect: args.redirect,
+        remoteNginxSudo: args['remote-nginx-sudo'],
         yes: args.yes === true,
       });
     }
@@ -1130,6 +1140,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           describe: 'Restart nginx after deploy',
         })
+        .option('remote-nginx-sudo', {
+          type: 'boolean',
+          describe: 'Use sudo for remote nginx/certbot commands (default true)',
+        })
         .option('skip-audit', {
           type: 'boolean',
           describe: 'Skip remote dependency audit',
@@ -1183,6 +1197,7 @@ const argv = yargs(hideBin(process.argv))
         buildCommand: args['build-command'] ? String(args['build-command']) : undefined,
         rsyncDelete: args['rsync-delete'],
         restartNginx: args['restart-nginx'],
+        remoteNginxSudo: args['remote-nginx-sudo'],
         noBuild: args['no-build'] === true,
         noEnvSync: args['no-env-sync'] === true,
         noSync: args['no-sync'] === true,
@@ -1502,6 +1517,10 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Remote path under base directory (e.g. dmo/public)',
         })
+        .option('remote-nginx-sudo', {
+          type: 'boolean',
+          describe: 'Use sudo for remote nginx/certbot commands (default true)',
+        })
         .option('overwrite-nginx', {
           type: 'boolean',
           describe: 'Overwrite nginx config if it exists',
@@ -1533,6 +1552,7 @@ const argv = yargs(hideBin(process.argv))
         remoteBase: args['remote-base'] ? String(args['remote-base']) : undefined,
         remoteRoot: args['remote-root'] ? String(args['remote-root']) : undefined,
         remotePath: args['remote-path'] ? String(args['remote-path']) : undefined,
+        remoteNginxSudo: args['remote-nginx-sudo'],
         overwriteNginx: args['overwrite-nginx'],
         overwriteApp: args['overwrite-app'],
         startPm2: args['start-pm2'],
@@ -2060,13 +2080,20 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Override nginx restart command (no sudo prefix)',
         })
+        .option('local-nginx-sudo', {
+          type: 'boolean',
+          describe: 'Use sudo for local nginx restart command',
+        })
         .option('mkcert-command', {
           type: 'string',
           describe: 'Override mkcert command',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
-      await runNginxSetup(args, projectRoot);
+      await runNginxSetup({
+        ...args,
+        localNginxSudo: args['local-nginx-sudo'],
+      }, projectRoot);
     }
   )
   .command(

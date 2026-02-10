@@ -46,6 +46,7 @@ interface NginxSetupArgs {
   hostsPath?: string;
   templatePath?: string;
   restartCommand?: string;
+  localNginxSudo?: boolean;
   mkcertCommand?: string;
 }
 
@@ -278,7 +279,7 @@ export async function runNginxSetup(args: NginxSetupArgs, projectRoot: string): 
   const hostsPath = resolvePathMaybeHome(args.hostsPath ?? config.hostsPath, projectRoot);
   const templatePath = resolvePathMaybeHome(args.templatePath ?? config.templatePath, projectRoot);
   const restartCommand = args.restartCommand ?? config.restartCommand ?? DEFAULT_CONFIG.restartCommand;
-  const nginxSudo = (config.nginxSudo ?? DEFAULT_CONFIG.nginxSudo) === true;
+  const nginxSudo = (args.localNginxSudo ?? config.nginxSudo ?? DEFAULT_CONFIG.nginxSudo) === true;
   const mkcertCommand = args.mkcertCommand ?? config.mkcertCommand ?? DEFAULT_CONFIG.mkcertCommand;
 
   try {
