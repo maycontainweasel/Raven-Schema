@@ -1,0 +1,17 @@
+services:
+  surrealmcp_prod_v2:
+    image: surrealdb/surrealmcp:latest
+    container_name: surrealmcp_prod_v2
+    restart: unless-stopped
+    command: >
+      start
+      --bind-address 0.0.0.0:10912
+      --server-url http://localhost:10912
+      --endpoint wss://api.v2.luckyisibaya.co.za/rpc
+      --ns appns
+      --db app_v1
+      --user mpire2
+      --pass BurntMyMoustacheIn1986
+      --auth-disabled
+    ports:
+      - "10912:10912"

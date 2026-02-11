@@ -8,7 +8,7 @@ import YAML from 'yaml';
 
 import { toKebabCase } from './util';
 
-interface SiteSpec {
+interface SiteSpec extends Record<string, unknown> {
   name: string;
   slug: string;
   template: string;
@@ -349,13 +349,17 @@ async function loadSiteSpec(
   const exists = await stat(specPath).catch(() => null);
   if (!exists?.isFile()) return null;
   const content = await readFile(specPath, 'utf-8');
-  const parsed = YAML.parse(content) as Partial<SiteSpec>;
-  if (!parsed?.name || !parsed.slug || !parsed.template || !parsed.target) {
+  const parsed = YAML.parse(content) as Record<string, unknown> | null;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  if (!parsed.name || !parsed.slug || !parsed.template || !parsed.target) {
     return null;
   }
   return {
     path: specPath,
     spec: {
+      ...parsed,
       name: String(parsed.name),
       slug: String(parsed.slug),
       template: String(parsed.template),

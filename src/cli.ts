@@ -806,7 +806,11 @@ const argv = yargs(hideBin(process.argv))
           mergedConfig.modules = mergeModuleList(mergedConfig.modules, layerDefaults.modules);
         }
       }
-      specEntry.spec.nuxtConfig = mergedConfig;
+      specEntry.spec.nuxtConfig = await applySiteAccessConfigDefaults({
+        config: mergedConfig,
+        spec: specEntry.spec,
+        appRoot,
+      });
       await writeSiteSpec(specEntry.path, specEntry.spec);
       console.log(`✅ Added layers to ${specEntry.spec.slug}: ${layersToAdd.join(', ')}`);
       const effectiveConfig = await buildSiteNuxtConfig({
@@ -923,7 +927,11 @@ const argv = yargs(hideBin(process.argv))
           mergedConfig.modules = mergeModuleList(mergedConfig.modules, layerDefaults.modules);
         }
       }
-      specEntry.spec.nuxtConfig = mergedConfig;
+      specEntry.spec.nuxtConfig = await applySiteAccessConfigDefaults({
+        config: mergedConfig,
+        spec: specEntry.spec,
+        appRoot,
+      });
 
       const useDefaults = args.yes === true || !process.stdin.isTTY;
       const resolvedAttributify = typeof args.attributify === 'boolean'
@@ -1118,7 +1126,11 @@ const argv = yargs(hideBin(process.argv))
         );
         mergedConfig.modules = mergeModuleList(trimmed, remainingDefaults.modules);
       }
-      specEntry.spec.nuxtConfig = mergedConfig;
+      specEntry.spec.nuxtConfig = await applySiteAccessConfigDefaults({
+        config: mergedConfig,
+        spec: specEntry.spec,
+        appRoot,
+      });
       await writeSiteSpec(specEntry.path, specEntry.spec);
       console.log(`✅ Removed layers from ${specEntry.spec.slug}: ${layersToRemove.join(', ')}`);
       const effectiveConfig = await buildSiteNuxtConfig({
@@ -4776,7 +4788,187 @@ async function buildSiteNuxtConfig(options: {
   if (!('modules' in merged) && layerDefaults.modules.length > 0) {
     merged.modules = layerDefaults.modules;
   }
-  return merged;
+  return applySiteAccessConfigDefaults({
+    config: merged,
+    spec: options.spec,
+    appRoot: options.appRoot,
+  });
+}
+
+async function applySiteAccessConfigDefaults(options: {
+  config: Record<string, unknown>;
+  spec: SiteSpecForSetup;
+  appRoot: string;
+}): Promise<Record<string, unknown>> {
+  const current = mergeOverride({}, options.config);
+  const currentDevServer = asRecord(current.devServer);
+  const currentPort = parseNumericPort(currentDevServer?.port);
+  const currentViteServer = asRecord(asRecord(current.vite)?.server);
+  const hasAllowedHosts = Array.isArray(currentViteServer?.allowedHosts)
+    && currentViteServer.allowedHosts.some((entry) => typeof entry === 'string' && entry.trim().length > 0);
+  const hasOrigin = typeof currentViteServer?.origin === 'string' && currentViteServer.origin.trim().length > 0;
+  if (currentPort !== null && hasAllowedHosts && hasOrigin) {
+    return current;
+  }
+
+  const fallback = await resolveSiteAccessFallbackConfig({
+    spec: options.spec,
+    appRoot: options.appRoot,
+  });
+  if (!fallback) {
+    return current;
+  }
+
+  return mergeOverride(fallback, current);
+}
+
+async function resolveSiteAccessFallbackConfig(options: {
+  spec: SiteSpecForSetup;
+  appRoot: string;
+}): Promise<Record<string, unknown> | null> {
+  const siteUrl = await readSiteUrlFromEnvYaml(options.appRoot)
+    ?? (typeof (options.spec.deploy as any)?.domain === 'string'
+      ? `https://${String((options.spec.deploy as any).domain).trim()}`
+      : null);
+  const parsedUrl = siteUrl
+    ? (() => {
+        try {
+          return new URL(siteUrl);
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+
+  const devPort = await parseDevPortFromPackageJson(options.appRoot)
+    ?? parseNumericPort((options.spec.deploy as any)?.port);
+
+  const out: Record<string, unknown> = {};
+  if (devPort !== null) {
+    out.devServer = {
+      host: '0.0.0.0',
+      port: devPort,
+    };
+  }
+
+  if (parsedUrl) {
+    const host = parsedUrl.hostname;
+    if (host) {
+      const isHttps = parsedUrl.protocol === 'https:';
+      const clientPort = parsedUrl.port
+        ? parseNumericPort(parsedUrl.port)
+        : (isHttps ? 443 : 80);
+      out.vite = {
+        server: {
+          allowedHosts: [host],
+          origin: parsedUrl.origin,
+          hmr: {
+            protocol: isHttps ? 'wss' : 'ws',
+            host,
+            clientPort: clientPort ?? (isHttps ? 443 : 80),
+            path: '/__vitews',
+          },
+        },
+      };
+    }
+  }
+
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+async function readSiteUrlFromEnvYaml(appRoot: string): Promise<string | null> {
+  const envPath = path.join(appRoot, 'env.yaml');
+  const envStat = await stat(envPath).catch(() => null);
+  if (!envStat?.isFile()) return null;
+  const raw = await readFile(envPath, 'utf-8').catch(() => null);
+  if (!raw) return null;
+  const parsed = YAML.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const candidate = preferLocalEnvValue((parsed as Record<string, unknown>).NUXT_SITEURL);
+  if (!candidate) return null;
+  try {
+    const url = new URL(candidate);
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function preferLocalEnvValue(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const parts = value.split('|').map((part) => part.trim()).filter(Boolean);
+    if (parts.length === 0) return null;
+    if (parts.length === 1) return parts[0];
+    const localFirst = parts.find((entry) => looksLocalSiteUrl(entry));
+    return localFirst ?? parts[0];
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (entry === null || entry === undefined) continue;
+      const candidate = String(entry).trim();
+      if (candidate) return candidate;
+    }
+    return null;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const local = record.local === null || record.local === undefined
+      ? ''
+      : String(record.local).trim();
+    const staging = record.staging === null || record.staging === undefined
+      ? ''
+      : String(record.staging).trim();
+    return local || staging || null;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return null;
+}
+
+function looksLocalSiteUrl(value: string): boolean {
+  return value.includes('localhost')
+    || value.includes('127.0.0.1')
+    || value.includes('.local');
+}
+
+async function parseDevPortFromPackageJson(appRoot: string): Promise<number | null> {
+  const packagePath = path.join(appRoot, 'package.json');
+  const raw = await readFile(packagePath, 'utf-8').catch(() => null);
+  if (!raw) return null;
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const scripts = asRecord(parsed.scripts);
+  const dev = typeof scripts?.dev === 'string' ? scripts.dev : '';
+  if (!dev) return null;
+  const directPort = dev.match(/--port(?:=|\s+)(\d{2,5})\b/i)?.[1]
+    ?? dev.match(/\s-p(?:=|\s+)(\d{2,5})\b/i)?.[1];
+  return directPort ? parseNumericPort(directPort) : null;
+}
+
+function parseNumericPort(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+  }
+  return null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
 }
 
 function normalizeLayerArgs(raw: unknown): string[] {

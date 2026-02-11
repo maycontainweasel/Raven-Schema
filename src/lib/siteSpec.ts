@@ -4,12 +4,15 @@ import YAML from 'yaml';
 
 import type { ProjectPathsConfig, SchemaKitFeatures } from '../types';
 
-export interface SiteSpecRecord {
+export interface SiteSpecRecord extends Record<string, unknown> {
   name: string;
   slug: string;
   template: string;
   target: string;
   nuxtConfig?: Record<string, unknown>;
+  packageJson?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+  deploy?: Record<string, unknown>;
   layers?: string[];
   capabilities?: SchemaKitFeatures;
   schemaKit?: {
@@ -218,30 +221,49 @@ async function readSpecFile(filePath: string): Promise<SiteSpecRecord | null> {
   const exists = await stat(filePath).catch(() => null);
   if (!exists?.isFile()) return null;
   const content = await readFile(filePath, 'utf-8');
-  const parsed = YAML.parse(content) as Partial<SiteSpecRecord>;
-  if (!parsed?.name || !parsed.slug || !parsed.template || !parsed.target) return null;
+  const parsed = YAML.parse(content);
+  if (!isPlainObject(parsed)) return null;
+  if (!parsed.name || !parsed.slug || !parsed.template || !parsed.target) return null;
+  const schemaKitRaw = isPlainObject(parsed.schemaKit)
+    ? (parsed.schemaKit as Record<string, unknown>)
+    : null;
+  const schemaKitValue = schemaKitRaw
+    ? (() => {
+        const next: { capabilities?: SchemaKitFeatures; features?: SchemaKitFeatures } = {};
+        if (isPlainObject(schemaKitRaw.capabilities)) {
+          next.capabilities = schemaKitRaw.capabilities as SchemaKitFeatures;
+        }
+        if (isPlainObject(schemaKitRaw.features)) {
+          next.features = schemaKitRaw.features as SchemaKitFeatures;
+        }
+        return next;
+      })()
+    : undefined;
   return {
+    ...(parsed as Record<string, unknown>),
     name: String(parsed.name),
     slug: String(parsed.slug),
     template: String(parsed.template),
     target: String(parsed.target),
-    nuxtConfig: parsed.nuxtConfig as Record<string, unknown> | undefined,
+    nuxtConfig: isPlainObject(parsed.nuxtConfig)
+      ? (parsed.nuxtConfig as Record<string, unknown>)
+      : undefined,
+    packageJson: isPlainObject(parsed.packageJson)
+      ? (parsed.packageJson as Record<string, unknown>)
+      : undefined,
+    env: isPlainObject(parsed.env)
+      ? (parsed.env as Record<string, unknown>)
+      : undefined,
+    deploy: isPlainObject(parsed.deploy)
+      ? (parsed.deploy as Record<string, unknown>)
+      : undefined,
     layers: Array.isArray(parsed.layers)
       ? parsed.layers.map((entry) => String(entry).trim()).filter(Boolean)
       : undefined,
     capabilities: isPlainObject(parsed.capabilities)
       ? (parsed.capabilities as SchemaKitFeatures)
       : undefined,
-    schemaKit: isPlainObject(parsed.schemaKit)
-      ? {
-          capabilities: isPlainObject((parsed.schemaKit as any).capabilities)
-            ? ((parsed.schemaKit as any).capabilities as SchemaKitFeatures)
-            : undefined,
-          features: isPlainObject((parsed.schemaKit as any).features)
-            ? ((parsed.schemaKit as any).features as SchemaKitFeatures)
-            : undefined,
-        }
-      : undefined,
+    schemaKit: schemaKitValue,
   };
 }
 
