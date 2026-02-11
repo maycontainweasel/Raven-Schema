@@ -88,12 +88,14 @@ export default defineEventHandler(async (event) => {
       spec: {
         route: specState.spec.directory.route,
         slugPolicy: specState.spec.directory.slugPolicy,
+        createAction: specState.spec.directory.createDialog.action,
       },
       debug: {
         payload,
         required,
         modelRequired,
         specRequired,
+        createAction: specState.spec.directory.createDialog.action,
       },
       ...created,
     }

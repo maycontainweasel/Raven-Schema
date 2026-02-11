@@ -34,6 +34,7 @@ export type ModelUIFieldSpec = {
   modelKey?: string
   validation?: Record<string, any>
   class?: string
+  meta?: Record<string, any>
 }
 
 export type ModelUIFieldLayoutColumnSpec = {
@@ -64,6 +65,7 @@ export type ModelUIWidgetSpec = {
   action?: string
   fields: ModelUIFieldSpec[]
   layout?: ModelUIFieldLayoutSpec
+  meta?: Record<string, any>
 }
 
 export type ModelUIColumnSpec = {
@@ -71,6 +73,7 @@ export type ModelUIColumnSpec = {
   name: string
   class?: string
   primary: ModelUIWidgetSpec[]
+  meta?: Record<string, any>
 }
 
 export type ModelUIRowSpec = {
@@ -78,6 +81,7 @@ export type ModelUIRowSpec = {
   name: string
   class?: string
   columns: ModelUIColumnSpec[]
+  meta?: Record<string, any>
 }
 
 export type ModelUITabSpec = {
@@ -85,6 +89,7 @@ export type ModelUITabSpec = {
   slug: string
   label: string
   primary: ModelUIRowSpec[]
+  meta?: Record<string, any>
 }
 
 export type DirectoryListingFieldSpec = {
@@ -101,6 +106,7 @@ export type DirectoryFilterSpec = {
 
 export type DirectoryCreateDialogSpec = {
   enabled: boolean
+  action: string
   title: string
   submitLabel: string
   required: string[]
@@ -167,6 +173,16 @@ const safeArray = (value: unknown): string[] => {
   return ensureUnique(mapped)
 }
 
+const safeMetaObject = (value: unknown): Record<string, any> | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  try {
+    return JSON.parse(JSON.stringify(value)) as Record<string, any>
+  }
+  catch {
+    return undefined
+  }
+}
+
 const startsWithSlash = (value: string) => {
   if (value.startsWith('/')) return value
   return `/${value}`
@@ -193,6 +209,34 @@ const normalizeModelKey = (value: string) =>
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
+
+const normalizeCreateDialogAction = (
+  value: unknown,
+  modelKey: string,
+  fallbackProcedure = 'create',
+) => {
+  const normalizedModel = normalizeModelKey(modelKey)
+  const fallbackAction = `${normalizedModel}.${fallbackProcedure}`
+  const raw = String(value ?? '').trim()
+  if (!raw) return fallbackAction
+
+  const segments = raw
+    .split('.')
+    .map(entry => entry.trim())
+    .filter(entry => entry.length > 0)
+
+  if (!segments.length || segments.length > 2) return fallbackAction
+
+  const procedure = segments.length === 1 ? segments[0]! : segments[1]!
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(procedure)) return fallbackAction
+
+  if (segments.length === 2) {
+    const targetModel = normalizeModelKey(segments[0]!)
+    if (targetModel !== normalizedModel) return fallbackAction
+  }
+
+  return `${normalizedModel}.${procedure}`
+}
 
 const normalizeRoutePath = (value: string, fallback: string) => {
   const normalized = startsWithSlash(safeText(value, fallback))
@@ -466,6 +510,7 @@ const normalizeFieldSpec = (
       ? (value as any).validation
       : {},
     class: String((value as any).class ?? '').trim() || undefined,
+    meta: safeMetaObject((value as any).meta),
   }
 }
 
@@ -603,6 +648,7 @@ const normalizeWidgetSpec = (
     action: String((value as any).action ?? `${model.modelKey}.update`).trim() || undefined,
     fields,
     layout,
+    meta: safeMetaObject((value as any).meta),
   }
 }
 
@@ -635,6 +681,7 @@ const normalizeColumnSpec = (
     name,
     class: String((value as any).class ?? '').trim() || undefined,
     primary: primaryRaw.map((widget, widgetIndex) => normalizeWidgetSpec(widget, model, widgetIndex)),
+    meta: safeMetaObject((value as any).meta),
   }
 }
 
@@ -667,6 +714,7 @@ const normalizeRowSpec = (
     name,
     class: String((value as any).class ?? '').trim() || undefined,
     columns: columnsRaw.map((column, colIndex) => normalizeColumnSpec(column, model, colIndex)),
+    meta: safeMetaObject((value as any).meta),
   }
 }
 
@@ -701,6 +749,7 @@ const normalizeTabSpec = (
     slug,
     label: rawLabel,
     primary: rowsRaw.map((row, rowIndex) => normalizeRowSpec(row, model, rowIndex)),
+    meta: safeMetaObject((value as any).meta),
   }
 }
 
@@ -1045,6 +1094,7 @@ export const createDefaultModelSpec = (model: ModelManagerModel): ModelLayoutSpe
       },
       createDialog: {
         enabled: true,
+        action: `${model.modelKey}.create`,
         title: `Create ${model.label}`,
         submitLabel: `Create ${model.label}`,
         required: model.requiredFields.length
@@ -1183,6 +1233,11 @@ export const normalizeModelSpec = (
       },
       createDialog: {
         enabled: Boolean(directoryCreateDialog?.enabled ?? fallback.directory.createDialog.enabled),
+        action: normalizeCreateDialogAction(
+          directoryCreateDialog?.action,
+          model.modelKey,
+          String(fallback.directory.createDialog.action || '').split('.')[1] || 'create',
+        ),
         title: safeText(directoryCreateDialog?.title, fallback.directory.createDialog.title),
         submitLabel: safeText(directoryCreateDialog?.submitLabel, fallback.directory.createDialog.submitLabel),
         required: requiredCreateKeys,

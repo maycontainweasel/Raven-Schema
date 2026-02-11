@@ -6,6 +6,11 @@ import type {
   ModelSpecResponse,
   ModelUIFieldSpec,
 } from '#helios-admin/app/types/model-spec'
+import type {
+  ModelCreateRecordContext,
+  ModelCreateRecordOverride,
+  ModelCreateRecordSyncResponse,
+} from '#helios-admin/app/types/model-overrides'
 
 type DirectoryRecord = {
   rid: string
@@ -21,14 +26,6 @@ type DirectoryRuntimeResponse = {
     collection?: string
     queryBy?: string
   }
-}
-
-type CreateSyncResponse = {
-  ok: boolean
-  slug: string
-  redirectTo: string
-  identifiers?: Record<string, any>
-  typesense?: Record<string, any> | null
 }
 
 type AComboboxOption = {
@@ -56,6 +53,7 @@ const createError = ref('')
 const createDraft = ref<Record<string, any>>({})
 const filterState = ref<Record<string, string | string[]>>({})
 const createDialogOverrideModules = import.meta.glob('@/components/admin/overrides/**/CreateDialog.vue')
+const createRecordOverrideModules = import.meta.glob('@/components/admin/overrides/**/createRecord.{ts,js,mjs}')
 
 const { data: specData, pending: specPending, error: specError } = await useFetch<ModelSpecResponse>(
   () => `/api/models/layout/${modelParam.value}`,
@@ -313,6 +311,22 @@ const resolveCreateDialogOverride = (modelKey: string) => {
   return defineAsyncComponent(createDialogOverrideModules[match] as any)
 }
 
+const resolveCreateRecordOverride = async (modelKey: string): Promise<ModelCreateRecordOverride | null> => {
+  const normalized = String(modelKey || '').trim().toLowerCase()
+  if (!normalized) return null
+
+  const suffixBase = `components/admin/overrides/${normalized}/createRecord`
+  const match = Object.keys(createRecordOverrideModules).find((key) =>
+    key.endsWith(`${suffixBase}.ts`)
+    || key.endsWith(`${suffixBase}.js`)
+    || key.endsWith(`${suffixBase}.mjs`))
+  if (!match) return null
+
+  const loaded = await (createRecordOverrideModules[match] as any)()
+  const override = (loaded as any)?.default ?? loaded
+  return typeof override === 'function' ? (override as ModelCreateRecordOverride) : null
+}
+
 const createDialogOverrideComponent = computed(() => resolveCreateDialogOverride(modelParam.value))
 
 const resolveCreateFieldProps = (field: ModelUIFieldSpec) => {
@@ -470,75 +484,195 @@ const filteredRows = computed(() => {
   })
 })
 
+const isMissingRequiredValue = (value: unknown) => {
+  if (value === null || typeof value === 'undefined') return true
+  if (typeof value === 'string') return value.trim().length === 0
+  if (Array.isArray(value)) return value.length === 0
+  return false
+}
+
+const resolveRequiredCreateKeys = () => {
+  return (spec.value?.directory.createDialog.required ?? [])
+    .map((entry) => String(entry || '').trim())
+    .filter((entry) => entry.length > 0)
+}
+
+const resolveCreateActionTarget = () => {
+  const normalizedModel = String(modelParam.value || '').trim().toLowerCase()
+  const raw = String(spec.value?.directory.createDialog.action || '').trim() || `${normalizedModel}.create`
+  const segments = raw
+    .split('.')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+
+  if (!segments.length || segments.length > 2) {
+    throw new Error(`Invalid create action "${raw}".`)
+  }
+
+  const procedure = segments.length === 1 ? segments[0]! : segments[1]!
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(procedure)) {
+    throw new Error(`Invalid create action "${raw}".`)
+  }
+
+  if (segments.length === 2 && segments[0]!.toLowerCase() !== normalizedModel) {
+    throw new Error(`Create action "${raw}" must target "${normalizedModel}".`)
+  }
+
+  return `${normalizedModel}.${procedure}`
+}
+
+const buildCreatePayload = () => {
+  const currentSpec = spec.value
+  if (!currentSpec) return {}
+
+  const payload: Record<string, any> = {}
+  for (const field of currentSpec.directory.createDialog.fields || []) {
+    const key = resolveFieldKey(field)
+    if (!key) continue
+    payload[key] = normalizePayloadValue(field, createDraft.value[key])
+  }
+  return payload
+}
+
+const processCreatePayload = async (payload: Record<string, any>) => {
+  const action = resolveCreateActionTarget()
+  return await $process(action, payload, {
+    dataLocation: 'local',
+    autoToast: false,
+    consoleLogging: true,
+    trackAttempts: false,
+    throwOnFailure: true,
+  })
+}
+
+const syncCreatedRecord = async (record: Record<string, any>) => {
+  return await $fetch<ModelCreateRecordSyncResponse>(`/api/models/runtime/${modelParam.value}/sync`, {
+    method: 'POST',
+    body: {
+      record,
+    },
+  })
+}
+
+const navigateAfterCreateSync = async (syncResponse: ModelCreateRecordSyncResponse) => {
+  if (syncResponse.redirectTo) {
+    await router.push(syncResponse.redirectTo)
+    return
+  }
+
+  if (syncResponse.slug) {
+    await router.push(`/admin/${modelParam.value}/${encodeURIComponent(syncResponse.slug)}`)
+  }
+}
+
+const runDefaultCreateRecord = async (context: ModelCreateRecordContext) => {
+  const payload = context.buildPayload()
+  const required = context.requiredKeys
+  const missing = required.filter((key) => isMissingRequiredValue(payload[key]))
+
+  if (missing.length) {
+    throw new Error(`Missing required create fields: ${missing.join(', ')}`)
+  }
+
+  context.logger.info('[model-create] request', {
+    model: context.modelKey,
+    payload,
+    required,
+  })
+
+  const createdRaw = await context.processCreate(payload)
+  const createdRecord = context.extractFirstObject(createdRaw)
+  if (!createdRecord) {
+    throw new Error('Create succeeded but no record was returned.')
+  }
+
+  context.logger.info('[model-create] response', {
+    model: context.modelKey,
+    createdRecord,
+  })
+
+  const syncResponse = await context.syncRecord(createdRecord)
+  context.logger.info('[model-create] sync', {
+    model: context.modelKey,
+    syncResponse,
+  })
+
+  await context.refreshDirectory()
+  context.closeCreateDialog()
+  context.resetCreateDraft()
+  await context.navigateAfterSync(syncResponse)
+}
+
+const buildCreateRecordContext = (): ModelCreateRecordContext => {
+  if (!spec.value) {
+    throw new Error('Model spec must be loaded before creating records.')
+  }
+
+  const logger = {
+    info: (message: string, payload?: any) => console.info(message, payload),
+    warn: (message: string, payload?: any) => console.warn(message, payload),
+    error: (message: string, payload?: any) => console.error(message, payload),
+  }
+
+  const context: ModelCreateRecordContext = {
+    modelKey: modelParam.value,
+    spec: spec.value,
+    requiredKeys: resolveRequiredCreateKeys(),
+    createDraft: { ...createDraft.value },
+    getCreateDraft: () => ({ ...createDraft.value }),
+    setCreateDraft: (draft) => setCreateDraft(draft),
+    setCreateError: (message) => {
+      createError.value = String(message || '')
+    },
+    resolveFieldKey,
+    normalizePayloadValue,
+    buildPayload: buildCreatePayload,
+    processCreate: processCreatePayload,
+    extractFirstObject,
+    syncRecord: syncCreatedRecord,
+    refreshDirectory: async () => await refreshDirectory(),
+    closeCreateDialog: () => {
+      createOpen.value = false
+    },
+    resetCreateDraft: () => {
+      initDraftFromSpec()
+    },
+    navigateAfterSync: navigateAfterCreateSync,
+    defaultCreateRecord: async () => {},
+    logger,
+  }
+
+  context.defaultCreateRecord = async () => {
+    await runDefaultCreateRecord(context)
+  }
+
+  return context
+}
+
 const createRecord = async () => {
   if (!spec.value) return
 
   creating.value = true
   createError.value = ''
-  let payload: Record<string, any> = {}
-  let createdRecord: Record<string, any> | null = null
 
   try {
-    payload = {}
-    for (const field of spec.value.directory.createDialog.fields || []) {
-      const key = resolveFieldKey(field)
-      if (!key) continue
-      payload[key] = normalizePayloadValue(field, createDraft.value[key])
-    }
+    const context = buildCreateRecordContext()
+    const override = await resolveCreateRecordOverride(modelParam.value)
 
-    console.info('[model-create] request', {
-      model: modelParam.value,
-      payload,
-      required: spec.value.directory.createDialog.required,
-    })
-
-    const createdRaw = await $process(`${modelParam.value}.create`, payload, {
-      dataLocation: 'local',
-      autoToast: false,
-      consoleLogging: true,
-      trackAttempts: false,
-      throwOnFailure: true,
-    })
-    createdRecord = extractFirstObject(createdRaw)
-    if (!createdRecord) {
-      throw new Error('Create succeeded but no record was returned.')
-    }
-
-    console.info('[model-create] response', {
-      model: modelParam.value,
-      createdRecord,
-    })
-
-    const syncResponse = await $fetch<CreateSyncResponse>(`/api/models/runtime/${modelParam.value}/sync`, {
-      method: 'POST',
-      body: {
-        record: createdRecord,
-      },
-    })
-
-    console.info('[model-create] sync', {
-      model: modelParam.value,
-      syncResponse,
-    })
-
-    await refreshDirectory()
-    createOpen.value = false
-    initDraftFromSpec()
-
-    if (syncResponse.redirectTo) {
-      await router.push(syncResponse.redirectTo)
+    if (override) {
+      context.logger.info('[model-create] override detected', {
+        model: context.modelKey,
+        override: `components/admin/overrides/${context.modelKey}/createRecord.ts`,
+      })
+      await override(context)
       return
     }
 
-    if (syncResponse.slug) {
-      await router.push(`/admin/${modelParam.value}/${encodeURIComponent(syncResponse.slug)}`)
-    }
+    await context.defaultCreateRecord()
   }
   catch (error: any) {
     console.error('[model-create] failed', {
       model: modelParam.value,
-      payload,
-      createdRecord,
       statusMessage: error?.data?.statusMessage,
       debug: error?.data?.data,
       error,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  ModelUIColumnSpec,
   ModelUIFieldLayoutColumnSpec,
   ModelUIFieldLayoutRowSpec,
   ModelLayoutSpec,
@@ -9,7 +10,7 @@ import type {
   ModelUIWidgetSpec,
 } from '#helios-admin/app/types/model-spec'
 
-type BuilderRootTab = 'settings' | 'page-builder'
+type BuilderRootTab = 'settings' | 'page-builder' | 'page-builder-2'
 type SettingsPanel =
   | 'directory'
   | 'typesense'
@@ -57,7 +58,17 @@ const overrideBusy = ref(false)
 const overrideNotice = ref('')
 const overrideError = ref('')
 const overrideResult = ref<Record<string, any> | null>(null)
+const showSchemaReference = ref(false)
+const frameSettingsId = ref<string | null>(null)
+const fieldSettingsId = ref<string | null>(null)
+const draggingTabSlug = ref<string | null>(null)
+const builder2ViewMode = ref<'edit' | 'runtime'>('edit')
+const fieldSettingsOptionsJson = ref('')
+const fieldSettingsOptionsError = ref('')
+const fieldSettingsOptionsNotice = ref('')
 const apiConsole = useApiConsole()
+
+const PAGE_BUILDER2_ROW_ID = 'pb2-row'
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const unique = <T>(value: T[]) => Array.from(new Set(value))
@@ -129,6 +140,10 @@ const createDialogOverridePath = computed(() => {
   return `app/components/admin/overrides/${modelParam.value || '<model>'}/CreateDialog.vue`
 })
 
+const createRecordOverridePath = computed(() => {
+  return `app/components/admin/overrides/${modelParam.value || '<model>'}/createRecord.ts`
+})
+
 const typesenseEnabled = computed(() => Boolean(form.value?.directory.typesense.enabled))
 const typesenseCollectionName = computed(() => {
   return String(
@@ -169,21 +184,143 @@ const createContractKeys = computed(() => unique([
   ...modelRequiredCreateKeys.value,
   ...specRequiredCreateKeys.value,
 ]))
+const resolveCreateDialogFieldKey = (field: ModelUIFieldSpec) =>
+  String(field.modelKey || field.field || field.id || '').trim()
+
+const inferCreateDialogPreviewValue = (
+  key: string,
+  field?: ModelUIFieldSpec,
+) => {
+  const normalizedKey = String(key || '').trim().toLowerCase()
+  const componentName = String(field?.component?.name || '').trim().toLowerCase()
+  const options = (field?.component?.options && typeof field.component.options === 'object')
+    ? field.component.options
+    : {}
+
+  if (typeof (options as any).defaultValue !== 'undefined') {
+    return (options as any).defaultValue
+  }
+
+  if (componentName.includes('color') || normalizedKey.includes('color')) return '#000000'
+
+  if (componentName.includes('combobox')) {
+    if (Boolean((options as any).multiple)) return []
+    if (normalizedKey.includes('status')) return 'draft'
+    return ''
+  }
+
+  if (
+    String((options as any).type || '').toLowerCase() === 'number'
+    || componentName.includes('number')
+    || /price|amount|count|qty|quantity|rank|order|weight|score|level/.test(normalizedKey)
+  ) {
+    return 0
+  }
+
+  if (componentName.includes('checkbox') || componentName.includes('switch')) {
+    return false
+  }
+
+  return ''
+}
+
+const createDialogFieldMap = computed(() => {
+  const map = new Map<string, ModelUIFieldSpec>()
+  const fields = form.value?.directory.createDialog.fields ?? []
+  for (const field of fields) {
+    const key = resolveCreateDialogFieldKey(field).toLowerCase()
+    if (!key) continue
+    if (!map.has(key)) map.set(key, field)
+  }
+  return map
+})
+
 const createContractPayloadPreview = computed(() => {
-  const sourceFields = form.value?.directory.createDialog.fields ?? []
   const preview = createContractKeys.value.reduce<Record<string, unknown>>((acc, key) => {
-    const match = sourceFields.find((field) => {
-      const candidate = String(field.modelKey || field.field || field.id || '').trim().toLowerCase()
-      return candidate === key.toLowerCase()
-    })
-    const type = String(match?.component?.name || '').toLowerCase()
-    if (type.includes('color')) acc[key] = '#000000'
-    else if (type.includes('combobox')) acc[key] = ''
-    else if (String(match?.component?.options?.type || '').toLowerCase() === 'number') acc[key] = 0
-    else acc[key] = ''
+    const match = createDialogFieldMap.value.get(key.toLowerCase())
+    acc[key] = inferCreateDialogPreviewValue(key, match)
     return acc
   }, {})
   return JSON.stringify(preview, null, 2)
+})
+
+const createDialogPayloadPreview = computed(() => {
+  const fields = form.value?.directory.createDialog.fields ?? []
+  const preview = fields.reduce<Record<string, unknown>>((acc, field) => {
+    const key = resolveCreateDialogFieldKey(field)
+    if (!key) return acc
+    acc[key] = inferCreateDialogPreviewValue(key, field)
+    return acc
+  }, {})
+  return JSON.stringify(preview, null, 2)
+})
+
+type CreateDialogActionMeta = {
+  raw: string
+  normalized: string
+  valid: boolean
+  reason: string
+  procedure: string
+}
+
+const analyzeCreateDialogAction = (
+  action: unknown,
+  modelKey: string,
+): CreateDialogActionMeta => {
+  const normalizedModel = String(modelKey || '').trim().toLowerCase()
+  const fallback = `${normalizedModel}.create`
+  const raw = String(action ?? '').trim()
+  const source = raw || fallback
+  const segments = source
+    .split('.')
+    .map(entry => entry.trim())
+    .filter(entry => entry.length > 0)
+
+  if (!segments.length || segments.length > 2) {
+    return {
+      raw,
+      normalized: fallback,
+      valid: false,
+      reason: `Invalid action format. Use "${normalizedModel}.create" or "${normalizedModel}.<name>".`,
+      procedure: 'create',
+    }
+  }
+
+  const procedure = segments.length === 1 ? segments[0]! : segments[1]!
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(procedure)) {
+    return {
+      raw,
+      normalized: fallback,
+      valid: false,
+      reason: 'Procedure name can only contain letters, numbers, and underscore.',
+      procedure: 'create',
+    }
+  }
+
+  if (segments.length === 2 && segments[0]!.toLowerCase() !== normalizedModel) {
+    return {
+      raw,
+      normalized: fallback,
+      valid: false,
+      reason: `Action must target model "${normalizedModel}".`,
+      procedure: 'create',
+    }
+  }
+
+  return {
+    raw,
+    normalized: `${normalizedModel}.${procedure}`,
+    valid: true,
+    reason: '',
+    procedure,
+  }
+}
+
+const createDialogActionMeta = computed(() => {
+  return analyzeCreateDialogAction(
+    form.value?.directory.createDialog.action,
+    modelParam.value,
+  )
 })
 
 const actionLabel: Record<TypesenseModelAction, string> = {
@@ -329,6 +466,32 @@ const generateCreateDialogOverride = async (force = false) => {
   }
   catch (apiError: any) {
     overrideError.value = apiError?.data?.statusMessage ?? apiError?.message ?? 'Failed to generate override.'
+  }
+  finally {
+    overrideBusy.value = false
+  }
+}
+
+const generateCreateRecordOverride = async (force = false) => {
+  overrideBusy.value = true
+  overrideError.value = ''
+  overrideNotice.value = ''
+
+  try {
+    const response = await $fetch(`/api/models/overrides/${modelParam.value}/create-record`, {
+      method: 'POST',
+      body: { force },
+    })
+
+    overrideResult.value = response as Record<string, any>
+    const status = String((response as any)?.override?.status || 'created')
+    const filePath = String((response as any)?.override?.filePath || '')
+    overrideNotice.value = status === 'exists'
+      ? `Create function override already exists at ${filePath}.`
+      : `Create function override ${status} at ${filePath}.`
+  }
+  catch (apiError: any) {
+    overrideError.value = apiError?.data?.statusMessage ?? apiError?.message ?? 'Failed to generate create function override.'
   }
   finally {
     overrideBusy.value = false
@@ -748,6 +911,571 @@ const removeWidgetField = (widget: ModelUIWidgetSpec, fieldId: string) => {
   syncWidgetLayout(widget)
 }
 
+type Builder2FrameMeta = {
+  width: number
+  outerClass: string
+  innerClass: string
+}
+
+const clampFrameWidth = (value: unknown) => clampPercentWidth(value, 20, 100)
+
+const stripManagedFrameClasses = (value: unknown) => {
+  return normalizeClassTokens(
+    String(value || '')
+      .replace(/\bgrow-0\b/g, ' ')
+      .replace(/\bshrink-0\b/g, ' ')
+      .replace(/\bbasis-\[[^\]]+\]\b/g, ' ')
+      .replace(/\bmax-w-\[[^\]]+\]\b/g, ' '),
+  )
+}
+
+const findBuilder2Row = (tab: ModelUITabSpec) =>
+  tab.primary.find(row => row.id === PAGE_BUILDER2_ROW_ID) ?? null
+
+const ensureBuilder2Row = (tab: ModelUITabSpec) => {
+  let row = findBuilder2Row(tab)
+  if (!row) {
+    row = {
+      id: PAGE_BUILDER2_ROW_ID,
+      name: 'Frame Canvas',
+      class: 'tm:flex tm:flex-wrap sg-050',
+      columns: [],
+      meta: {
+        builder2: {
+          version: 1,
+        },
+      },
+    }
+    tab.primary.push(row)
+  }
+
+  if (!String(row.class || '').trim()) {
+    row.class = 'tm:flex tm:flex-wrap sg-050'
+  }
+
+  return row
+}
+
+const readFrameMeta = (column: ModelUIColumnSpec): Builder2FrameMeta => {
+  const root = (column.meta && typeof column.meta === 'object') ? column.meta : {}
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  return {
+    width: clampFrameWidth(raw.width ?? 50),
+    outerClass: normalizeClassTokens(raw.outerClass ?? stripManagedFrameClasses(column.class)),
+    innerClass: String(raw.innerClass ?? '').trim(),
+  }
+}
+
+const ensureFrameMeta = (column: ModelUIColumnSpec) => {
+  const meta = readFrameMeta(column)
+  if (!column.meta || typeof column.meta !== 'object') column.meta = {}
+  column.meta.builder2 = meta
+  column.class = buildFrameClass(meta.width, meta.outerClass) || undefined
+  return meta
+}
+
+const updateFrameMeta = (column: ModelUIColumnSpec, patch: Partial<Builder2FrameMeta>) => {
+  const current = ensureFrameMeta(column)
+  const next: Builder2FrameMeta = {
+    width: patch.width === undefined ? current.width : clampFrameWidth(patch.width),
+    outerClass: patch.outerClass === undefined ? current.outerClass : String(patch.outerClass || '').trim(),
+    innerClass: patch.innerClass === undefined ? current.innerClass : String(patch.innerClass || '').trim(),
+  }
+  if (!column.meta || typeof column.meta !== 'object') column.meta = {}
+  column.meta.builder2 = next
+  column.class = buildFrameClass(next.width, next.outerClass) || undefined
+}
+
+const pageBuilder2Row = computed(() => {
+  if (!activeTabSpec.value) return null
+  return findBuilder2Row(activeTabSpec.value)
+})
+
+const pageBuilder2Frames = computed(() => pageBuilder2Row.value?.columns ?? [])
+
+const pageBuilder2CanvasFrames = computed(() =>
+  pageBuilder2Frames.value.map(frame => ({
+    id: frame.id,
+    width: readFrameMeta(frame).width,
+    data: frame,
+  })),
+)
+
+const findBuilder2FrameById = (frameId: string) => {
+  const row = pageBuilder2Row.value
+  if (!row) return null
+  return row.columns.find(column => column.id === frameId) ?? null
+}
+
+const onBuilder2MoveFrame = (payload: { fromId: string, toId: string, position: 'before' | 'after' }) => {
+  const row = pageBuilder2Row.value
+  if (!row) return
+  row.columns = reorderByDrop(row.columns, payload.fromId, payload.toId, payload.position)
+}
+
+const onBuilder2ResizeFrame = (payload: { id: string, width: number }) => {
+  const frame = findBuilder2FrameById(payload.id)
+  if (!frame) return
+  updateFrameMeta(frame, { width: payload.width })
+}
+
+const addBuilder2WidgetById = (frameId: string) => {
+  const frame = findBuilder2FrameById(frameId)
+  if (!frame) return
+  addBuilder2Widget(frame)
+}
+
+const removeBuilder2Widget = (frameId: string, widgetId: string) => {
+  const frame = findBuilder2FrameById(frameId)
+  if (!frame) return
+  removeWidget(frame, widgetId)
+}
+
+const resolveFieldPreviewKey = (field: ModelUIFieldSpec) =>
+  String(field.modelKey || field.field || field.id || '').trim()
+
+type Builder2RuntimeLayoutColumn = {
+  id: string
+  class?: string
+  fields: ModelUIFieldSpec[]
+}
+
+type Builder2RuntimeLayoutRow = {
+  id: string
+  class?: string
+  columns: Builder2RuntimeLayoutColumn[]
+}
+
+const builder2FieldState = ref<Record<string, any>>({})
+
+const fieldPreviewValue = (field: ModelUIFieldSpec) => {
+  const key = resolveFieldPreviewKey(field)
+  return builder2FieldState.value[key] ?? ''
+}
+
+const setFieldPreviewValue = (field: ModelUIFieldSpec, value: unknown) => {
+  const key = resolveFieldPreviewKey(field)
+  if (!key) return
+  builder2FieldState.value[key] = value
+}
+
+const fieldPreviewModelValue = (field: ModelUIFieldSpec) => {
+  const value = fieldPreviewValue(field)
+  const componentName = resolvePreviewComponentName(field)
+  const options = (field.component?.options && typeof field.component.options === 'object')
+    ? field.component.options
+    : {}
+
+  if (componentName === 'ATagsInput') {
+    return Array.isArray(value) ? value : []
+  }
+
+  if (componentName === 'ACombobox') {
+    const multiple = Boolean((options as any).multiple)
+    if (multiple) return Array.isArray(value) ? value : []
+    return typeof value === 'string' ? value : ''
+  }
+
+  if (componentName === 'ANumberInput') {
+    if (typeof value === 'string') return value
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+    return ''
+  }
+
+  return typeof value === 'number' ? String(value) : String(value ?? '')
+}
+
+const normalizeComboboxOptions = (value: unknown) => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const label = String((entry as any).label ?? '').trim()
+      const optionValue = String((entry as any).value ?? '').trim()
+      if (!optionValue) return null
+      return {
+        label: label || optionValue,
+        value: optionValue,
+        group: String((entry as any).group ?? '').trim() || undefined,
+        disabled: Boolean((entry as any).disabled),
+      }
+    })
+    .filter(Boolean)
+}
+
+const resolvePreviewComponentName = (field: ModelUIFieldSpec) => {
+  const name = String(field.component?.name || '').trim()
+  const supported = new Set(['AInput', 'ANumberInput', 'ACombobox', 'ATagsInput'])
+  return supported.has(name) ? name : 'AInput'
+}
+
+const resolvePreviewFieldProps = (field: ModelUIFieldSpec) => {
+  const componentName = resolvePreviewComponentName(field)
+  const options = (field.component?.options && typeof field.component.options === 'object')
+    ? field.component.options
+    : {}
+  const label = String(field.label || resolveFieldPreviewKey(field) || 'Field').trim()
+
+  if (componentName === 'ANumberInput') {
+    return {
+      label,
+      helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+      min: Number.isFinite(Number((options as any).min)) ? Number((options as any).min) : undefined,
+      max: Number.isFinite(Number((options as any).max)) ? Number((options as any).max) : undefined,
+      step: Number.isFinite(Number((options as any).step)) ? Number((options as any).step) : 1,
+      mode: String((options as any).mode || 'default'),
+      showScrubber: Boolean((options as any).showScrubber),
+    }
+  }
+
+  if (componentName === 'ACombobox') {
+    return {
+      label,
+      helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+      placeholder: String((options as any).placeholder || `Select ${label.toLowerCase()}`),
+      grouped: Boolean((options as any).grouped),
+      multiple: Boolean((options as any).multiple),
+      clearable: (options as any).clearable !== false,
+      showIndicator: (options as any).showIndicator !== false,
+      highlightMatch: Boolean((options as any).highlightMatch),
+      options: normalizeComboboxOptions((options as any).options),
+    }
+  }
+
+  if (componentName === 'ATagsInput') {
+    return {
+      label,
+      helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+      placeholder: String((options as any).placeholder || 'Add tag'),
+      withCombobox: Boolean((options as any).withCombobox),
+      options: normalizeComboboxOptions((options as any).options),
+    }
+  }
+
+  return {
+    label,
+    helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+    type: String((options as any).type || 'text'),
+    placeholder: String((options as any).placeholder || `Enter ${label.toLowerCase()}`),
+  }
+}
+
+const widgetRuntimeLayoutRows = (widget: ModelUIWidgetSpec): Builder2RuntimeLayoutRow[] => {
+  const fieldMap = new Map(widget.fields.map(field => [field.id, field]))
+  const fallback: Builder2RuntimeLayoutRow[] = [
+    {
+      id: `${widget.id}-row-1`,
+      class: '',
+      columns: [
+        {
+          id: `${widget.id}-col-1`,
+          class: '',
+          fields: [...widget.fields],
+        },
+      ],
+    },
+  ]
+
+  const rawRows = Array.isArray(widget.layout?.rows) ? widget.layout!.rows : []
+  if (!rawRows.length) return fallback
+
+  const rows: Builder2RuntimeLayoutRow[] = rawRows
+    .map(row => ({
+      id: row.id,
+      class: row.class,
+      columns: (Array.isArray(row.columns) ? row.columns : [])
+        .map(column => ({
+          id: column.id,
+          class: column.class,
+          fields: (Array.isArray(column.fieldIds) ? column.fieldIds : [])
+            .map(fieldId => fieldMap.get(fieldId))
+            .filter(Boolean) as ModelUIFieldSpec[],
+        }))
+        .filter(column => column.fields.length > 0),
+    }))
+    .filter(row => row.columns.length > 0)
+
+  if (!rows.length) return fallback
+
+  const used = new Set<string>()
+  for (const row of rows) {
+    for (const column of row.columns) {
+      for (const field of column.fields) {
+        used.add(field.id)
+      }
+    }
+  }
+
+  const missing = widget.fields.filter(field => !used.has(field.id))
+  if (missing.length) {
+    rows[0]!.columns[0]!.fields.push(...missing)
+  }
+
+  return rows
+}
+
+const addBuilder2Frame = () => {
+  if (!activeTabSpec.value) return
+  const row = ensureBuilder2Row(activeTabSpec.value)
+  const frameIndex = row.columns.length + 1
+  const frame: ModelUIColumnSpec = {
+    id: makeId('frame'),
+    name: `Frame ${frameIndex}`,
+    class: '',
+    primary: [],
+    meta: {
+      builder2: {
+        width: row.columns.length ? 50 : 100,
+        outerClass: '',
+        innerClass: '',
+      },
+    },
+  }
+  row.columns.push(frame)
+  ensureFrameMeta(frame)
+  addWidget(frame)
+}
+
+const removeBuilder2Frame = (frameId: string) => {
+  if (!activeTabSpec.value) return
+  const row = findBuilder2Row(activeTabSpec.value)
+  if (!row) return
+  row.columns = row.columns.filter(column => column.id !== frameId)
+  if (frameSettingsId.value === frameId) frameSettingsId.value = null
+}
+
+const addBuilder2Widget = (column: ModelUIColumnSpec) => {
+  addWidget(column)
+  const meta = ensureFrameMeta(column)
+  const widget = column.primary[column.primary.length - 1]
+  if (!widget) return
+  if (!widget.class && meta.innerClass) widget.class = meta.innerClass
+}
+
+const addBuilder2Field = (widget: ModelUIWidgetSpec) => {
+  addWidgetField(widget)
+  const nextField = widget.fields[widget.fields.length - 1]
+  if (!nextField) return
+  const key = resolveFieldPreviewKey(nextField)
+  if (key && builder2FieldState.value[key] === undefined) builder2FieldState.value[key] = ''
+}
+
+const findFieldEditorTarget = () => {
+  if (!fieldSettingsId.value || !activeTabSpec.value) return null
+  const [frameId, widgetId, fieldId] = fieldSettingsId.value.split('::')
+  if (!frameId || !widgetId || !fieldId) return null
+  const row = findBuilder2Row(activeTabSpec.value)
+  const frame = row?.columns.find(column => column.id === frameId)
+  if (!frame) return null
+  const widget = frame.primary.find(entry => entry.id === widgetId)
+  if (!widget) return null
+  const field = widget.fields.find(entry => entry.id === fieldId)
+  if (!field) return null
+  if (!field.component || typeof field.component !== 'object') {
+    field.component = { name: 'AInput', options: {} }
+  }
+  if (!field.component.options || typeof field.component.options !== 'object') {
+    field.component.options = {}
+  }
+  if (!field.modelKey || !String(field.modelKey).trim()) {
+    field.modelKey = String(field.field || field.id || '').trim()
+  }
+  return { frame, widget, field }
+}
+
+const fieldSettingsTarget = computed(() => findFieldEditorTarget())
+
+const fieldValidationState = computed<Record<string, any> | null>(() => {
+  const field = fieldSettingsTarget.value?.field
+  if (!field) return null
+  if (!field.validation || typeof field.validation !== 'object') {
+    field.validation = {}
+  }
+  return field.validation as Record<string, any>
+})
+
+const fieldContractPreview = computed(() => {
+  const target = fieldSettingsTarget.value
+  if (!target) return '{}'
+  return JSON.stringify(
+    {
+      id: target.field.id,
+      field: target.field.field,
+      modelKey: target.field.modelKey,
+      action: target.field.action,
+      component: target.field.component,
+      validation: target.field.validation || {},
+    },
+    null,
+    2,
+  )
+})
+
+const refreshFieldSettingsOptionsJson = () => {
+  const target = fieldSettingsTarget.value
+  fieldSettingsOptionsError.value = ''
+  fieldSettingsOptionsNotice.value = ''
+  if (!target) {
+    fieldSettingsOptionsJson.value = ''
+    return
+  }
+
+  const options = target.field.component?.options && typeof target.field.component.options === 'object'
+    ? target.field.component.options
+    : {}
+  fieldSettingsOptionsJson.value = JSON.stringify(options, null, 2)
+}
+
+const applyFieldOptionsJson = () => {
+  const target = fieldSettingsTarget.value
+  if (!target) return
+  fieldSettingsOptionsError.value = ''
+  fieldSettingsOptionsNotice.value = ''
+
+  try {
+    const parsed = JSON.parse(fieldSettingsOptionsJson.value || '{}')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Options must be a JSON object.')
+    }
+    target.field.component.options = parsed as Record<string, any>
+    fieldSettingsOptionsNotice.value = 'Component options applied.'
+  }
+  catch (error: any) {
+    fieldSettingsOptionsError.value = error?.message || 'Invalid JSON options.'
+  }
+}
+
+const frameSettingsTarget = computed(() => {
+  if (!frameSettingsId.value || !activeTabSpec.value) return null
+  const row = findBuilder2Row(activeTabSpec.value)
+  if (!row) return null
+  const frame = row.columns.find(column => column.id === frameSettingsId.value)
+  if (!frame) return null
+  return {
+    row,
+    frame,
+    meta: ensureFrameMeta(frame),
+  }
+})
+
+const openFrameSettings = (frameId: string) => {
+  frameSettingsId.value = frameId
+}
+
+const openFieldSettings = (frameId: string, widgetId: string, fieldId: string) => {
+  fieldSettingsId.value = `${frameId}::${widgetId}::${fieldId}`
+}
+
+const closeFrameSettings = () => {
+  frameSettingsId.value = null
+}
+
+const closeFieldSettings = () => {
+  fieldSettingsId.value = null
+  fieldSettingsOptionsError.value = ''
+  fieldSettingsOptionsNotice.value = ''
+}
+
+const syncFrameInnerClassToWidgets = (frame: ModelUIColumnSpec) => {
+  const meta = ensureFrameMeta(frame)
+  for (const widget of frame.primary) {
+    if (widget.type !== 'fields-card') continue
+    widget.class = meta.innerClass || undefined
+  }
+}
+
+const setFieldComponentName = (field: ModelUIFieldSpec, name: string) => {
+  const nextName = String(name || 'AInput').trim() || 'AInput'
+  field.component.name = nextName
+  if (!field.component.options || typeof field.component.options !== 'object') {
+    field.component.options = {}
+  }
+  if (nextName === 'AInput') {
+    field.component.options = {
+      type: 'text',
+      placeholder: `Enter ${String(field.label || field.field || 'value').toLowerCase()}`,
+    }
+  }
+  if (nextName === 'ANumberInput') {
+    field.component.options = {
+      step: 1,
+      mode: 'default',
+    }
+  }
+  if (nextName === 'ACombobox') {
+    field.component.options = {
+      grouped: false,
+      highlightMatch: false,
+      multiple: false,
+      clearable: true,
+      showIndicator: true,
+      options: [],
+    }
+  }
+  if (nextName === 'ATagsInput') {
+    field.component.options = {
+      withCombobox: false,
+      options: [],
+    }
+  }
+  refreshFieldSettingsOptionsJson()
+}
+
+const onTabDragStart = (slug: string) => {
+  draggingTabSlug.value = slug
+}
+
+const onTabDragOver = (event: DragEvent) => {
+  event.preventDefault()
+}
+
+const onTabDrop = (targetSlug: string) => {
+  if (!form.value || !draggingTabSlug.value || draggingTabSlug.value === targetSlug) {
+    draggingTabSlug.value = null
+    return
+  }
+
+  const list = form.value.single.tabs
+  const fromIndex = list.findIndex(tab => tab.slug === draggingTabSlug.value)
+  const toIndex = list.findIndex(tab => tab.slug === targetSlug)
+  if (fromIndex < 0 || toIndex < 0) {
+    draggingTabSlug.value = null
+    return
+  }
+
+  const [entry] = list.splice(fromIndex, 1)
+  if (!entry) {
+    draggingTabSlug.value = null
+    return
+  }
+  const targetIndex = fromIndex < toIndex ? toIndex - 1 : toIndex
+  list.splice(targetIndex, 0, entry)
+  draggingTabSlug.value = null
+}
+
+const onTabDragEnd = () => {
+  draggingTabSlug.value = null
+}
+
+watch(
+  [() => activeRootTab.value, () => activeTabSpec.value?.id],
+  ([rootTab]) => {
+    if (rootTab !== 'page-builder-2') return
+    if (!activeTabSpec.value) return
+    const row = ensureBuilder2Row(activeTabSpec.value)
+    row.columns.forEach(ensureFrameMeta)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => fieldSettingsTarget.value?.field.id,
+  () => {
+    refreshFieldSettingsOptionsJson()
+  },
+  { immediate: true },
+)
+
 const normalizeTabSlug = (tab: ModelUITabSpec) => {
   if (!tab.slug || !tab.slug.trim()) {
     tab.slug = slugify(tab.label || tab.id || 'tab', 'tab')
@@ -838,6 +1566,14 @@ const commitState = async () => {
         @click="activeRootTab = 'page-builder'"
       >
         Page Builder
+      </button>
+      <button
+        class="builder-tab"
+        :class="activeRootTab === 'page-builder-2' ? 'is-active' : ''"
+        type="button"
+        @click="activeRootTab = 'page-builder-2'"
+      >
+        Page Builder 2
       </button>
       <span class="builder-source a-chip">source: {{ source }}</span>
     </section>
@@ -1164,6 +1900,9 @@ const commitState = async () => {
                 <button class="a-btn a-btn--subtle" type="button" :disabled="overrideBusy" @click="generateCreateDialogOverride(false)">
                   {{ overrideBusy ? 'Generating…' : 'Generate Override' }}
                 </button>
+                <button class="a-btn a-btn--ghost" type="button" :disabled="overrideBusy" @click="generateCreateRecordOverride(false)">
+                  {{ overrideBusy ? 'Generating…' : 'Generate Create Function' }}
+                </button>
                 <button class="a-btn a-btn--subtle" type="button" @click="addCreateField">
                   <AdminIcon name="plus" :size="14" />
                   Field
@@ -1172,28 +1911,53 @@ const commitState = async () => {
             </div>
 
             <div class="settings-fields smt-050">
-              <label class="a-field inline-field">
+              <div class="a-field inline-field">
                 <span class="a-field__label">Enabled</span>
-                <input v-model="form.directory.createDialog.enabled" type="checkbox">
-              </label>
+                <ASwitchBasic v-model="form.directory.createDialog.enabled" />
+              </div>
 
-              <label class="a-field">
-                <span class="a-field__label">Title</span>
-                <input v-model="form.directory.createDialog.title" class="a-input" type="text">
-              </label>
+              <AInput
+                v-model="form.directory.createDialog.title"
+                label="Title"
+                placeholder="Create Car"
+              />
 
-              <label class="a-field">
-                <span class="a-field__label">Submit Label</span>
-                <input v-model="form.directory.createDialog.submitLabel" class="a-input" type="text">
-              </label>
+              <AInput
+                v-model="form.directory.createDialog.submitLabel"
+                label="Submit Label"
+                placeholder="Create Car"
+              />
 
-              <label class="a-field form-full">
-                <span class="a-field__label">Required Keys (comma-separated)</span>
-                <input v-model="createRequiredCsv" class="a-input" type="text" placeholder="title, email">
-              </label>
+              <AInput
+                v-model="form.directory.createDialog.action"
+                class="form-full"
+                label="TRPC Create Action"
+                :placeholder="`${modelParam}.create`"
+                helper-text="Use <model>.create or <model>.<customCreate>. Cross-model targets are blocked."
+              />
+
+              <AInput
+                v-model="createRequiredCsv"
+                class="form-full"
+                label="Required Keys (comma-separated)"
+                placeholder="carid, name, price"
+              />
 
               <div class="file-item form-full">
-                <p class="a-eyebrow">Create Contract (Required)</p>
+                <p class="a-eyebrow">Resolved Create Action</p>
+                <code>{{ createDialogActionMeta.normalized }}</code>
+                <p v-if="createDialogActionMeta.valid" class="a-copy smt-025">
+                  Runtime will call
+                  <code>{{ createDialogActionMeta.procedure }}({ data: payload })</code>
+                  on this model router.
+                </p>
+                <p v-else class="builder-notice is-error smt-025">
+                  {{ createDialogActionMeta.reason }}
+                </p>
+              </div>
+
+              <div class="file-item form-full">
+                <p class="a-eyebrow">Create Contract (Server Required Keys)</p>
                 <code>{{ createContractKeys.join(', ') || 'No required keys' }}</code>
                 <p class="a-copy smt-025">
                   These keys are enforced server-side before the TRPC create call.
@@ -1201,8 +1965,13 @@ const commitState = async () => {
               </div>
 
               <div class="file-item form-full">
-                <p class="a-eyebrow">Payload Preview</p>
+                <p class="a-eyebrow">TRPC Required Payload Preview</p>
                 <pre class="api-result">{{ createContractPayloadPreview }}</pre>
+              </div>
+
+              <div class="file-item form-full">
+                <p class="a-eyebrow">Form Payload Preview (All Configured Fields)</p>
+                <pre class="api-result">{{ createDialogPayloadPreview }}</pre>
               </div>
             </div>
 
@@ -1263,6 +2032,19 @@ const commitState = async () => {
                   </button>
                 </div>
               </div>
+
+              <div class="file-item">
+                <p class="a-eyebrow">Create Function Override</p>
+                <code>{{ createRecordOverridePath }}</code>
+                <div class="api-actions smt-025">
+                  <button class="a-btn a-btn--subtle" type="button" :disabled="overrideBusy" @click="generateCreateRecordOverride(false)">
+                    {{ overrideBusy ? 'Generating…' : 'Generate' }}
+                  </button>
+                  <button class="a-btn a-btn--ghost" type="button" :disabled="overrideBusy" @click="generateCreateRecordOverride(true)">
+                    {{ overrideBusy ? 'Working…' : 'Regenerate' }}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <p v-if="overrideResult?.override?.filePath" class="a-copy smt-025">
@@ -1292,7 +2074,7 @@ const commitState = async () => {
         </section>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeRootTab === 'page-builder'">
         <section class="builder-layout-grid">
           <aside class="a-card section-panel">
             <div class="section-panel__header">
@@ -1565,6 +2347,419 @@ const commitState = async () => {
             </p>
           </article>
         </section>
+      </template>
+
+      <template v-else>
+        <section class="builder-layout-grid">
+          <aside class="a-card section-panel">
+            <div class="section-panel__header">
+              <h2 class="panel-title">Page Builder 2</h2>
+              <span class="a-chip">{{ tabs.length }} tabs</span>
+            </div>
+            <p class="a-copy">
+              Visual frame canvas with field previews. Commit writes everything back into the same model fragment.
+            </p>
+
+            <div class="api-actions">
+              <button class="a-btn a-btn--subtle" type="button" @click="showSchemaReference = true">
+                Schema Reference
+              </button>
+            </div>
+
+            <div class="section-list smt-025">
+              <div
+                v-for="tab in tabs"
+                :key="tab.id"
+                class="section-pill-wrap"
+                draggable="true"
+                @dragstart="onTabDragStart(tab.slug)"
+                @dragend="onTabDragEnd"
+                @dragover="onTabDragOver"
+                @drop="onTabDrop(tab.slug)"
+              >
+                <button
+                  class="section-pill"
+                  :class="tab.slug === activeTabSlug ? 'is-active' : ''"
+                  type="button"
+                  @click="activeTabSlug = tab.slug"
+                >
+                  {{ tab.label }}
+                </button>
+                <button class="section-remove" type="button" @click="removeTab(tab.slug)">
+                  <AdminIcon name="close" :size="12" />
+                </button>
+              </div>
+            </div>
+
+            <div class="section-create">
+              <input
+                v-model="newTabLabel"
+                class="a-input"
+                type="text"
+                placeholder="New tab label"
+                @keydown.enter.prevent="addTab"
+              >
+              <button class="a-btn a-btn--subtle" type="button" @click="addTab">
+                <AdminIcon name="plus" :size="14" />
+                Add Tab
+              </button>
+            </div>
+          </aside>
+
+          <article v-if="activeTabSpec" class="a-card builder2-panel">
+            <div class="builder2-panel__head">
+              <div>
+                <h2 class="panel-title">{{ activeTabSpec.label }} Canvas</h2>
+                <p class="a-copy smt-025">
+                  Add frames, then place field cards. Frame settings control width and class output.
+                </p>
+              </div>
+              <div class="builder-header__actions builder2-view-toggle">
+                <button
+                  class="a-btn a-btn--subtle"
+                  :class="builder2ViewMode === 'edit' ? 'is-active' : ''"
+                  type="button"
+                  @click="builder2ViewMode = 'edit'"
+                >
+                  Edit Canvas
+                </button>
+                <button
+                  class="a-btn a-btn--subtle"
+                  :class="builder2ViewMode === 'runtime' ? 'is-active' : ''"
+                  type="button"
+                  @click="builder2ViewMode = 'runtime'"
+                >
+                  Runtime Preview
+                </button>
+                <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2Frame">
+                  <AdminIcon name="plus" :size="14" />
+                  Frame
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-fields smt-050">
+              <label class="a-field">
+                <span class="a-field__label">Tab Label</span>
+                <input v-model="activeTabSpec.label" class="a-input" type="text">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Tab Slug</span>
+                <input v-model="activeTabSpec.slug" class="a-input" type="text" @blur="normalizeTabSlug(activeTabSpec)">
+              </label>
+            </div>
+
+            <section v-if="builder2ViewMode === 'edit'" class="builder2-canvas smt-050">
+              <PageFrameCanvas
+                :frames="pageBuilder2CanvasFrames"
+                :min-width="20"
+                :max-width="100"
+                :draggable="true"
+                :resizable="true"
+                @move-frame="onBuilder2MoveFrame"
+                @resize-frame="onBuilder2ResizeFrame"
+              >
+                <template #frame="{ frame: canvasFrame, frameId }">
+                  <div class="builder2-frame" :class="readFrameMeta(canvasFrame.data).outerClass">
+                    <div class="builder2-frame__head">
+                      <h3>{{ canvasFrame.data?.name || frameId }}</h3>
+                      <div class="builder2-frame__actions">
+                        <button class="a-btn a-btn--ghost" type="button" @click="openFrameSettings(frameId)">
+                          Settings
+                        </button>
+                        <button class="a-btn a-btn--ghost" type="button" @click="removeBuilder2Frame(frameId)">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="builder2-frame__widgets" :class="readFrameMeta(canvasFrame.data).innerClass">
+                      <section
+                        v-for="widget in canvasFrame.data?.primary || []"
+                        :key="widget.id"
+                        class="builder2-widget"
+                      >
+                        <FieldSectionCard
+                          :title="widget.label || widget.name"
+                          :description="widget.subtitle || 'Field card preview'"
+                        >
+                          <div class="builder2-widget__fields">
+                            <div v-for="field in widget.fields" :key="field.id" class="builder2-field">
+                              <component
+                                :is="resolvePreviewComponentName(field)"
+                                :model-value="fieldPreviewModelValue(field)"
+                                v-bind="resolvePreviewFieldProps(field)"
+                                @update:model-value="setFieldPreviewValue(field, $event)"
+                              />
+                              <button
+                                class="builder2-field__settings"
+                                type="button"
+                                @click="openFieldSettings(frameId, widget.id, field.id)"
+                              >
+                                <AdminIcon name="settings" :size="12" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div class="api-actions smt-050">
+                            <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2Field(widget)">
+                              <AdminIcon name="plus" :size="14" />
+                              Field
+                            </button>
+                            <button class="a-btn a-btn--ghost" type="button" @click="removeBuilder2Widget(frameId, widget.id)">
+                              Remove Card
+                            </button>
+                          </div>
+                        </FieldSectionCard>
+                      </section>
+
+                      <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2WidgetById(frameId)">
+                        <AdminIcon name="plus" :size="14" />
+                        Field Card
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </PageFrameCanvas>
+
+              <article v-if="!pageBuilder2Frames.length" class="a-card builder2-empty">
+                <p class="a-copy">No frames yet. Add one frame to start building this tab visually.</p>
+                <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2Frame">
+                  <AdminIcon name="plus" :size="14" />
+                  Add First Frame
+                </button>
+              </article>
+            </section>
+
+            <section v-else class="builder2-runtime smt-050">
+              <section
+                v-for="row in activeTabSpec.primary"
+                :key="`pb2-runtime-row-${row.id}`"
+                class="layout-row"
+                :class="row.class"
+              >
+                <div
+                  v-for="column in row.columns"
+                  :key="`pb2-runtime-col-${row.id}-${column.id}`"
+                  class="layout-col"
+                  :class="column.class"
+                >
+                  <template v-for="widget in column.primary" :key="`pb2-runtime-widget-${widget.id}`">
+                    <FieldSectionCard
+                      v-if="widget.type === 'fields-card'"
+                      :title="widget.label || widget.name"
+                      :description="widget.subtitle || ''"
+                    >
+                      <div class="widget-fields">
+                        <div
+                          v-for="layoutRow in widgetRuntimeLayoutRows(widget)"
+                          :key="`${widget.id}-${layoutRow.id}`"
+                          class="widget-fields__row"
+                          :class="layoutRow.class"
+                        >
+                          <div
+                            v-for="layoutColumn in layoutRow.columns"
+                            :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
+                            class="widget-fields__col"
+                            :class="layoutColumn.class"
+                          >
+                            <component
+                              :is="resolvePreviewComponentName(field)"
+                              v-for="field in layoutColumn.fields"
+                              :key="field.id"
+                              :model-value="fieldPreviewModelValue(field)"
+                              v-bind="resolvePreviewFieldProps(field)"
+                              @update:model-value="setFieldPreviewValue(field, $event)"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </FieldSectionCard>
+
+                    <article v-else class="a-card widget-generic">
+                      <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
+                      <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
+                    </article>
+                  </template>
+                </div>
+              </section>
+            </section>
+          </article>
+        </section>
+
+        <div v-if="showSchemaReference" class="builder2-modal-backdrop" @click.self="showSchemaReference = false">
+          <section class="a-card builder2-modal">
+            <div class="panel-row">
+              <h3 class="panel-title">Schema Reference</h3>
+              <button class="a-btn a-btn--ghost" type="button" @click="showSchemaReference = false">Close</button>
+            </div>
+            <p class="a-copy smt-025">Available model fields for this layout:</p>
+            <div class="builder2-schema-list smt-050">
+              <span v-for="field in modelFieldOptions" :key="`schema-field-${field}`" class="a-chip">
+                {{ field }}
+              </span>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="frameSettingsTarget" class="builder2-modal-backdrop" @click.self="closeFrameSettings">
+          <section class="a-card builder2-modal">
+            <div class="panel-row">
+              <h3 class="panel-title">Frame Settings</h3>
+              <button class="a-btn a-btn--ghost" type="button" @click="closeFrameSettings">Close</button>
+            </div>
+
+            <div class="settings-fields smt-050">
+              <label class="a-field">
+                <span class="a-field__label">Frame Name</span>
+                <input v-model="frameSettingsTarget.frame.name" class="a-input" type="text">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Frame ID</span>
+                <input v-model="frameSettingsTarget.frame.id" class="a-input" type="text">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Width %</span>
+                <input
+                  :value="frameSettingsTarget.meta.width"
+                  class="a-input"
+                  type="number"
+                  min="20"
+                  max="100"
+                  @input="updateFrameMeta(frameSettingsTarget.frame, { width: Number(($event.target as HTMLInputElement).value) })"
+                >
+              </label>
+              <label class="a-field form-full">
+                <span class="a-field__label">Outer Class</span>
+                <input
+                  :value="frameSettingsTarget.meta.outerClass"
+                  class="a-input"
+                  type="text"
+                  placeholder="tm:min-w-[320px]"
+                  @input="updateFrameMeta(frameSettingsTarget.frame, { outerClass: ($event.target as HTMLInputElement).value })"
+                >
+              </label>
+              <div class="file-item form-full">
+                <p class="a-eyebrow">Generated Frame Class</p>
+                <code>{{ buildFrameClass(frameSettingsTarget.meta.width, frameSettingsTarget.meta.outerClass) }}</code>
+              </div>
+              <label class="a-field form-full">
+                <span class="a-field__label">Inner Class</span>
+                <input
+                  :value="frameSettingsTarget.meta.innerClass"
+                  class="a-input"
+                  type="text"
+                  placeholder="sg-050"
+                  @input="updateFrameMeta(frameSettingsTarget.frame, { innerClass: ($event.target as HTMLInputElement).value }); syncFrameInnerClassToWidgets(frameSettingsTarget.frame)"
+                >
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="fieldSettingsTarget" class="builder2-modal-backdrop" @click.self="closeFieldSettings">
+          <section class="a-card builder2-modal">
+            <div class="panel-row">
+              <h3 class="panel-title">Field Settings</h3>
+              <button class="a-btn a-btn--ghost" type="button" @click="closeFieldSettings">Close</button>
+            </div>
+
+            <div class="settings-fields smt-050">
+              <label class="a-field">
+                <span class="a-field__label">Field ID</span>
+                <input v-model="fieldSettingsTarget.field.id" class="a-input" type="text">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Model Field</span>
+                <select
+                  v-model="fieldSettingsTarget.field.field"
+                  class="a-select"
+                  @change="fieldSettingsTarget.field.modelKey = fieldSettingsTarget.field.field"
+                >
+                  <option v-for="option in modelFieldOptions" :key="`pb2-field-${option}`" :value="option">
+                    {{ option }}
+                  </option>
+                </select>
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Label</span>
+                <input v-model="fieldSettingsTarget.field.label" class="a-input" type="text">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Model Key</span>
+                <input v-model="fieldSettingsTarget.field.modelKey" class="a-input" type="text">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Component</span>
+                <select
+                  :value="fieldSettingsTarget.field.component.name"
+                  class="a-select"
+                  @change="setFieldComponentName(fieldSettingsTarget.field, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="AInput">AInput</option>
+                  <option value="ANumberInput">ANumberInput</option>
+                  <option value="ACombobox">ACombobox</option>
+                  <option value="ATagsInput">ATagsInput</option>
+                </select>
+              </label>
+              <label v-if="fieldSettingsTarget.field.component.name === 'AInput'" class="a-field">
+                <span class="a-field__label">Input Type</span>
+                <select v-model="fieldSettingsTarget.field.component.options.type" class="a-select">
+                  <option value="text">text</option>
+                  <option value="email">email</option>
+                  <option value="password">password</option>
+                  <option value="number">number</option>
+                </select>
+              </label>
+              <label class="a-field form-full">
+                <span class="a-field__label">Placeholder</span>
+                <input v-model="fieldSettingsTarget.field.component.options.placeholder" class="a-input" type="text">
+              </label>
+              <label class="a-field form-full">
+                <span class="a-field__label">Action</span>
+                <input v-model="fieldSettingsTarget.field.action" class="a-input" type="text" placeholder="car.update">
+              </label>
+              <label class="a-field inline-field">
+                <span class="a-field__label">Required</span>
+                <input v-if="fieldValidationState" v-model="fieldValidationState.required" type="checkbox">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Min Length</span>
+                <input v-if="fieldValidationState" v-model="fieldValidationState.minLength" class="a-input" type="number" min="0">
+              </label>
+              <label class="a-field">
+                <span class="a-field__label">Max Length</span>
+                <input v-if="fieldValidationState" v-model="fieldValidationState.maxLength" class="a-input" type="number" min="0">
+              </label>
+              <label class="a-field form-full">
+                <span class="a-field__label">Pattern</span>
+                <input v-if="fieldValidationState" v-model="fieldValidationState.pattern" class="a-input" type="text" placeholder="^[a-zA-Z]+$">
+              </label>
+              <label class="a-field form-full">
+                <span class="a-field__label">Component Options (JSON)</span>
+                <textarea
+                  v-model="fieldSettingsOptionsJson"
+                  class="a-textarea"
+                  rows="8"
+                  spellcheck="false"
+                />
+              </label>
+            </div>
+
+            <div class="api-actions smt-050">
+              <button class="a-btn a-btn--subtle" type="button" @click="applyFieldOptionsJson">
+                Apply Options JSON
+              </button>
+            </div>
+            <p v-if="fieldSettingsOptionsNotice" class="builder-notice smt-025">{{ fieldSettingsOptionsNotice }}</p>
+            <p v-if="fieldSettingsOptionsError" class="builder-notice is-error smt-025">{{ fieldSettingsOptionsError }}</p>
+
+            <div class="file-item smt-050">
+              <p class="a-eyebrow">Field Contract Preview</p>
+              <pre class="api-result">{{ fieldContractPreview }}</pre>
+            </div>
+          </section>
+        </div>
       </template>
     </template>
 
@@ -1909,6 +3104,180 @@ const commitState = async () => {
   gap: 0.4rem;
 }
 
+.builder2-panel {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.builder2-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.62rem;
+}
+
+.builder2-view-toggle .a-btn.is-active {
+  border-color: color-mix(in srgb, var(--admin-brand) 38%, var(--admin-border) 62%);
+  color: var(--admin-brand-text);
+  background: color-mix(in srgb, var(--admin-brand) 10%, var(--admin-surface) 90%);
+}
+
+.builder2-canvas {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-muted);
+  padding: 0.62rem;
+}
+
+.builder2-canvas__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+
+.builder2-frame {
+  min-width: 260px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.52rem;
+}
+
+.builder2-frame__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.builder2-frame__head h3 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: var(--fs--05, 0.9rem);
+  font-weight: 600;
+}
+
+.builder2-frame__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.builder2-frame__widgets {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.builder2-widget__fields {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.builder2-field {
+  position: relative;
+  border: 1px dashed color-mix(in srgb, var(--admin-brand) 28%, var(--admin-border) 72%);
+  border-radius: var(--admin-radius-sm);
+  padding: 0.45rem;
+}
+
+.builder2-field__settings {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: var(--admin-surface);
+  color: var(--admin-muted-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.builder2-field__settings:hover {
+  color: var(--admin-text);
+  border-color: color-mix(in srgb, var(--admin-brand) 42%, var(--admin-border) 58%);
+}
+
+.builder2-empty {
+  width: 100%;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.builder2-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--admin-bg) 74%, black 26%);
+}
+
+.builder2-modal {
+  width: min(900px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.builder2-schema-list {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.builder2-runtime {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-muted);
+  padding: 0.62rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.layout-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.layout-col {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.widget-fields {
+  display: grid;
+  gap: 0.52rem;
+}
+
+.widget-fields__row {
+  display: grid;
+  gap: 0.52rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.widget-fields__col {
+  display: grid;
+  gap: 0.52rem;
+  min-width: 0;
+}
+
+.widget-generic__title {
+  margin: 0;
+  font-size: var(--fs-025, 1.04rem);
+  color: var(--admin-text);
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
 @media (max-width: 1260px) {
   .field-item-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1942,6 +3311,19 @@ const commitState = async () => {
 
   .section-panel {
     position: static;
+  }
+
+  .builder2-panel__head {
+    flex-direction: column;
+  }
+
+  .builder2-frame {
+    flex-basis: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .widget-fields__row {
+    grid-template-columns: 1fr;
   }
 }
 

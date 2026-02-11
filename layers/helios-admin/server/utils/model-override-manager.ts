@@ -10,6 +10,15 @@ export type CreateDialogOverrideResult = {
   status: 'created' | 'overwritten' | 'exists'
 }
 
+type CreateRecordOverrideOptions = {
+  force?: boolean
+}
+
+export type CreateRecordOverrideResult = {
+  filePath: string
+  status: 'created' | 'overwritten' | 'exists'
+}
+
 const normalizeModelKey = (value: string) =>
   value
     .trim()
@@ -124,6 +133,48 @@ const setFieldValue = (field: ModelUIFieldSpec, value: unknown) => {
 </template>
 `
 
+const createRecordTemplate = (modelKey: string) => `// @helios-generated-model-override kind=create-record model=${modelKey}
+import type { ModelCreateRecordOverride } from '#helios-admin/app/types/model-overrides'
+
+const createRecord: ModelCreateRecordOverride = async (context) => {
+  context.logger.info('[model-create-override] invoked', {
+    model: context.modelKey,
+    requiredKeys: context.requiredKeys,
+  })
+
+  // Keep this call if you only want to extend behavior around the default pipeline.
+  await context.defaultCreateRecord()
+
+  // Example post-create hook:
+  // const draft = context.getCreateDraft()
+  // context.logger.info('[model-create-override] post-create draft', { draft })
+}
+
+export default createRecord
+`
+
+const scaffoldOverrideFile = async (
+  filePath: string,
+  content: string,
+  force = false,
+) => {
+  const exists = await fileExists(filePath)
+  if (exists && !force) {
+    return {
+      filePath,
+      status: 'exists' as const,
+    }
+  }
+
+  await ensureDir(filePath)
+  await fs.writeFile(filePath, content, 'utf-8')
+
+  return {
+    filePath,
+    status: (exists ? 'overwritten' : 'created') as 'overwritten' | 'created',
+  }
+}
+
 export const scaffoldCreateDialogOverride = async (
   model: string,
   options: CreateDialogOverrideOptions = {},
@@ -135,20 +186,19 @@ export const scaffoldCreateDialogOverride = async (
   }
 
   const filePath = resolve(cwd, 'app/components/admin/overrides', modelKey, 'CreateDialog.vue')
-  const exists = await fileExists(filePath)
+  return await scaffoldOverrideFile(filePath, createDialogTemplate(modelKey), options.force)
+}
 
-  if (exists && !options.force) {
-    return {
-      filePath,
-      status: 'exists',
-    }
+export const scaffoldCreateRecordOverride = async (
+  model: string,
+  options: CreateRecordOverrideOptions = {},
+  cwd = process.cwd(),
+): Promise<CreateRecordOverrideResult> => {
+  const modelKey = normalizeModelKey(model)
+  if (!modelKey) {
+    throw new Error('Model key is required to scaffold an override.')
   }
 
-  await ensureDir(filePath)
-  await fs.writeFile(filePath, createDialogTemplate(modelKey), 'utf-8')
-
-  return {
-    filePath,
-    status: exists ? 'overwritten' : 'created',
-  }
+  const filePath = resolve(cwd, 'app/components/admin/overrides', modelKey, 'createRecord.ts')
+  return await scaffoldOverrideFile(filePath, createRecordTemplate(modelKey), options.force)
 }

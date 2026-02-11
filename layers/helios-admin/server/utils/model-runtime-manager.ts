@@ -104,6 +104,33 @@ const parseRidString = (value: string): { table: string, subId: string } | null 
   }
 }
 
+const resolveCreateActionProcedure = (modelKey: string, action: unknown) => {
+  const normalizedModel = String(modelKey || '').trim().toLowerCase()
+  const raw = String(action ?? '').trim() || `${normalizedModel}.create`
+  const segments = raw
+    .split('.')
+    .map(entry => entry.trim())
+    .filter(entry => entry.length > 0)
+
+  if (!segments.length || segments.length > 2) {
+    throw new Error(`Invalid create action "${raw}". Expected "${normalizedModel}.create" or "${normalizedModel}.<name>".`)
+  }
+
+  const procedure = segments.length === 1 ? segments[0]! : segments[1]!
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(procedure)) {
+    throw new Error(`Invalid create action "${raw}". Procedure "${procedure}" is not a valid function name.`)
+  }
+
+  if (segments.length === 2) {
+    const targetModel = segments[0]!.toLowerCase()
+    if (targetModel !== normalizedModel) {
+      throw new Error(`Invalid create action "${raw}". Cross-model create actions are not allowed.`)
+    }
+  }
+
+  return procedure
+}
+
 export const resolveRuntimeRecordIdentifiers = (
   value: unknown,
   fallbackTable?: string,
@@ -383,11 +410,14 @@ export const createModelDirectoryRecord = async (
   payload: Record<string, any>,
 ) => {
   const modelCaller = await resolveModelCaller(event, model.modelKey)
-  if (!modelCaller.create) {
-    throw new Error(`Model "${model.modelKey}" does not expose a create endpoint.`)
+  const procedure = resolveCreateActionProcedure(model.modelKey, spec.directory.createDialog?.action)
+  const createProcedure = (modelCaller as AnyRecord)?.[procedure]
+
+  if (typeof createProcedure !== 'function') {
+    throw new Error(`Model "${model.modelKey}" does not expose a "${procedure}" create endpoint.`)
   }
 
-  const createdRaw = await modelCaller.create({ data: payload || {} })
+  const createdRaw = await createProcedure({ data: payload || {} })
   const created = extractFirstObject(createdRaw)
   if (!created) {
     throw new Error(`Create for "${model.modelKey}" did not return a record.`)

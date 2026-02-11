@@ -35,6 +35,14 @@ import APasswordConfirmInput from '#layers/helios-ui/app/components/fields/APass
 import ADateCalendar from '#layers/helios-ui/app/components/fields/ADateCalendar.vue'
 import ADateRangeCalendar, { type ADateRangePreset } from '#layers/helios-ui/app/components/fields/ADateRangeCalendar.vue'
 import ADateMetaCalendar from '#layers/helios-ui/app/components/fields/ADateMetaCalendar.vue'
+import AFileUploadBasic from '#layers/helios-ui/app/components/fields/AFileUploadBasic.vue'
+import AFileUploadAvatar from '#layers/helios-ui/app/components/fields/AFileUploadAvatar.vue'
+import AFileUploadDropzone from '#layers/helios-ui/app/components/fields/AFileUploadDropzone.vue'
+import AFileUploadImagesGrid from '#layers/helios-ui/app/components/fields/AFileUploadImagesGrid.vue'
+import AFileUploadList from '#layers/helios-ui/app/components/fields/AFileUploadList.vue'
+import AFileUploadTable from '#layers/helios-ui/app/components/fields/AFileUploadTable.vue'
+import AFileUploadPaste from '#layers/helios-ui/app/components/fields/AFileUploadPaste.vue'
+import AFileUploadDirectory from '#layers/helios-ui/app/components/fields/AFileUploadDirectory.vue'
 import ANumberInput from '#layers/helios-ui/app/components/fields/ANumberInput.vue'
 import ATagsInput from '#layers/helios-ui/app/components/fields/ATagsInput.vue'
 import ATree, { type ATreeNode } from '#layers/helios-ui/app/components/fields/ATree.vue'
@@ -354,6 +362,15 @@ const dateTwoMonths = ref<DateValue[]>([
 ])
 const datePricing = ref<DateValue[]>([todayDate])
 
+const fileUploadBasic = ref<File[]>([])
+const fileUploadAvatar = ref<File[]>([])
+const fileUploadDropzone = ref<File[]>([])
+const fileUploadImages = ref<File[]>([])
+const fileUploadList = ref<File[]>([])
+const fileUploadTable = ref<File[]>([])
+const fileUploadPaste = ref<File[]>([])
+const fileUploadDirectory = ref<File[]>([])
+
 const rangePresets: ADateRangePreset[] = [
   { label: 'Last 3 days', value: 'last3Days' },
   { label: 'Last 7 days', value: 'last7Days' },
@@ -502,6 +519,16 @@ const referencePreview = computed(() => JSON.stringify({
   dateRangeWithPresets: toDateStrings(dateRangeWithPresets.value),
   dateTwoMonths: toDateStrings(dateTwoMonths.value),
   datePricing: toDateStrings(datePricing.value),
+  fileUploads: {
+    basic: fileUploadBasic.value.map(file => file.name),
+    avatar: fileUploadAvatar.value.map(file => file.name),
+    dropzone: fileUploadDropzone.value.map(file => file.name),
+    images: fileUploadImages.value.map(file => file.name),
+    list: fileUploadList.value.map(file => file.name),
+    table: fileUploadTable.value.map(file => file.name),
+    paste: fileUploadPaste.value.map(file => file.name),
+    directory: fileUploadDirectory.value.map(file => file.webkitRelativePath || file.name),
+  },
   standaloneChecked: standaloneChecked.value,
   taxonomyChecked: taxonomyChecked.value,
 }, null, 2))
@@ -1646,6 +1673,109 @@ const schemaPreview = computed(() => JSON.stringify(schemaDescriptor.value, null
                   :num-of-months="2"
                   :meta-by-date="pricingMetaByDate"
                   :meta-threshold="100"
+                />
+              </article>
+            </div>
+          </FieldSectionCard>
+
+          <FieldSectionCard
+            title="File Upload Reference"
+            description="File upload variants split by use-case: avatar, dropzone image, multi-image gallery, list/table files, paste flow, and directory upload."
+          >
+            <div class="reference-grid">
+              <article class="reference-item">
+                <header class="reference-item__head">
+                  <h3>Basic</h3>
+                  <p>Single image with compact preview + replace action.</p>
+                </header>
+                <AFileUploadBasic
+                  v-model="fileUploadBasic"
+                  label="Technology Icon"
+                  helper-text="maxFiles=1, accept=image/*"
+                />
+              </article>
+
+              <article class="reference-item">
+                <header class="reference-item__head">
+                  <h3>Avatar Upload</h3>
+                  <p>Profile-style rounded uploader with inline delete.</p>
+                </header>
+                <AFileUploadAvatar
+                  v-model="fileUploadAvatar"
+                  label="Team Avatar"
+                  helper-text="Avatar mode, single image"
+                />
+              </article>
+
+              <article class="reference-item">
+                <header class="reference-item__head">
+                  <h3>Drag and Drop</h3>
+                  <p>Large dropzone for one hero image.</p>
+                </header>
+                <AFileUploadDropzone
+                  v-model="fileUploadDropzone"
+                  label="Hero Image"
+                  helper-text="maxFileSize=5MB"
+                />
+              </article>
+
+              <article class="reference-item reference-item--full">
+                <header class="reference-item__head">
+                  <h3>Multiple Images</h3>
+                  <p>Image grid manager with per-item remove and bulk clear.</p>
+                </header>
+                <AFileUploadImagesGrid
+                  v-model="fileUploadImages"
+                  label="Gallery"
+                  helper-text="Image-only, up to 10 files"
+                />
+              </article>
+
+              <article class="reference-item reference-item--full">
+                <header class="reference-item__head">
+                  <h3>Files List</h3>
+                  <p>Mixed-file vertical list with previews/icons and sizes.</p>
+                </header>
+                <AFileUploadList
+                  v-model="fileUploadList"
+                  label="Attachment List"
+                  helper-text="All file types, list style"
+                />
+              </article>
+
+              <article class="reference-item reference-item--full">
+                <header class="reference-item__head">
+                  <h3>Files Table</h3>
+                  <p>Table layout with extension, size, download and delete actions.</p>
+                </header>
+                <AFileUploadTable
+                  v-model="fileUploadTable"
+                  label="Attachment Table"
+                  helper-text="All file types, table style"
+                />
+              </article>
+
+              <article class="reference-item reference-item--full">
+                <header class="reference-item__head">
+                  <h3>With Paste</h3>
+                  <p>Paste files from clipboard while focused on the dropzone.</p>
+                </header>
+                <AFileUploadPaste
+                  v-model="fileUploadPaste"
+                  label="Paste Upload"
+                  helper-text="Use Ctrl/Cmd + V while focused"
+                />
+              </article>
+
+              <article class="reference-item reference-item--full">
+                <header class="reference-item__head">
+                  <h3>Directory Upload</h3>
+                  <p>Folder picker with relative path visibility and clear action.</p>
+                </header>
+                <AFileUploadDirectory
+                  v-model="fileUploadDirectory"
+                  label="Directory Contents"
+                  helper-text="directory=true"
                 />
               </article>
             </div>

@@ -14,6 +14,7 @@ export type ModelUIFieldSpec = {
   modelKey?: string
   validation?: Record<string, any>
   class?: string
+  meta?: Record<string, any>
 }
 
 export type ModelUIFieldLayoutColumnSpec = {
@@ -44,6 +45,7 @@ export type ModelUIWidgetSpec = {
   action?: string
   fields: ModelUIFieldSpec[]
   layout?: ModelUIFieldLayoutSpec
+  meta?: Record<string, any>
 }
 
 export type ModelUIColumnSpec = {
@@ -51,6 +53,7 @@ export type ModelUIColumnSpec = {
   name: string
   class?: string
   primary: ModelUIWidgetSpec[]
+  meta?: Record<string, any>
 }
 
 export type ModelUIRowSpec = {
@@ -58,6 +61,7 @@ export type ModelUIRowSpec = {
   name: string
   class?: string
   columns: ModelUIColumnSpec[]
+  meta?: Record<string, any>
 }
 
 export type ModelUITabSpec = {
@@ -65,6 +69,7 @@ export type ModelUITabSpec = {
   slug: string
   label: string
   primary: ModelUIRowSpec[]
+  meta?: Record<string, any>
 }
 
 export type DirectoryListingFieldSpec = {
@@ -81,6 +86,7 @@ export type DirectoryFilterSpec = {
 
 export type DirectoryCreateDialogSpec = {
   enabled: boolean
+  action: string
   title: string
   submitLabel: string
   required: string[]

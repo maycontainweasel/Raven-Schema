@@ -97,6 +97,7 @@ export default defineEventHandler(async (event) => {
         route: specState.spec.directory.route,
         slugPolicy: specState.spec.directory.slugPolicy,
         typesenseEnabled: specState.spec.directory.typesense.enabled,
+        createAction: specState.spec.directory.createDialog.action,
       },
       ...created,
     }
