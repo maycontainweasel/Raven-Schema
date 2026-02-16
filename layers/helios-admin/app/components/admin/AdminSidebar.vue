@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { markRaw, shallowRef, type Component } from 'vue'
 import type { AdminNavItem, AdminNavSection } from '~/app/types/admin-nav'
-import AdminLogo from './AdminLogo.vue'
-import AdminLogoIcon from './AdminLogoIcon.vue'
+import AdminSidebarBrandOpen from './branding/AdminSidebarBrandOpen.vue'
+import AdminSidebarBrandCollapsed from './branding/AdminSidebarBrandCollapsed.vue'
 
 const props = defineProps<{ collapsed: boolean }>()
 
@@ -174,12 +174,16 @@ const releaseHoverItem = () => {
 <template>
   <aside class="admin-sidebar" :class="props.collapsed ? 'admin-sidebar--collapsed' : ''">
     <div class="admin-sidebar__header">
-      <NuxtLink class="admin-sidebar__brand" to="/" aria-label="Go to homepage">
-        <component
-          :is="props.collapsed ? collapsedLogoComponent : expandedLogoComponent"
-          class="admin-sidebar__brand-logo"
+      <div class="admin-sidebar__brand" :class="props.collapsed ? 'is-collapsed' : ''">
+        <AdminSidebarBrandOpen
+          v-if="!props.collapsed"
+          class="admin-sidebar__brand-open"
         />
-      </NuxtLink>
+        <AdminSidebarBrandCollapsed
+          v-else
+          class="admin-sidebar__brand-collapsed"
+        />
+      </div>
     </div>
 
     <div class="admin-sidebar__scroll">
@@ -341,26 +345,28 @@ const releaseHoverItem = () => {
 
 .admin-sidebar__brand {
   width: 100%;
-  display: inline-flex;
-  align-items: center;
   min-width: 0;
-  text-decoration: none;
-  color: inherit;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
-.admin-sidebar--collapsed .admin-sidebar__brand {
+.admin-sidebar__brand.is-collapsed {
   justify-content: center;
 }
 
-.admin-sidebar__brand-logo {
-  max-width: 100%;
-  min-width: 0;
-}
-
-.admin-sidebar__brand-logo :deep(svg) {
+.admin-sidebar__brand-open {
   display: block;
+  width: 8.65rem;
   max-width: 100%;
   height: auto;
+}
+
+.admin-sidebar__brand-collapsed {
+  display: block;
+  width: 2.25rem;
+  height: 2.25rem;
 }
 
 .admin-sidebar__scroll {

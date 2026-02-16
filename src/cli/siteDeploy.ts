@@ -162,6 +162,13 @@ export async function runSiteDeploy(options: {
 
   let context = await resolveContext(spec);
 
+  console.log('📡 Deploy target:');
+  console.log(`   ssh: ${context.sshTarget}`);
+  console.log(`   appDir: ${context.resolvedAnswers.appDir}`);
+  console.log(`   domain: ${context.resolvedAnswers.domain}`);
+  console.log(`   pm2: ${context.resolvedAnswers.pm2Command} (${context.resolvedAnswers.pm2Name})`);
+  console.log(`   port: ${context.resolvedAnswers.port}`);
+
   await assertSafeRemotePath(context.sshTarget, context.resolvedAnswers.appDir);
 
   if (options.reset) {
@@ -546,19 +553,34 @@ function buildEcosystemConfig(
     NODE_ENV: 'production',
     ...(extraEnv && typeof extraEnv === 'object' ? extraEnv : {}),
   };
-  const config = {
-    apps: [
-      {
-        name: answers.pm2Name,
-        exec_mode: 'fork',
-        cwd: answers.appDir,
-        script: 'output/server/index.mjs',
-        node_args: '',
-        env: mergedEnv,
-      },
-    ],
-  };
-  return `module.exports = ${JSON.stringify(config, null, 2)};\n`;
+
+  return [
+    'module.exports = (() => {',
+    '  let fileEnv = {};',
+    '  try {',
+    '    fileEnv = require(\'./env.config.cjs\');',
+    '  } catch {',
+    '    fileEnv = {};',
+    '  }',
+    '',
+    '  return {',
+    '    apps: [',
+    '      {',
+    `        name: ${JSON.stringify(answers.pm2Name)},`,
+    '        exec_mode: \'fork\',',
+    `        cwd: ${JSON.stringify(answers.appDir)},`,
+    '        script: \'output/server/index.mjs\',',
+    '        node_args: \'\',',
+    '        env: {',
+    '          ...fileEnv,',
+    `          ...${JSON.stringify(mergedEnv, null, 10)},`,
+    '        },',
+    '      },',
+    '    ],',
+    '  };',
+    '})();',
+    '',
+  ].join('\n');
 }
 
 const execFileAsync = promisify(execFile);
@@ -673,6 +695,11 @@ async function runDeployStep(
   }
 
   await runSsh(sshTarget, `mkdir -p ${shellEscapePath(`${resolvedAnswers.appDir}/output`)}`);
+  await runSsh(sshTarget, `mkdir -p ${shellEscapePath(`${resolvedAnswers.appDir}/app/helios`)}`);
+  await runSsh(
+    sshTarget,
+    `mkdir -p ${shellEscapePath(`${resolvedAnswers.appDir}/modules/schema-kit/runtime/generated`)}`
+  );
 
   if (!options.noSync) {
     console.log('🚚 Syncing .output → output ...');
@@ -680,6 +707,30 @@ async function runDeployStep(
       `${outputDir}${path.sep}`,
       `${sshTarget}:${resolvedAnswers.appDir}/output/`,
       resolvedAnswers.rsyncDelete
+    );
+
+    // Runtime server APIs read these assets directly from disk (process.cwd()).
+    // Keep them in sync so remote behavior matches local.
+    await syncRuntimeAssetDir(
+      appRoot,
+      sshTarget,
+      resolvedAnswers.appDir,
+      'app/helios/fragments',
+      { del: false }
+    );
+    await syncRuntimeAssetDir(
+      appRoot,
+      sshTarget,
+      resolvedAnswers.appDir,
+      'app/helios/generated',
+      { del: false }
+    );
+    await syncRuntimeAssetDir(
+      appRoot,
+      sshTarget,
+      resolvedAnswers.appDir,
+      'modules/schema-kit/runtime/generated',
+      { del: false }
     );
   }
 
@@ -725,6 +776,28 @@ async function runDeployStep(
   }
 
   console.log('✅ Deploy complete.');
+}
+
+async function syncRuntimeAssetDir(
+  appRoot: string,
+  sshTarget: string,
+  remoteAppDir: string,
+  relativePath: string,
+  options?: { del?: boolean }
+): Promise<void> {
+  const localDir = path.join(appRoot, relativePath);
+  const exists = await stat(localDir).catch(() => null);
+  if (!exists?.isDirectory()) {
+    console.log(`ℹ️  ${relativePath} not found; skipping runtime asset sync.`);
+    return;
+  }
+
+  console.log(`📦 Syncing ${relativePath} ...`);
+  await runRsync(
+    `${localDir}${path.sep}`,
+    `${sshTarget}:${remoteAppDir}/${relativePath}/`,
+    Boolean(options?.del)
+  );
 }
 
 async function runLocalCommand(command: string, cwd: string): Promise<void> {

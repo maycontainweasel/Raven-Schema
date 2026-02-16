@@ -4,6 +4,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
 export type ModelManagerModel = {
   modelKey: string
+  routerKey: string
   table: string
   label: string
   directoryRoute: string
@@ -157,6 +158,8 @@ const TYPESENSE_RE = /^\s*typesense\s*:\s*$/
 const TYPESENSE_FN_RE = /^\s*([A-Za-z_][\w-]*)::fn\[(.*?)\]/
 const CAPABILITY_TOKEN_RE = /^[a-z][a-z0-9_-]*$/
 const GENERATED_ROUTE_MARKER = '@helios-generated-model-route'
+const GENERATED_MODELS_BLOCK_RE = /export const models\s*=\s*\{([\s\S]*?)\}\s*as const;/
+const GENERATED_MODELS_ENTRY_RE = /"([^"]+)"\s*:\s*\{\s*table:\s*"([^"]+)"/g
 
 const ensureUnique = <T>(values: T[]) => Array.from(new Set(values))
 
@@ -868,6 +871,58 @@ export const resolveModelManagerPaths = (cwd = process.cwd()) => {
   }
 }
 
+type GeneratedModelManifestEntry = {
+  key: string
+  table: string
+  normalizedKey: string
+  normalizedTable: string
+}
+
+const resolveGeneratedModelsManifestFile = async (cwd = process.cwd()) => {
+  const candidates = ensureUnique([
+    resolve(cwd, 'modules/schema-kit/runtime/generated/models.ts'),
+    resolve(cwd, './modules/schema-kit/runtime/generated/models.ts'),
+  ])
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) return candidate
+  }
+
+  return null
+}
+
+const loadGeneratedModelManifest = async (
+  cwd = process.cwd(),
+): Promise<GeneratedModelManifestEntry[]> => {
+  const manifestFile = await resolveGeneratedModelsManifestFile(cwd)
+  if (!manifestFile) return []
+
+  const source = await readTextFile(manifestFile)
+  if (!source) return []
+
+  const blockMatch = source.match(GENERATED_MODELS_BLOCK_RE)
+  if (!blockMatch) return []
+
+  const entries: GeneratedModelManifestEntry[] = []
+  const block = blockMatch[1]
+  let match: RegExpExecArray | null
+
+  while ((match = GENERATED_MODELS_ENTRY_RE.exec(block))) {
+    const key = String(match[1] ?? '').trim()
+    const table = String(match[2] ?? '').trim()
+    if (!key || !table) continue
+
+    entries.push({
+      key,
+      table,
+      normalizedKey: normalizeModelKey(key),
+      normalizedTable: normalizeModelKey(table),
+    })
+  }
+
+  return entries
+}
+
 const resolveGraphFile = async (cwd = process.cwd()) => {
   const { graphCandidates } = resolveModelManagerPaths(cwd)
 
@@ -937,6 +992,7 @@ const parseGraphModels = (source: string): InternalModel[] => {
 
       current = {
         modelKey,
+        routerKey: modelKey,
         table,
         label,
         directoryRoute: `/admin/${table}`,
@@ -1024,9 +1080,18 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
   const source = await fs.readFile(graphFile, 'utf-8')
   const baseModels = parseGraphModels(source)
   const { fragmentFile, generatedFile } = resolveModelManagerPaths(cwd)
+  const generatedManifest = await loadGeneratedModelManifest(cwd)
+  const generatedByTable = new Map(
+    generatedManifest.map(entry => [entry.normalizedTable, entry]),
+  )
+  const manifestIsAvailable = generatedManifest.length > 0
 
   const enriched = await Promise.all(
     baseModels.map(async (model) => {
+      const generatedEntry = generatedByTable.get(model.table)
+      if (manifestIsAvailable && !generatedEntry) return null
+
+      const routerKey = generatedEntry?.key || model.routerKey || model.modelKey
       const fragmentPath = fragmentFile(model.modelKey)
       const hasFragment = await fileExists(fragmentPath)
       const rawSpec = hasFragment
@@ -1041,6 +1106,8 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
 
       return {
         ...model,
+        routerKey,
+        canManage: true,
         directoryRoute,
         hasFragment,
         hasGenerated: await fileExists(generatedFile(model.modelKey)),
@@ -1049,6 +1116,8 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
   )
 
   return enriched
+    .filter((entry): entry is ModelManagerModel => Boolean(entry))
+    .sort((a, b) => a.modelKey.localeCompare(b.modelKey))
 }
 
 export const findModelManagerModel = (
@@ -1056,7 +1125,13 @@ export const findModelManagerModel = (
   modelParam: string,
 ) => {
   const normalized = normalizeModelKey(modelParam)
-  return models.find((entry) => entry.modelKey === normalized || entry.table === normalized) ?? null
+  return models.find((entry) => {
+    return (
+      entry.modelKey === normalized ||
+      entry.table === normalized ||
+      normalizeModelKey(entry.routerKey) === normalized
+    )
+  }) ?? null
 }
 
 export const createDefaultModelSpec = (model: ModelManagerModel): ModelLayoutSpec => {

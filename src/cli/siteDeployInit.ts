@@ -318,19 +318,34 @@ function buildEcosystemConfig(answers: DeployAnswers, deploy?: Record<string, un
     NODE_ENV: 'production',
     ...(extraEnv && typeof extraEnv === 'object' ? extraEnv : {}),
   };
-  const config = {
-    apps: [
-      {
-        name: answers.pm2Name,
-        exec_mode: 'fork',
-        cwd: answers.appDir,
-        script: 'output/server/index.mjs',
-        node_args: '',
-        env: mergedEnv,
-      },
-    ],
-  };
-  return `module.exports = ${JSON.stringify(config, null, 2)};\n`;
+
+  return [
+    'module.exports = (() => {',
+    '  let fileEnv = {};',
+    '  try {',
+    '    fileEnv = require(\'./env.config.cjs\');',
+    '  } catch {',
+    '    fileEnv = {};',
+    '  }',
+    '',
+    '  return {',
+    '    apps: [',
+    '      {',
+    `        name: ${JSON.stringify(answers.pm2Name)},`,
+    '        exec_mode: \'fork\',',
+    `        cwd: ${JSON.stringify(answers.appDir)},`,
+    '        script: \'output/server/index.mjs\',',
+    '        node_args: \'\',',
+    '        env: {',
+    '          ...fileEnv,',
+    `          ...${JSON.stringify(mergedEnv, null, 10)},`,
+    '        },',
+    '      },',
+    '    ],',
+    '  };',
+    '})();',
+    '',
+  ].join('\n');
 }
 
 async function loadSiteSpec(

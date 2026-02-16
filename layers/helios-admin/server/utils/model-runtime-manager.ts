@@ -18,6 +18,11 @@ type ModelCaller = {
   }
 }
 
+type ResolvedModelCaller = {
+  caller: ModelCaller
+  routerKey: string
+}
+
 export type RuntimeRecordIdentifiers = {
   rid: string | null
   subId: string | null
@@ -210,26 +215,119 @@ const toInputId = (value: string | number): string | number => {
   return text
 }
 
+const normalizeLookupToken = (value: unknown) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+
+const toCamelCase = (value: unknown) => {
+  const source = String(value ?? '').trim()
+  if (!source.length) return ''
+  return source
+    .replace(/[_\-\s]+([A-Za-z0-9])/g, (_, token: string) => token.toUpperCase())
+    .replace(/^[A-Z]/, token => token.toLowerCase())
+}
+
+const resolveModelCallerCandidates = (model: ModelManagerModel) =>
+  unique([
+    model.routerKey,
+    model.modelKey,
+    model.table,
+    toCamelCase(model.routerKey),
+    toCamelCase(model.modelKey),
+    toCamelCase(model.table),
+  ]
+    .map(value => String(value ?? '').trim())
+    .filter(value => value.length > 0))
+
 const resolveModelCaller = async (
   event: H3Event,
-  modelKey: string,
-): Promise<ModelCaller> => {
+  model: ModelManagerModel,
+): Promise<ResolvedModelCaller> => {
   const context = await createContext(event)
   const caller = appRouter.createCaller(context as any) as AnyRecord
-  const modelCaller = caller?.[modelKey]
-  if (!modelCaller) {
-    throw new Error(`No generated model router found for "${modelKey}".`)
+
+  const candidateKeys = resolveModelCallerCandidates(model)
+  for (const key of candidateKeys) {
+    const modelCaller = caller?.[key]
+    if (modelCaller) {
+      return {
+        caller: modelCaller as ModelCaller,
+        routerKey: key,
+      }
+    }
   }
-  return modelCaller as ModelCaller
+
+  const availableKeys = Object.keys(caller || {})
+  const normalizedToKey = new Map<string, string>()
+  for (const key of availableKeys) {
+    const normalized = normalizeLookupToken(key)
+    if (normalized && !normalizedToKey.has(normalized)) {
+      normalizedToKey.set(normalized, key)
+    }
+  }
+
+  for (const candidate of candidateKeys) {
+    const normalized = normalizeLookupToken(candidate)
+    const resolvedKey = normalizedToKey.get(normalized)
+    if (!resolvedKey) continue
+    const modelCaller = caller?.[resolvedKey]
+    if (!modelCaller) continue
+    return {
+      caller: modelCaller as ModelCaller,
+      routerKey: resolvedKey,
+    }
+  }
+
+  throw new Error(`No generated model router found for "${model.modelKey}". Tried: ${candidateKeys.join(', ')}`)
+}
+
+const resolveTypesenseCollection = (
+  model: ModelManagerModel,
+  routerKey: string,
+) => {
+  const allCollections = collections as Record<string, any>
+
+  const candidates = unique([
+    model.typesenseCollection,
+    model.table,
+    model.modelKey,
+    routerKey,
+    toCamelCase(routerKey),
+  ]
+    .map(value => String(value ?? '').trim())
+    .filter(value => value.length > 0))
+
+  for (const key of candidates) {
+    const collection = allCollections[key]
+    if (collection) return collection
+  }
+
+  const normalizedToCollection = new Map<string, any>()
+  for (const [key, collection] of Object.entries(allCollections)) {
+    const normalized = normalizeLookupToken(key)
+    if (normalized && !normalizedToCollection.has(normalized)) {
+      normalizedToCollection.set(normalized, collection)
+    }
+  }
+
+  for (const key of candidates) {
+    const collection = normalizedToCollection.get(normalizeLookupToken(key))
+    if (collection) return collection
+  }
+
+  return null
 }
 
 const syncTypesenseRecord = async (
-  modelKey: string,
+  model: ModelManagerModel,
+  routerKey: string,
   modelCaller: ModelCaller,
   subId: string | null,
 ) => {
   if (!subId || !modelCaller.typesense?.resource) return null
-  const collection = (collections as Record<string, any>)[modelKey]
+  const collection = resolveTypesenseCollection(model, routerKey)
   if (!collection) return null
 
   const resourceRaw = await modelCaller.typesense.resource({
@@ -351,7 +449,8 @@ export const readModelDirectoryRecords = async (
     }
   }
 
-  const modelCaller = await resolveModelCaller(event, model.modelKey)
+  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const modelCaller = resolvedModelCaller.caller
   const typesense = modelCaller.typesense
   if (!typesense?.list || !typesense?.count) {
     return {
@@ -383,16 +482,17 @@ export const readModelDirectoryRecords = async (
 const buildSyncResult = async (
   model: ModelManagerModel,
   spec: ModelLayoutSpec,
-  modelCaller: ModelCaller,
+  resolvedModelCaller: ResolvedModelCaller,
   recordLike: AnyRecord,
 ) => {
+  const modelCaller = resolvedModelCaller.caller
   const identifiers = resolveRuntimeRecordIdentifiers(recordLike, model.table)
   const slug = resolveSlugPolicyValue(spec, recordLike, identifiers, model.table)
   const routeBase = spec.directory.route.replace(/\/+$/, '')
   const redirectTo = `${routeBase}/${encodeURIComponent(slug)}`
 
   const typesense = spec.directory.typesense.enabled
-    ? await syncTypesenseRecord(model.modelKey, modelCaller, identifiers.subId)
+    ? await syncTypesenseRecord(model, resolvedModelCaller.routerKey, modelCaller, identifiers.subId)
     : null
 
   return {
@@ -409,7 +509,8 @@ export const createModelDirectoryRecord = async (
   spec: ModelLayoutSpec,
   payload: Record<string, any>,
 ) => {
-  const modelCaller = await resolveModelCaller(event, model.modelKey)
+  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const modelCaller = resolvedModelCaller.caller
   const procedure = resolveCreateActionProcedure(model.modelKey, spec.directory.createDialog?.action)
   const createProcedure = (modelCaller as AnyRecord)?.[procedure]
 
@@ -423,7 +524,7 @@ export const createModelDirectoryRecord = async (
     throw new Error(`Create for "${model.modelKey}" did not return a record.`)
   }
 
-  const sync = await buildSyncResult(model, spec, modelCaller, created)
+  const sync = await buildSyncResult(model, spec, resolvedModelCaller, created)
 
   return {
     created,
@@ -440,7 +541,8 @@ export const syncModelDirectoryRecord = async (
     id?: string | number | null
   },
 ) => {
-  const modelCaller = await resolveModelCaller(event, model.modelKey)
+  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const modelCaller = resolvedModelCaller.caller
   const explicitId = payload?.id
   const record = extractFirstObject(payload?.record)
 
@@ -454,7 +556,7 @@ export const syncModelDirectoryRecord = async (
     throw new Error('syncModelDirectoryRecord requires a record or id.')
   }
 
-  const sync = await buildSyncResult(model, spec, modelCaller, fallback)
+  const sync = await buildSyncResult(model, spec, resolvedModelCaller, fallback)
   return {
     record: fallback,
     ...sync,
@@ -466,7 +568,8 @@ export const readModelRecordBySlug = async (
   model: ModelManagerModel,
   slugValue: string,
 ) => {
-  const modelCaller = await resolveModelCaller(event, model.modelKey)
+  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const modelCaller = resolvedModelCaller.caller
   const resource = modelCaller.typesense?.resource
   if (!resource) {
     return null
@@ -501,7 +604,8 @@ export const updateModelRecordBySlug = async (
   payload: Record<string, any>,
   explicitId?: unknown,
 ) => {
-  const modelCaller = await resolveModelCaller(event, model.modelKey)
+  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const modelCaller = resolvedModelCaller.caller
   if (!modelCaller.update) {
     throw new Error(`Model "${model.modelKey}" does not expose an update endpoint.`)
   }
@@ -531,7 +635,12 @@ export const updateModelRecordBySlug = async (
 
   const updated = extractFirstObject(updatedRaw)
   const identifiers = resolveRuntimeRecordIdentifiers(updated || { id: updateId }, model.table)
-  const typesense = await syncTypesenseRecord(model.modelKey, modelCaller, identifiers.subId || updateId)
+  const typesense = await syncTypesenseRecord(
+    model,
+    resolvedModelCaller.routerKey,
+    modelCaller,
+    identifiers.subId || updateId,
+  )
 
   return {
     updated,
