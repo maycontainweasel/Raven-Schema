@@ -325,12 +325,52 @@ const buildUnoGenerated = (
   }
 
   const sortedBreakpoints = [...breakpoints].sort((a, b) => a.minWidth - b.minWidth)
-  const breakpointEntries = sortedBreakpoints
+  const generatedBreakpoints = sortedBreakpoints
     .filter((entry) => entry.minWidth > 0)
-    .map((entry, index) => {
+    .reduce<Record<string, string>>((acc, entry, index) => {
       const key = sanitizeThemeKey(entry.id, `bp_${index + 1}`)
-      return `      ${key}: '${Math.round(entry.minWidth)}px',`
-    })
+      acc[key] = `${Math.round(entry.minWidth)}px`
+      return acc
+    }, {})
+  // Legacy mq.scss aliases used throughout existing templates (e.g. t:, tm:, ds:).
+  const legacyBreakpointAliases = {
+    mobile: '320px',
+    tablet: '740px',
+    desktop: '980px',
+    wide: '1300px',
+    m: '320px',
+    mm: '380px',
+    mmx: '381px',
+    ml: '480px',
+    mlx: '481px',
+    txs: '550px',
+    ts: '600px',
+    t: '767px',
+    tx: '768px',
+    txl: '800px',
+    tm: '991px',
+    tmx: '992px',
+    tl: '1024px',
+    ds: '1024px',
+    d: '1200px',
+    dm: '1366px',
+    dmx: '1440px',
+    dmxx: '1441px',
+    dml: '1600px',
+    dmlx: '1750px',
+    dl: '1900px',
+    dxl: '2560px',
+    dxxl: '3840px',
+    dsx: '1100px',
+    brandslider: '1771px',
+    midtab: '800px',
+    desktopAd: '810px',
+    mobileLandscape: '480px',
+  }
+  const heliosBreakpoints = {
+    ...legacyBreakpointAliases,
+    ...(Object.keys(generatedBreakpoints).length > 0 ? generatedBreakpoints : { md: '768px' }),
+  }
   const selectedThemeColors = getEnabledColorMap(palettes)
   const semanticShortcuts = buildSemanticShortcuts(themeSettings)
 
@@ -340,6 +380,7 @@ const buildUnoGenerated = (
     '',
     `const heliosPaletteColors = ${JSON.stringify(selectedThemeColors)}`,
     `const heliosSemanticShortcuts = ${JSON.stringify(semanticShortcuts)}`,
+    `const heliosBreakpoints = ${JSON.stringify(heliosBreakpoints)}`,
     '',
     'const formatScaleKey = (raw: string) => {',
     '  const value = Number(raw)',
@@ -355,6 +396,28 @@ const buildUnoGenerated = (
     '  return `${sign}${padded}`',
     '}',
     '',
+    "const toMaxWidth = (width: string) => {",
+    "  const value = Number.parseFloat(width)",
+    "  if (!Number.isFinite(value)) return width",
+    "  return `${Math.max(0, value - 0.02).toFixed(2)}px`",
+    "}",
+    '',
+    'const heliosBreakpointVariant = (matcher: string) => {',
+    "  const idx = matcher.indexOf(':')",
+    '  if (idx <= 0) return matcher',
+    '  const prefix = matcher.slice(0, idx)',
+    '  const body = matcher.slice(idx + 1)',
+    "  if (prefix.startsWith('lt-')) {",
+    "    const key = prefix.slice(3)",
+    '    const width = heliosBreakpoints[key]',
+    '    if (!width) return matcher',
+    "    return { matcher: body, parent: `@media (max-width: ${toMaxWidth(width)})` }",
+    '  }',
+    '  const width = heliosBreakpoints[prefix]',
+    '  if (!width) return matcher',
+    "  return { matcher: body, parent: `@media (min-width: ${width})` }",
+    '}',
+    '',
     'export default defineConfig({',
     '  presets: [',
     ...presetEntries,
@@ -362,6 +425,7 @@ const buildUnoGenerated = (
     setup.variantGroup
       ? '  transformers: [transformerVariantGroup()],'
       : '  transformers: [],',
+    '  variants: [heliosBreakpointVariant],',
     '  shortcuts: {',
     '    ...heliosSemanticShortcuts,',
     "    'type-h1': 'f-6 lh-1 font-700',",
@@ -397,9 +461,7 @@ const buildUnoGenerated = (
     "    [/^sh-(-?[\\d.]+)$/, ([, value = '0']) => ({ height: `var(--sp-${formatScaleKey(value)})` })],",
     '  ],',
     '  theme: {',
-    '    breakpoints: {',
-    ...(breakpointEntries.length > 0 ? breakpointEntries : ["      md: '768px',"]),
-    '    },',
+    '    breakpoints: heliosBreakpoints,',
     '    colors: {',
     '      ...heliosPaletteColors,',
     `      heliosbrand: '${config.brandColor}',`,
