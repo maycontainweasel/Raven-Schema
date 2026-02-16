@@ -195,6 +195,10 @@ docs/generated/
 
 
 
+/layers/pm-za/** 
+/layers/pm-ca/** 
+
+
 
 # --- Cleanup (remove already-tracked generated files) ---
 # Use these commands when you want to untrack generated content:
