@@ -3,6 +3,8 @@ import { markRaw, shallowRef, type Component } from 'vue'
 import type { AdminNavItem, AdminNavSection } from '~/app/types/admin-nav'
 import AdminSidebarBrandOpen from './branding/AdminSidebarBrandOpen.vue'
 import AdminSidebarBrandCollapsed from './branding/AdminSidebarBrandCollapsed.vue'
+import AdminLogo from './AdminLogo.vue'
+import AdminLogoIcon from './AdminLogoIcon.vue'
 
 const props = defineProps<{ collapsed: boolean }>()
 
