@@ -4,9 +4,11 @@ import { storeToRefs } from 'pinia'
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/vue'
 import { useHeliosManagerStore } from '../stores/heliosManager'
 
+
 definePageMeta({
   ssr: false,
-})
+  layout: "helios"
+});
 
 type HeliosTypeConfig = {
   baseFontPx: number
