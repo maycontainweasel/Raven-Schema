@@ -1,7 +1,58 @@
 <script setup lang="ts">
+import { markRaw, shallowRef, type Component } from 'vue'
 import type { AdminNavItem, AdminNavSection } from '~/app/types/admin-nav'
+import AdminLogo from './AdminLogo.vue'
+import AdminLogoIcon from './AdminLogoIcon.vue'
 
 const props = defineProps<{ collapsed: boolean }>()
+
+const appExpandedLogoModules = import.meta.glob([
+  '@/components/branding/logos/Logo.vue',
+  '@/components/admin/branding/logos/Logo.vue',
+  '@/components/branding/Logo.vue',
+  '@/components/admin/Logo.vue',
+])
+
+const appCollapsedLogoModules = import.meta.glob([
+  '@/components/branding/logos/LogoIcon.vue',
+  '@/components/admin/branding/logos/LogoIcon.vue',
+  '@/components/branding/LogoIcon.vue',
+  '@/components/admin/LogoIcon.vue',
+])
+
+const loadFirstLogoComponent = async (modules: Record<string, () => Promise<unknown>>) => {
+  const [first] = Object.keys(modules)
+  if (!first) return null
+
+  try {
+    const loaded = await modules[first]()
+    const component = (loaded as any)?.default ?? loaded
+    if (typeof component === 'object' || typeof component === 'function') {
+      return component as Component
+    }
+  }
+  catch (error) {
+    console.error(`[admin-sidebar] failed loading logo override: ${first}`, error)
+  }
+
+  return null
+}
+
+const expandedLogoComponent = shallowRef<Component>(markRaw(AdminLogo))
+const collapsedLogoComponent = shallowRef<Component>(markRaw(AdminLogoIcon))
+
+const expandedOverride = await loadFirstLogoComponent(appExpandedLogoModules)
+if (expandedOverride) {
+  expandedLogoComponent.value = markRaw(expandedOverride)
+}
+
+const collapsedOverride = await loadFirstLogoComponent(appCollapsedLogoModules)
+if (collapsedOverride) {
+  collapsedLogoComponent.value = markRaw(collapsedOverride)
+}
+else if (expandedOverride) {
+  collapsedLogoComponent.value = markRaw(expandedOverride)
+}
 
 const route = useRoute()
 const fallbackConfig = useAdminNav()
@@ -123,7 +174,12 @@ const releaseHoverItem = () => {
 <template>
   <aside class="admin-sidebar" :class="props.collapsed ? 'admin-sidebar--collapsed' : ''">
     <div class="admin-sidebar__header">
-      <AdminLogo />
+      <NuxtLink class="admin-sidebar__brand" to="/" aria-label="Go to homepage">
+        <component
+          :is="props.collapsed ? collapsedLogoComponent : expandedLogoComponent"
+          class="admin-sidebar__brand-logo"
+        />
+      </NuxtLink>
     </div>
 
     <div class="admin-sidebar__scroll">
@@ -281,6 +337,30 @@ const releaseHoverItem = () => {
   display: flex;
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, var(--admin-border) 65%, transparent);
+}
+
+.admin-sidebar__brand {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.admin-sidebar--collapsed .admin-sidebar__brand {
+  justify-content: center;
+}
+
+.admin-sidebar__brand-logo {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.admin-sidebar__brand-logo :deep(svg) {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .admin-sidebar__scroll {
