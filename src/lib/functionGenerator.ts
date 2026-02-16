@@ -2377,11 +2377,11 @@ function buildSubtableRecordIdLine(
 
   const idSource = table.id?.structure ?? table.id?.source;
   if (!idSource) {
-    return `let $RID = type::record('${tableModel}', record::id($PARENT_ID));`;
+    return `let $RID = type::record('${tableModel}', rand::ulid());`;
   }
 
   if (idSource === 'default') {
-    return `let $RID = type::record('${tableModel}', record::id($PARENT_ID));`;
+    return `let $RID = type::record('${tableModel}', rand::ulid());`;
   }
 
   if (Array.isArray(idSource)) {

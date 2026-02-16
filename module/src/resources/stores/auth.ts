@@ -53,6 +53,58 @@ interface UserRecord {
   [key: string]: any
 }
 
+type RecordIdShape = { tb: string; id: any }
+
+const unwrapRecordIdPart = (value: string): string => {
+  const trimmed = value.trim()
+  if (trimmed.startsWith('⟨') && trimmed.endsWith('⟩')) {
+    return trimmed.slice(1, -1)
+  }
+  if (trimmed.startsWith('`') && trimmed.endsWith('`')) {
+    return trimmed.slice(1, -1)
+  }
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1)
+  }
+  return trimmed
+}
+
+const toRecordId = (value: unknown, fallbackTb?: string): RecordIdShape | null => {
+  if (!value) return null
+
+  if (typeof value === 'object') {
+    const obj = value as Record<string, any>
+    if (obj.tb !== undefined && obj.id !== undefined) {
+      return { tb: String(obj.tb), id: obj.id }
+    }
+    if (obj.table !== undefined && obj.id !== undefined) {
+      const tb = typeof obj.table === 'string' ? obj.table : obj.table?.name
+      if (tb) return { tb: String(tb), id: obj.id }
+    }
+  }
+
+  if (typeof value === 'string') {
+    const idx = value.indexOf(':')
+    if (idx > 0) {
+      const tb = value.slice(0, idx).trim()
+      const idPart = unwrapRecordIdPart(value.slice(idx + 1))
+      return { tb, id: idPart }
+    }
+    if (fallbackTb) {
+      return { tb: fallbackTb, id: unwrapRecordIdPart(value) }
+    }
+  }
+
+  return null
+}
+
+const toRecordSubId = (value: unknown): string => {
+  const rid = toRecordId(value)
+  if (rid?.id !== undefined && rid?.id !== null) return String(rid.id)
+  if (typeof value === 'string') return unwrapRecordIdPart(value)
+  return ''
+}
+
 const baseUseAuthStore = defineStore('authstore', {
   state: (): AuthRootState => ({
     storeLabel: 'Auth',
@@ -170,20 +222,16 @@ const baseUseAuthStore = defineStore('authstore', {
           throw new Error('userData.id is required')
         }
 
-        // Handle role field - can be string or RecordId object
-        const roleValue = typeof userData.role === 'string' 
-          ? userData.role 
-          : (userData.role?.id || userData.role?.value || userData.role?.label || "")
-
-        // Handle id field - can be string or RecordId object  
-        const idValue = typeof userData.id === 'string'
-          ? userData.id
-          : (userData.id?.id || userData.id?.toString() || "")
+        // Normalize IDs to Surreal RecordId object shape where possible.
+        const idValue = toRecordId(userData.id, 'u') || userData.id
+        const roleValue = toRecordId(userData.role) || userData.role || ""
+        const userId = toRecordSubId(idValue)
 
         // Safely merge user data with fallbacks
         this.user = {
           ...userData, // Spread all properties from userData first
           id: idValue,
+          userId,
           firstName: userData.firstName || "",
           surname: userData.surname || "",
           title: userData.title || "",
@@ -199,6 +247,7 @@ const baseUseAuthStore = defineStore('authstore', {
         
         console.log('✅ [AUTH-STORE] User data set successfully:', {
           id: idValue,
+          userId,
           firstName: userData.firstName,
           surname: userData.surname,
           email: userData.email,
@@ -745,12 +794,13 @@ const baseUseAuthStore = defineStore('authstore', {
     paymentIntentUser: (state) => {
       try {
         const user: any = state?.user || {}
+        const userId = toRecordSubId(user?.id)
         const roleValue = typeof user?.role === 'string'
           ? user.role
-          : (user?.role?.value || user?.role?.label || '')
+          : (toRecordSubId(user?.role) || user?.role?.value || user?.role?.label || '')
 
         return {
-          id: user?.id || '',
+          id: userId || '',
           email: user?.email || '',
           firstName: user?.firstName || '',
           surname: user?.surname || '',
