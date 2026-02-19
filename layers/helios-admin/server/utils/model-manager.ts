@@ -8,16 +8,41 @@ export type ModelManagerModel = {
   table: string
   label: string
   directoryRoute: string
+  dataMode: ModelDataMode
   capabilities: string[]
   hasTypesense: boolean
   typesenseCollection: string | null
   typesenseFields: string[]
+  taxonomyKeys: string[]
+  subtableKeys: string[]
+  taxonomies: Array<{
+    key: string
+    actions: {
+      getTerms: string
+      getRecordTerms: string
+      attach: string
+      detach: string
+      addTerm?: string
+    }
+  }>
+  subtables: Array<{
+    key: string
+    actions: {
+      create: string
+      update: string
+      delete: string
+      get: string
+      list: string
+    }
+  }>
   fields: string[]
   requiredFields: string[]
   canManage: boolean
   hasFragment: boolean
   hasGenerated: boolean
 }
+
+export type ModelDataMode = 'local' | 'remote'
 
 export type ModelUIComponentSpec = {
   name: string
@@ -26,11 +51,49 @@ export type ModelUIComponentSpec = {
   modelKey?: string
 }
 
+export type ModelUIFieldBindingModel = {
+  kind: 'model'
+  action: string
+  payloadKey: string
+}
+
+export type ModelUIFieldBindingSubtable = {
+  kind: 'subtable'
+  subtableKey: string
+  action: string
+  payloadKey: string
+}
+
+export type ModelUIFieldBindingTaxonomy = {
+  kind: 'taxonomy'
+  taxonomyKey: string
+  valueMode: 'termIds'
+  actions: {
+    getTerms: string
+    getRecordTerms: string
+    attach: string
+    detach: string
+    addTerm?: string
+  }
+}
+
+export type ModelUIFieldBindingCustom = {
+  kind: 'custom'
+  handler: string
+}
+
+export type ModelUIFieldBinding =
+  | ModelUIFieldBindingModel
+  | ModelUIFieldBindingSubtable
+  | ModelUIFieldBindingTaxonomy
+  | ModelUIFieldBindingCustom
+
 export type ModelUIFieldSpec = {
   id: string
   field: string
   label: string
   component: ModelUIComponentSpec
+  binding?: ModelUIFieldBinding
   action?: string
   modelKey?: string
   validation?: Record<string, any>
@@ -115,7 +178,7 @@ export type DirectoryCreateDialogSpec = {
 }
 
 export type ModelLayoutSpec = {
-  version: 2
+  version: 2 | 3
   kind: 'helios-model-ui'
   model: string
   table: string
@@ -159,7 +222,12 @@ const TYPESENSE_FN_RE = /^\s*([A-Za-z_][\w-]*)::fn\[(.*?)\]/
 const CAPABILITY_TOKEN_RE = /^[a-z][a-z0-9_-]*$/
 const GENERATED_ROUTE_MARKER = '@helios-generated-model-route'
 const GENERATED_MODELS_BLOCK_RE = /export const models\s*=\s*\{([\s\S]*?)\}\s*as const;/
-const GENERATED_MODELS_ENTRY_RE = /"([^"]+)"\s*:\s*\{\s*table:\s*"([^"]+)"/g
+const GENERATED_MODELS_ENTRY_RE = /"([^"]+)"\s*:\s*\{\s*table:\s*"([^"]+)"(?:\s*,\s*data:\s*"(local|remote)")?/g
+const SUBTABLE_FIELD_RE = /<\s*(subsingle|submany|subtable\*?)\s*<\s*([^>]+)\s*>\s*>/i
+const GENERATED_ADMIN_MANIFEST_FILES = [
+  'modules/schema-kit/runtime/generated/admin-models.json',
+  './modules/schema-kit/runtime/generated/admin-models.json',
+]
 
 const ensureUnique = <T>(values: T[]) => Array.from(new Set(values))
 
@@ -213,6 +281,15 @@ const normalizeModelKey = (value: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
 
+const toCamelCase = (value: string) => {
+  const source = String(value || '').trim()
+  if (!source.length) return ''
+  const normalized = source
+    .replace(/[_\-\s]+([A-Za-z0-9])/g, (_, token: string) => token.toUpperCase())
+    .replace(/^[A-Z]/, token => token.toLowerCase())
+  return normalized
+}
+
 const normalizeCreateDialogAction = (
   value: unknown,
   modelKey: string,
@@ -264,6 +341,17 @@ const routeSegmentsFromPath = (value: string) => {
 const readTextFile = async (filePath: string): Promise<string | null> => {
   try {
     return await fs.readFile(filePath, 'utf-8')
+  }
+  catch {
+    return null
+  }
+}
+
+const readJsonFile = async <T>(filePath: string): Promise<T | null> => {
+  const source = await readTextFile(filePath)
+  if (!source) return null
+  try {
+    return JSON.parse(source) as T
   }
   catch {
     return null
@@ -476,6 +564,102 @@ const normalizeComponent = (
   }
 }
 
+const resolveTaxonomyActions = (model: ModelManagerModel, taxonomyKey: string) => {
+  const fallbackPrefix = `${model.modelKey}.${taxonomyKey}`
+  const fromModel = model.taxonomies.find(entry => normalizeModelKey(entry.key) === normalizeModelKey(taxonomyKey))
+  if (fromModel) return fromModel.actions
+  return {
+    getTerms: `${fallbackPrefix}.getTerms`,
+    getRecordTerms: `${fallbackPrefix}.getRecordTerms`,
+    attach: `${fallbackPrefix}.attach`,
+    detach: `${fallbackPrefix}.detach`,
+    addTerm: `${fallbackPrefix}.addTerm`,
+  }
+}
+
+const resolveSubtableActions = (model: ModelManagerModel, subtableKey: string) => {
+  const fallbackPrefix = `${model.modelKey}.subtables.${subtableKey}`
+  const fromModel = model.subtables.find(entry => normalizeModelKey(entry.key) === normalizeModelKey(subtableKey))
+  if (fromModel) return fromModel.actions
+  return {
+    create: `${fallbackPrefix}.create`,
+    update: `${fallbackPrefix}.update`,
+    delete: `${fallbackPrefix}.delete`,
+    get: `${fallbackPrefix}.get`,
+    list: `${fallbackPrefix}.list`,
+  }
+}
+
+const defaultBindingForField = (
+  model: ModelManagerModel,
+  fieldName: string,
+  action: string,
+): ModelUIFieldBindingModel => {
+  return {
+    kind: 'model',
+    action: action || `${model.modelKey}.update`,
+    payloadKey: fieldName,
+  }
+}
+
+const normalizeBinding = (
+  value: unknown,
+  model: ModelManagerModel,
+  fieldName: string,
+  action: string,
+): ModelUIFieldBinding => {
+  const fallback = defaultBindingForField(model, fieldName, action)
+  if (!value || typeof value !== 'object') return fallback
+
+  const kind = String((value as any).kind ?? '').trim().toLowerCase()
+  if (kind === 'taxonomy') {
+    const taxonomyKey = normalizeModelKey(String((value as any).taxonomyKey ?? fieldName).trim()) || fieldName
+    const actionsRaw = (value as any).actions
+    const inferredActions = resolveTaxonomyActions(model, taxonomyKey)
+    const actions = {
+      getTerms: String(actionsRaw?.getTerms ?? inferredActions.getTerms).trim(),
+      getRecordTerms: String(actionsRaw?.getRecordTerms ?? inferredActions.getRecordTerms).trim(),
+      attach: String(actionsRaw?.attach ?? inferredActions.attach).trim(),
+      detach: String(actionsRaw?.detach ?? inferredActions.detach).trim(),
+      addTerm: String(actionsRaw?.addTerm ?? inferredActions.addTerm ?? '').trim() || undefined,
+    }
+    return {
+      kind: 'taxonomy',
+      taxonomyKey,
+      valueMode: 'termIds',
+      actions,
+    }
+  }
+
+  if (kind === 'subtable') {
+    const subtableKeyRaw = String((value as any).subtableKey ?? '').trim()
+    const subtableKey = subtableKeyRaw || fieldName
+    const actionFromValue = String((value as any).action ?? '').trim()
+    const payloadKey = String((value as any).payloadKey ?? fieldName).trim() || fieldName
+    const inferred = resolveSubtableActions(model, subtableKey)
+    return {
+      kind: 'subtable',
+      subtableKey,
+      action: actionFromValue || inferred.update,
+      payloadKey,
+    }
+  }
+
+  if (kind === 'custom') {
+    const handler = String((value as any).handler ?? '').trim()
+    return {
+      kind: 'custom',
+      handler: handler || `${model.modelKey}.custom.${fieldName}`,
+    }
+  }
+
+  return {
+    kind: 'model',
+    action: String((value as any).action ?? action).trim() || `${model.modelKey}.update`,
+    payloadKey: String((value as any).payloadKey ?? fieldName).trim() || fieldName,
+  }
+}
+
 const normalizeFieldSpec = (
   value: unknown,
   model: ModelManagerModel,
@@ -484,6 +668,7 @@ const normalizeFieldSpec = (
   const fallbackField = model.fields.find((field) => !isIgnorableField(field)) ?? `field-${index + 1}`
   const fallbackFieldId = slugify(fallbackField, `field-${index + 1}`)
   const fallbackComponent = componentFromField(model.modelKey, fallbackField)
+  const fallbackAction = String(fallbackComponent.action ?? `${model.modelKey}.update`).trim()
 
   if (!value || typeof value !== 'object') {
     return {
@@ -491,7 +676,8 @@ const normalizeFieldSpec = (
       field: fallbackField,
       label: titleCase(fallbackField),
       component: fallbackComponent,
-      action: fallbackComponent.action,
+      action: fallbackAction,
+      binding: defaultBindingForField(model, fallbackField, fallbackAction),
       modelKey: fallbackField,
       validation: {},
     }
@@ -501,13 +687,15 @@ const normalizeFieldSpec = (
   const id = slugify(safeText((value as any).id, fieldName), fallbackFieldId)
   const label = safeText((value as any).label, titleCase(fieldName))
   const baseComponent = componentFromField(model.modelKey, fieldName)
+  const resolvedAction = String((value as any).action ?? baseComponent.action ?? '').trim() || `${model.modelKey}.update`
 
   return {
     id,
     field: fieldName,
     label,
     component: normalizeComponent((value as any).component, baseComponent),
-    action: String((value as any).action ?? baseComponent.action ?? '').trim() || undefined,
+    action: resolvedAction,
+    binding: normalizeBinding((value as any).binding, model, fieldName, resolvedAction),
     modelKey: String((value as any).modelKey ?? fieldName).trim(),
     validation: (value as any).validation && typeof (value as any).validation === 'object'
       ? (value as any).validation
@@ -829,6 +1017,7 @@ const defaultCreateFields = (model: ModelManagerModel): ModelUIFieldSpec[] => {
     label: titleCase(field),
     component: componentFromField(model.modelKey, field),
     action: `${model.modelKey}.create`,
+    binding: defaultBindingForField(model, field, `${model.modelKey}.create`),
     modelKey: field,
     validation: {},
   }))
@@ -844,6 +1033,7 @@ const defaultSingleFields = (model: ModelManagerModel): ModelUIFieldSpec[] => {
     label: titleCase(field),
     component: componentFromField(model.modelKey, field),
     action: `${model.modelKey}.update`,
+    binding: defaultBindingForField(model, field, `${model.modelKey}.update`),
     modelKey: field,
     validation: {},
   }))
@@ -874,8 +1064,205 @@ export const resolveModelManagerPaths = (cwd = process.cwd()) => {
 type GeneratedModelManifestEntry = {
   key: string
   table: string
+  dataMode: ModelDataMode
   normalizedKey: string
   normalizedTable: string
+}
+
+type GeneratedAdminManifestEntry = {
+  key: string
+  table: string
+  dataMode: ModelDataMode
+  capabilities: string[]
+  hasTypesense: boolean
+  typesenseCollection: string | null
+  typesenseFields: string[]
+  taxonomyKeys: string[]
+  subtableKeys: string[]
+  taxonomies: Array<{
+    key: string
+    actions: ModelManagerModel['taxonomies'][number]['actions']
+  }>
+  subtables: Array<{
+    key: string
+    actions: ModelManagerModel['subtables'][number]['actions']
+  }>
+  fields: string[]
+  requiredFields: string[]
+  normalizedKey: string
+  normalizedTable: string
+}
+
+type GeneratedAdminManifestDocument = {
+  version?: number
+  generatedAt?: string
+  models?: Record<string, any>
+}
+
+const resolveGeneratedAdminManifestFile = async (cwd = process.cwd()) => {
+  const candidates = ensureUnique(
+    GENERATED_ADMIN_MANIFEST_FILES.map(candidate => resolve(cwd, candidate)),
+  )
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) return candidate
+  }
+
+  return null
+}
+
+const normalizeGeneratedTaxonomyActions = (
+  value: unknown,
+  modelKey: string,
+  taxonomyKey: string,
+): ModelManagerModel['taxonomies'][number]['actions'] => {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const fallbackPrefix = `${modelKey}.${taxonomyKey}`
+
+  return {
+    getTerms: String(source.getTerms ?? `${fallbackPrefix}.getTerms`).trim() || `${fallbackPrefix}.getTerms`,
+    getRecordTerms: String(source.getRecordTerms ?? `${fallbackPrefix}.getRecordTerms`).trim() || `${fallbackPrefix}.getRecordTerms`,
+    attach: String(source.attach ?? `${fallbackPrefix}.attach`).trim() || `${fallbackPrefix}.attach`,
+    detach: String(source.detach ?? `${fallbackPrefix}.detach`).trim() || `${fallbackPrefix}.detach`,
+    addTerm: String(source.addTerm ?? `${fallbackPrefix}.addTerm`).trim() || `${fallbackPrefix}.addTerm`,
+  }
+}
+
+const normalizeGeneratedSubtableActions = (
+  value: unknown,
+  modelKey: string,
+  subtableKey: string,
+): ModelManagerModel['subtables'][number]['actions'] => {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const fallbackPrefix = `${modelKey}.subtables.${subtableKey}`
+
+  return {
+    create: String(source.create ?? `${fallbackPrefix}.create`).trim() || `${fallbackPrefix}.create`,
+    update: String(source.update ?? `${fallbackPrefix}.update`).trim() || `${fallbackPrefix}.update`,
+    delete: String(source.delete ?? `${fallbackPrefix}.delete`).trim() || `${fallbackPrefix}.delete`,
+    get: String(source.get ?? `${fallbackPrefix}.get`).trim() || `${fallbackPrefix}.get`,
+    list: String(source.list ?? `${fallbackPrefix}.list`).trim() || `${fallbackPrefix}.list`,
+  }
+}
+
+const loadGeneratedAdminManifest = async (
+  cwd = process.cwd(),
+): Promise<GeneratedAdminManifestEntry[]> => {
+  const manifestFile = await resolveGeneratedAdminManifestFile(cwd)
+  if (!manifestFile) return []
+
+  const source = await readJsonFile<GeneratedAdminManifestDocument>(manifestFile)
+  if (!source || !source.models || typeof source.models !== 'object' || Array.isArray(source.models)) {
+    return []
+  }
+
+  const entries: GeneratedAdminManifestEntry[] = []
+
+  for (const [entryKey, value] of Object.entries(source.models)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const modelValue = value as Record<string, any>
+    const key = normalizeModelKey(String(modelValue.key ?? entryKey))
+    const table = normalizeModelKey(String(modelValue.table ?? ''))
+    if (!key || !table) continue
+
+    const dataModeRaw = String(modelValue.data ?? modelValue.dataMode ?? '').trim().toLowerCase()
+    const dataMode: ModelDataMode = dataModeRaw === 'remote' ? 'remote' : 'local'
+
+    const fields = ensureUnique(safeArray(modelValue.fields).map(normalizeModelKey).filter(Boolean))
+    const requiredFields = ensureUnique(safeArray(modelValue.requiredFields).map(normalizeModelKey).filter(Boolean))
+    const capabilities = ensureUnique(safeArray(modelValue.capabilities).map(normalizeModelKey).filter(Boolean))
+
+    const typesenseRaw = modelValue.typesense && typeof modelValue.typesense === 'object'
+      ? modelValue.typesense as Record<string, any>
+      : {}
+    const hasTypesense = Boolean(typesenseRaw.enabled ?? modelValue.hasTypesense)
+    const typesenseCollectionRaw = String(
+      typesenseRaw.collection ?? modelValue.typesenseCollection ?? '',
+    ).trim()
+    const typesenseCollection = hasTypesense ? (typesenseCollectionRaw || table) : null
+    const typesenseFields = ensureUnique(
+      safeArray(typesenseRaw.fields ?? modelValue.typesenseFields)
+        .map(normalizeModelKey)
+        .filter(Boolean),
+    )
+
+    const taxonomyKeys = ensureUnique(
+      safeArray(modelValue.taxonomyKeys).map(normalizeModelKey).filter(Boolean),
+    )
+    const subtableKeys = ensureUnique(
+      safeArray(modelValue.subtableKeys).map(toCamelCase).filter(Boolean),
+    )
+
+    const taxonomyMap = new Map<string, {
+      key: string
+      actions: ModelManagerModel['taxonomies'][number]['actions']
+    }>()
+    const taxonomiesRaw = Array.isArray(modelValue.taxonomies) ? modelValue.taxonomies : []
+    for (const entry of taxonomiesRaw) {
+      if (!entry || typeof entry !== 'object') continue
+      const taxonomyKey = normalizeModelKey(String((entry as any).key ?? ''))
+      if (!taxonomyKey) continue
+      taxonomyMap.set(taxonomyKey, {
+        key: taxonomyKey,
+        actions: normalizeGeneratedTaxonomyActions((entry as any).actions, key, taxonomyKey),
+      })
+    }
+    for (const taxonomyKey of taxonomyKeys) {
+      if (taxonomyMap.has(taxonomyKey)) continue
+      taxonomyMap.set(taxonomyKey, {
+        key: taxonomyKey,
+        actions: normalizeGeneratedTaxonomyActions(undefined, key, taxonomyKey),
+      })
+    }
+
+    const subtableMap = new Map<string, {
+      key: string
+      actions: ModelManagerModel['subtables'][number]['actions']
+    }>()
+    const subtablesRaw = Array.isArray(modelValue.subtables) ? modelValue.subtables : []
+    for (const entry of subtablesRaw) {
+      if (!entry || typeof entry !== 'object') continue
+      const subtableKey = toCamelCase((entry as any).key ?? '')
+      if (!subtableKey) continue
+      subtableMap.set(subtableKey, {
+        key: subtableKey,
+        actions: normalizeGeneratedSubtableActions((entry as any).actions, key, subtableKey),
+      })
+    }
+    for (const subtableKey of subtableKeys) {
+      if (subtableMap.has(subtableKey)) continue
+      subtableMap.set(subtableKey, {
+        key: subtableKey,
+        actions: normalizeGeneratedSubtableActions(undefined, key, subtableKey),
+      })
+    }
+
+    entries.push({
+      key,
+      table,
+      dataMode,
+      capabilities,
+      hasTypesense,
+      typesenseCollection,
+      typesenseFields,
+      taxonomyKeys: ensureUnique([
+        ...taxonomyKeys,
+        ...Array.from(taxonomyMap.keys()),
+      ]),
+      subtableKeys: ensureUnique([
+        ...subtableKeys,
+        ...Array.from(subtableMap.keys()),
+      ]),
+      taxonomies: Array.from(taxonomyMap.values()),
+      subtables: Array.from(subtableMap.values()),
+      fields,
+      requiredFields,
+      normalizedKey: normalizeModelKey(key),
+      normalizedTable: normalizeModelKey(table),
+    })
+  }
+
+  return entries
 }
 
 const resolveGeneratedModelsManifestFile = async (cwd = process.cwd()) => {
@@ -910,11 +1297,13 @@ const loadGeneratedModelManifest = async (
   while ((match = GENERATED_MODELS_ENTRY_RE.exec(block))) {
     const key = String(match[1] ?? '').trim()
     const table = String(match[2] ?? '').trim()
+    const dataModeRaw = String(match[3] ?? '').trim().toLowerCase()
     if (!key || !table) continue
 
     entries.push({
       key,
       table,
+      dataMode: dataModeRaw === 'remote' ? 'remote' : 'local',
       normalizedKey: normalizeModelKey(key),
       normalizedTable: normalizeModelKey(table),
     })
@@ -960,6 +1349,7 @@ const parseGraphModels = (source: string): InternalModel[] => {
   let inFields = false
   let inCapabilities = false
   let inTypesense = false
+  let inTaxonomies = false
 
   const flushCurrent = () => {
     if (!current) return
@@ -967,12 +1357,41 @@ const parseGraphModels = (source: string): InternalModel[] => {
     current.requiredFields = ensureUnique(current.requiredFields)
     current.capabilities = ensureUnique(current.capabilities)
     current.typesenseFields = ensureUnique(current.typesenseFields)
+    current.taxonomyKeys = ensureUnique(current.taxonomyKeys)
+    current.subtableKeys = ensureUnique(current.subtableKeys)
+    current.taxonomies = ensureUnique(current.taxonomyKeys).map((key) => {
+      const prefix = `${current!.modelKey}.${key}`
+      return {
+        key,
+        actions: {
+          getTerms: `${prefix}.getTerms`,
+          getRecordTerms: `${prefix}.getRecordTerms`,
+          attach: `${prefix}.attach`,
+          detach: `${prefix}.detach`,
+          addTerm: `${prefix}.addTerm`,
+        },
+      }
+    })
+    current.subtables = ensureUnique(current.subtableKeys).map((key) => {
+      const prefix = `${current!.modelKey}.subtables.${key}`
+      return {
+        key,
+        actions: {
+          create: `${prefix}.create`,
+          update: `${prefix}.update`,
+          delete: `${prefix}.delete`,
+          get: `${prefix}.get`,
+          list: `${prefix}.list`,
+        },
+      }
+    })
     current.canManage = true
     parsed.push(current)
     current = null
     inFields = false
     inCapabilities = false
     inTypesense = false
+    inTaxonomies = false
   }
 
   for (const line of lines) {
@@ -996,10 +1415,15 @@ const parseGraphModels = (source: string): InternalModel[] => {
         table,
         label,
         directoryRoute: `/admin/${table}`,
+        dataMode: 'local',
         capabilities: [],
         hasTypesense: false,
         typesenseCollection: null,
         typesenseFields: [],
+        taxonomyKeys: [],
+        subtableKeys: [],
+        taxonomies: [],
+        subtables: [],
         fields: [],
         requiredFields: [],
         canManage: false,
@@ -1008,6 +1432,7 @@ const parseGraphModels = (source: string): InternalModel[] => {
       inFields = line.includes('{')
       inCapabilities = false
       inTypesense = false
+      inTaxonomies = false
       continue
     }
 
@@ -1025,6 +1450,13 @@ const parseGraphModels = (source: string): InternalModel[] => {
           if (fieldMatch[2] === '!') current.requiredFields.push(field)
         }
       }
+      const subtableMatch = line.match(SUBTABLE_FIELD_RE)
+      if (subtableMatch?.[2]) {
+        const subtableModel = normalizeModelKey(String(subtableMatch[2] ?? ''))
+        if (subtableModel) {
+          current.subtableKeys.push(toCamelCase(subtableModel))
+        }
+      }
       if (trimmed.includes('[')) {
         inCapabilities = true
       }
@@ -1037,6 +1469,31 @@ const parseGraphModels = (source: string): InternalModel[] => {
 
     if (inCapabilities) {
       const fnMatch = line.match(TYPESENSE_FN_RE)
+      const modeMatch = line.match(/instance\s*<\s*(local|remote)\s*>/i)
+      if (modeMatch?.[1]) {
+        current.dataMode = String(modeMatch[1]).toLowerCase() === 'remote' ? 'remote' : 'local'
+      }
+
+      const taxonomyStart = /^\s*taxonomies\s*:?\s*$/i.test(trimmed)
+      if (taxonomyStart) {
+        inTaxonomies = true
+      }
+
+      if (inTaxonomies) {
+        const taxonomyEntryMatch = line.match(/,\s*([A-Za-z_][\w-]*)/)
+        if (taxonomyEntryMatch?.[1]) {
+          const taxonomyKey = normalizeModelKey(taxonomyEntryMatch[1])
+          if (taxonomyKey) current.taxonomyKeys.push(taxonomyKey)
+        }
+
+        const taxonomyExit =
+          TYPESENSE_RE.test(line)
+          || trimmed.startsWith(']')
+          || /^[a-z][a-z0-9_-]*,?\s*$/i.test(trimmed)
+        if (taxonomyExit) {
+          inTaxonomies = false
+        }
+      }
 
       if (TYPESENSE_RE.test(line)) {
         inTypesense = true
@@ -1059,6 +1516,7 @@ const parseGraphModels = (source: string): InternalModel[] => {
       if (trimmed.startsWith(']')) {
         inCapabilities = false
         inTypesense = false
+        inTaxonomies = false
       }
       continue
     }
@@ -1076,11 +1534,42 @@ const parseGraphModels = (source: string): InternalModel[] => {
 }
 
 export const listModelManagerModels = async (cwd = process.cwd()): Promise<ModelManagerModel[]> => {
-  const graphFile = await resolveGraphFile(cwd)
-  const source = await fs.readFile(graphFile, 'utf-8')
-  const baseModels = parseGraphModels(source)
+  const generatedAdminManifest = await loadGeneratedAdminManifest(cwd)
+  const baseModels: InternalModel[] = generatedAdminManifest.length
+    ? generatedAdminManifest.map((entry) => {
+        const modelKey = normalizeModelKey(entry.table)
+        const routerKey = normalizeModelKey(entry.key || modelKey) || modelKey
+        const label = titleCase(entry.key || entry.table)
+
+        return {
+          modelKey,
+          routerKey,
+          table: modelKey,
+          label,
+          directoryRoute: `/admin/${modelKey}`,
+          dataMode: entry.dataMode,
+          capabilities: ensureUnique(entry.capabilities),
+          hasTypesense: Boolean(entry.hasTypesense),
+          typesenseCollection: entry.typesenseCollection,
+          typesenseFields: ensureUnique(entry.typesenseFields),
+          taxonomyKeys: ensureUnique(entry.taxonomyKeys),
+          subtableKeys: ensureUnique(entry.subtableKeys),
+          taxonomies: entry.taxonomies,
+          subtables: entry.subtables,
+          fields: ensureUnique(entry.fields),
+          requiredFields: ensureUnique(entry.requiredFields),
+          canManage: true,
+        }
+      })
+    : await (async () => {
+        const graphFile = await resolveGraphFile(cwd)
+        const source = await fs.readFile(graphFile, 'utf-8')
+        return parseGraphModels(source)
+      })()
   const { fragmentFile, generatedFile } = resolveModelManagerPaths(cwd)
-  const generatedManifest = await loadGeneratedModelManifest(cwd)
+  const generatedManifest = generatedAdminManifest.length
+    ? []
+    : await loadGeneratedModelManifest(cwd)
   const generatedByTable = new Map(
     generatedManifest.map(entry => [entry.normalizedTable, entry]),
   )
@@ -1107,6 +1596,7 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
       return {
         ...model,
         routerKey,
+        dataMode: generatedEntry?.dataMode ?? model.dataMode ?? 'local',
         canManage: true,
         directoryRoute,
         hasFragment,
@@ -1144,7 +1634,7 @@ export const createDefaultModelSpec = (model: ModelManagerModel): ModelLayoutSpe
   const description = `Search, filter and manage ${model.label.toLowerCase()} records.`
 
   return {
-    version: 2,
+    version: 3,
     kind: 'helios-model-ui',
     model: model.modelKey,
     table: model.table,
@@ -1262,6 +1752,7 @@ export const normalizeModelSpec = (
       label: titleCase(requiredField),
       component,
       action: `${model.modelKey}.create`,
+      binding: defaultBindingForField(model, requiredField, `${model.modelKey}.create`),
       modelKey: requiredField,
       validation: {},
     })
@@ -1275,7 +1766,7 @@ export const normalizeModelSpec = (
   const tabsSafe = tabs.length ? tabs : fallback.single.tabs
 
   return {
-    version: 2,
+    version: 3,
     kind: 'helios-model-ui',
     model: model.modelKey,
     table: model.table,
@@ -1538,7 +2029,7 @@ export const commitModelSpec = async (
   ].join('\n')
 
   const generatedOutput = {
-    version: 2,
+    version: 3,
     generatedAt: committedAt,
     modelKey: model.modelKey,
     directoryRoute: normalized.directory.route,

@@ -9,3 +9,4 @@ Planned working docs (v1):
 - User admin single record edit
 - Typesense refresh and reindex flow
 - Instances: multi‑tenant CRUD flow
+- Helios Model Engine project: `projects/PROJECT-HELIOS-MODEL-ENGINE.md`

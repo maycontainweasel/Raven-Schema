@@ -9,6 +9,11 @@ type ATreeNode = {
   [key: string]: unknown
 }
 
+type CreateTermPayload = {
+  label: string
+  parentId?: string | null
+}
+
 const props = withDefaults(
   defineProps<{
     modelValue: ATreeNode[]
@@ -21,6 +26,7 @@ const props = withDefaults(
     checkable?: boolean
     treeLine?: boolean
     createButtonLabel?: string
+    createTermAction?: (payload: CreateTermPayload) => Promise<ATreeNode | null>
   }>(),
   {
     checkedIds: () => [],
@@ -45,6 +51,7 @@ const treeRef = ref<{ addNode: (node: ATreeNode, parentId?: string | null) => un
 const draftLabel = ref('')
 const draftParentId = ref('')
 const createError = ref('')
+const creating = ref(false)
 
 const terms = computed({
   get: () => props.modelValue || [],
@@ -94,7 +101,7 @@ const makeTermId = (label: string) => {
   return `${slugify(label)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-const createTerm = () => {
+const createTerm = async () => {
   createError.value = ''
   const label = draftLabel.value.trim()
   if (!label) {
@@ -102,14 +109,35 @@ const createTerm = () => {
     return
   }
 
-  const node: ATreeNode = {
-    id: makeTermId(label),
-    label,
-    children: [],
-  }
+  creating.value = true
+  try {
+    const externalNode = props.createTermAction
+      ? await props.createTermAction({
+          label,
+          parentId: draftParentId.value || null,
+        })
+      : null
+    const node: ATreeNode = externalNode
+      ? {
+          id: String(externalNode.id),
+          label: String(externalNode.label || label),
+          children: Array.isArray(externalNode.children) ? externalNode.children : [],
+        }
+      : {
+          id: makeTermId(label),
+          label,
+          children: [],
+        }
 
-  treeRef.value?.addNode(node, draftParentId.value || null)
-  draftLabel.value = ''
+    treeRef.value?.addNode(node, draftParentId.value || null)
+    draftLabel.value = ''
+  }
+  catch (error: any) {
+    createError.value = error?.message ?? 'Failed to create term.'
+  }
+  finally {
+    creating.value = false
+  }
 }
 
 const closeModal = () => {
@@ -176,7 +204,7 @@ const closeModal = () => {
                     class="a-input"
                     type="text"
                     placeholder="e.g. SUV"
-                    @keydown.enter.prevent="createTerm"
+                    @keydown.enter.prevent="createTerm()"
                   >
                 </label>
                 <label class="a-field">
@@ -195,8 +223,8 @@ const closeModal = () => {
 
                 <p v-if="createError" class="a-taxonomy-dialog__error">{{ createError }}</p>
 
-                <button class="a-btn a-btn--primary" type="button" @click="createTerm">
-                  {{ createButtonLabel }}
+                <button class="a-btn a-btn--primary" type="button" :disabled="creating" @click="createTerm">
+                  {{ creating ? 'Creating…' : createButtonLabel }}
                 </button>
               </div>
 

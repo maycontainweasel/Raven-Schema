@@ -5,11 +5,51 @@ export type ModelUIComponentSpec = {
   modelKey?: string
 }
 
+export type ModelDataMode = 'local' | 'remote'
+
+export type ModelUIFieldBindingModel = {
+  kind: 'model'
+  action: string
+  payloadKey: string
+}
+
+export type ModelUIFieldBindingSubtable = {
+  kind: 'subtable'
+  subtableKey: string
+  action: string
+  payloadKey: string
+}
+
+export type ModelUIFieldBindingTaxonomy = {
+  kind: 'taxonomy'
+  taxonomyKey: string
+  valueMode: 'termIds'
+  actions: {
+    getTerms: string
+    getRecordTerms: string
+    attach: string
+    detach: string
+    addTerm?: string
+  }
+}
+
+export type ModelUIFieldBindingCustom = {
+  kind: 'custom'
+  handler: string
+}
+
+export type ModelUIFieldBinding =
+  | ModelUIFieldBindingModel
+  | ModelUIFieldBindingSubtable
+  | ModelUIFieldBindingTaxonomy
+  | ModelUIFieldBindingCustom
+
 export type ModelUIFieldSpec = {
   id: string
   field: string
   label: string
   component: ModelUIComponentSpec
+  binding?: ModelUIFieldBinding
   action?: string
   modelKey?: string
   validation?: Record<string, any>
@@ -94,7 +134,7 @@ export type DirectoryCreateDialogSpec = {
 }
 
 export type ModelLayoutSpec = {
-  version: 2
+  version: 2 | 3
   kind: 'helios-model-ui'
   model: string
   table: string
@@ -136,10 +176,33 @@ export type ModelSpecResponse = {
     table: string
     label: string
     directoryRoute?: string
+    dataMode?: ModelDataMode
     capabilities: string[]
     hasTypesense: boolean
     typesenseCollection: string | null
     typesenseFields: string[]
+    taxonomyKeys?: string[]
+    subtableKeys?: string[]
+    taxonomies?: Array<{
+      key: string
+      actions: {
+        getTerms: string
+        getRecordTerms: string
+        attach: string
+        detach: string
+        addTerm?: string
+      }
+    }>
+    subtables?: Array<{
+      key: string
+      actions: {
+        create: string
+        update: string
+        delete: string
+        get: string
+        list: string
+      }
+    }>
     fields: string[]
     requiredFields?: string[]
     canManage: boolean

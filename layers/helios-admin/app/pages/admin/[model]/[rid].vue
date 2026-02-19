@@ -1,30 +1,20 @@
 <script setup lang="ts">
 import type {
   ModelLayoutSpec,
+  ModelUIFieldBinding,
+  ModelUIFieldBindingModel,
+  ModelUIFieldBindingSubtable,
+  ModelUIFieldBindingTaxonomy,
   ModelSpecResponse,
   ModelUIFieldSpec,
   ModelUITabSpec,
   ModelUIWidgetSpec,
 } from '../../../types/model-spec'
-// import AInput from '../../../components/fields/AInput.vue'
-// import ACombobox, { type AComboboxOption } from '../../../components/fields/ACombobox.vue'
-// import AComboboxAsync from '../../../components/fields/AComboboxAsync.vue'
-//   import AColorPicker from '../../../components/fields/AColorPicker.vue'
-//   import FieldSectionCard from '../../../components/fields/FieldSectionCard.vue'
+// Components are auto-imported from the active layer.
 
 type RuntimeRecordResponse = {
   ok: boolean
   record: Record<string, any>
-  identifiers: {
-    rid: string | null
-    subId: string | null
-    table: string | null
-  }
-}
-
-type RuntimeUpdateResponse = {
-  ok: boolean
-  updated: Record<string, any> | null
   identifiers: {
     rid: string | null
     subId: string | null
@@ -44,7 +34,44 @@ type WidgetLayoutRowState = {
   columns: WidgetLayoutColumnState[]
 }
 
+type AComboboxOption = {
+  label: string
+  value: string
+  group?: string
+  disabled?: boolean
+}
+
+type TaxonomyTerm = {
+  id?: string | number
+  key?: string
+  slug?: string
+  label?: string
+  title?: string
+  parent?: string | number | null
+  [key: string]: any
+}
+
+type TaxonomyTreeNode = {
+  id: string
+  label: string
+  children?: TaxonomyTreeNode[]
+}
+
+type TaxonomyFieldState = {
+  terms: TaxonomyTerm[]
+  tree: TaxonomyTreeNode[]
+  loading: boolean
+  error: string
+  initialSelected: string[]
+}
+
+type TaxonomyCreatePayload = {
+  label: string
+  parentId?: string | null
+}
+
 const route = useRoute()
+const { $process } = useCRUD()
 
 const modelParam = computed(() => {
   const fromParams = String(route.params.model ?? '').trim().toLowerCase()
@@ -79,6 +106,7 @@ const {
 const spec = computed<ModelLayoutSpec | null>(() => specData.value?.spec ?? null)
 const modelInfo = computed(() => specData.value?.model ?? null)
 const modelLabel = computed(() => modelInfo.value?.label || modelParam.value)
+const modelDataMode = computed<'local' | 'remote'>(() => modelInfo.value?.dataMode === 'remote' ? 'remote' : 'local')
 const directoryRoute = computed(() => spec.value?.directory.route || `/admin/${modelParam.value}`)
 const sourceRecord = computed<Record<string, any> | null>(() => {
   const value = recordData.value?.record
@@ -87,6 +115,8 @@ const sourceRecord = computed<Record<string, any> | null>(() => {
 const recordIdentifiers = computed(() => recordData.value?.identifiers ?? null)
 
 const fieldState = ref<Record<string, any>>({})
+const taxonomyState = ref<Record<string, TaxonomyFieldState>>({})
+let taxonomyLoadTicket = 0
 
 const toLabel = (value: string) =>
   value
@@ -100,6 +130,116 @@ const resolveFieldKey = (field: ModelUIFieldSpec) => {
 }
 
 const unique = <T>(value: T[]) => Array.from(new Set(value))
+
+const normalizeModeKey = (value: unknown) =>
+  String(value ?? '')
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, '')
+
+const toCamelCase = (value: unknown) => {
+  const source = String(value ?? '').trim()
+  if (!source) return ''
+  return source
+    .replace(/[_\-\s]+([A-Za-z0-9])/g, (_, token: string) => token.toUpperCase())
+    .replace(/^[A-Z]/, token => token.toLowerCase())
+}
+
+const resolveMutationRecordId = () => {
+  const subId = String(recordIdentifiers.value?.subId ?? '').trim()
+  if (subId) return subId
+  const rid = String(recordIdentifiers.value?.rid ?? ridParam.value).trim()
+  if (rid.includes(':')) return rid.split(':').slice(1).join(':')
+  return rid
+}
+
+const resolveProcessInstances = () => {
+  const fromRecord = Array.isArray(sourceRecord.value?.instances)
+    ? sourceRecord.value?.instances
+    : []
+  return unique(
+    (fromRecord ?? [])
+      .map((entry: unknown) => String(entry ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+}
+
+const buildProcessOptions = (mode: 'query' | 'mutate' = 'mutate') => {
+  const base: Record<string, any> = {
+    dataLocation: modelDataMode.value,
+    autoToast: false,
+    consoleLogging: mode === 'mutate',
+    trackAttempts: false,
+    throwOnFailure: true,
+  }
+
+  if (modelDataMode.value === 'remote') {
+    const instances = resolveProcessInstances()
+    if (!instances.length) {
+      throw new Error('Remote data mode requires at least one instance on the record.')
+    }
+    base.instances = instances
+  }
+
+  return base
+}
+
+const resolveFieldBinding = (field: ModelUIFieldSpec): ModelUIFieldBinding => {
+  const key = resolveFieldKey(field)
+  const fallbackAction = String(field.action || `${modelParam.value}.update`).trim()
+  const raw = (field as any).binding
+  if (!raw || typeof raw !== 'object') {
+    return {
+      kind: 'model',
+      action: fallbackAction,
+      payloadKey: key,
+    } satisfies ModelUIFieldBindingModel
+  }
+
+  const kind = String((raw as any).kind || '').trim().toLowerCase()
+  if (kind === 'taxonomy') {
+    const taxonomyKey = normalizeModeKey((raw as any).taxonomyKey || key) || key
+    const actions = (raw as any).actions || {}
+    const prefix = `${modelParam.value}.${taxonomyKey}`
+    return {
+      kind: 'taxonomy',
+      taxonomyKey,
+      valueMode: 'termIds',
+      actions: {
+        getTerms: String(actions.getTerms || `${prefix}.getTerms`).trim(),
+        getRecordTerms: String(actions.getRecordTerms || `${prefix}.getRecordTerms`).trim(),
+        attach: String(actions.attach || `${prefix}.attach`).trim(),
+        detach: String(actions.detach || `${prefix}.detach`).trim(),
+        addTerm: String(actions.addTerm || `${prefix}.addTerm`).trim() || undefined,
+      },
+    } satisfies ModelUIFieldBindingTaxonomy
+  }
+
+  if (kind === 'subtable') {
+    const subtableKey = toCamelCase((raw as any).subtableKey || key) || key
+    const prefix = `${modelParam.value}.subtables.${subtableKey}`
+    return {
+      kind: 'subtable',
+      subtableKey,
+      action: String((raw as any).action || `${prefix}.update`).trim(),
+      payloadKey: String((raw as any).payloadKey || key).trim() || key,
+    } satisfies ModelUIFieldBindingSubtable
+  }
+
+  if (kind === 'custom') {
+    return {
+      kind: 'custom',
+      handler: String((raw as any).handler || `${modelParam.value}.custom.${key}`).trim(),
+    }
+  }
+
+  return {
+    kind: 'model',
+    action: String((raw as any).action || fallbackAction).trim() || fallbackAction,
+    payloadKey: String((raw as any).payloadKey || key).trim() || key,
+  } satisfies ModelUIFieldBindingModel
+}
+
+const isTaxonomyField = (field: ModelUIFieldSpec) => resolveFieldBinding(field).kind === 'taxonomy'
 
 const resolveRecordFieldValue = (record: Record<string, any> | null, field: ModelUIFieldSpec) => {
   if (!record) return undefined
@@ -134,6 +274,12 @@ const resolveRecordFieldValue = (record: Record<string, any> | null, field: Mode
 
 const normalizePayloadValue = (field: ModelUIFieldSpec, value: unknown) => {
   const options = field.component?.options || {}
+  if (isTaxonomyField(field)) {
+    if (!Array.isArray(value)) return []
+    return value
+      .map((entry) => String(entry ?? '').trim())
+      .filter(Boolean)
+  }
   if (field.component?.name === 'AInput' && String(options.type || '').toLowerCase() === 'number') {
     if (value === '' || value === null || typeof value === 'undefined') return 0
     const parsed = Number(value)
@@ -145,9 +291,11 @@ const normalizePayloadValue = (field: ModelUIFieldSpec, value: unknown) => {
 const payloadFromFields = (fields: ModelUIFieldSpec[]) => {
   const payload: Record<string, any> = {}
   for (const field of fields) {
-    const key = resolveFieldKey(field)
-    if (!key) continue
-    payload[key] = normalizePayloadValue(field, fieldState.value[key])
+    const binding = resolveFieldBinding(field)
+    if (binding.kind !== 'model') continue
+    const payloadKey = String(binding.payloadKey || resolveFieldKey(field)).trim()
+    if (!payloadKey) continue
+    payload[payloadKey] = normalizePayloadValue(field, fieldState.value[resolveFieldKey(field)])
   }
   return payload
 }
@@ -158,6 +306,7 @@ const inferDefault = (field: ModelUIFieldSpec) => {
 
   if (typeof options.defaultValue !== 'undefined') return options.defaultValue
 
+  if (isTaxonomyField(field)) return []
   if (field.component.name === 'AColorPicker') return '#000000'
   if (field.component.name === 'AInput' && String(options.type || '').toLowerCase() === 'number') return 0
   if (field.component.name === 'ACombobox' || field.component.name === 'AComboboxAsync') {
@@ -195,12 +344,219 @@ const allFieldSpecs = computed(() => {
   return merged
 })
 
+const taxonomyFieldSpecs = computed(() => allFieldSpecs.value.filter(field => isTaxonomyField(field)))
+
+const flattenObjects = (value: any): Record<string, any>[] => {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value.flatMap(entry => flattenObjects(entry))
+  }
+  if (typeof value === 'object') return [value as Record<string, any>]
+  return []
+}
+
+const resolveTermId = (term: TaxonomyTerm): string => {
+  const direct = term.key ?? term.id ?? term.slug
+  if (typeof direct === 'number') return String(direct)
+  return String(direct ?? '').trim()
+}
+
+const resolveTermParent = (term: TaxonomyTerm): string | null => {
+  const value = term.parent
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    if (trimmed.includes(':')) return trimmed.split(':').slice(1).join(':')
+    return trimmed
+  }
+  if (value && typeof value === 'object') {
+    const nested = (value as any).id ?? (value as any).value
+    if (typeof nested === 'number') return String(nested)
+    if (typeof nested === 'string') return nested.trim() || null
+  }
+  return null
+}
+
+const buildTaxonomyTree = (terms: TaxonomyTerm[]): TaxonomyTreeNode[] => {
+  const nodes = terms
+    .map((term) => {
+      const id = resolveTermId(term)
+      if (!id) return null
+      return {
+        id,
+        label: String(term.label ?? term.title ?? id),
+        parent: resolveTermParent(term),
+        children: [] as TaxonomyTreeNode[],
+      }
+    })
+    .filter(Boolean) as Array<TaxonomyTreeNode & { parent: string | null }>
+
+  const map = new Map(nodes.map(node => [node.id, node]))
+  const roots: TaxonomyTreeNode[] = []
+  for (const node of nodes) {
+    if (node.parent && map.has(node.parent)) {
+      map.get(node.parent)!.children!.push(node)
+    }
+    else {
+      roots.push(node)
+    }
+  }
+  return roots
+}
+
+const taxonomyStateFor = (field: ModelUIFieldSpec): TaxonomyFieldState => {
+  const key = resolveFieldKey(field)
+  const existing = taxonomyState.value[key]
+  if (existing) return existing
+  const created: TaxonomyFieldState = {
+    terms: [],
+    tree: [],
+    loading: false,
+    error: '',
+    initialSelected: [],
+  }
+  taxonomyState.value = {
+    ...taxonomyState.value,
+    [key]: created,
+  }
+  return created
+}
+
+const taxonomyTreeForField = (field: ModelUIFieldSpec) => {
+  return taxonomyStateFor(field).tree
+}
+
+const setTaxonomyTreeForField = (field: ModelUIFieldSpec, tree: TaxonomyTreeNode[]) => {
+  const key = resolveFieldKey(field)
+  const state = taxonomyStateFor(field)
+  taxonomyState.value = {
+    ...taxonomyState.value,
+    [key]: {
+      ...state,
+      tree: Array.isArray(tree) ? tree : [],
+    },
+  }
+}
+
+const taxonomySelectedIdsForField = (field: ModelUIFieldSpec): string[] => {
+  const key = resolveFieldKey(field)
+  const value = fieldState.value[key]
+  if (!Array.isArray(value)) return []
+  return value.map(entry => String(entry ?? '').trim()).filter(Boolean)
+}
+
+const loadTaxonomyField = async (field: ModelUIFieldSpec, ticket: number) => {
+  const key = resolveFieldKey(field)
+  const binding = resolveFieldBinding(field)
+  if (binding.kind !== 'taxonomy') return
+  const state = taxonomyStateFor(field)
+  const recordId = resolveMutationRecordId()
+  if (!recordId) return
+
+  taxonomyState.value = {
+    ...taxonomyState.value,
+    [key]: {
+      ...state,
+      loading: true,
+      error: '',
+    },
+  }
+
+  try {
+    const processOptions = buildProcessOptions('query')
+    const termsRaw = await $process(binding.actions.getTerms, {}, processOptions)
+    const recordTermsRaw = await $process(binding.actions.getRecordTerms, { id: recordId }, processOptions)
+
+    const terms = flattenObjects(termsRaw)
+    const recordTerms = flattenObjects(recordTermsRaw)
+    const selected = unique(recordTerms.map(term => resolveTermId(term as any)).filter(Boolean))
+    if (ticket !== taxonomyLoadTicket) return
+
+    taxonomyState.value = {
+      ...taxonomyState.value,
+      [key]: {
+        terms,
+        tree: buildTaxonomyTree(terms),
+        loading: false,
+        error: '',
+        initialSelected: selected,
+      },
+    }
+
+    setFieldValue(field, selected)
+  }
+  catch (error: any) {
+    if (ticket !== taxonomyLoadTicket) return
+    taxonomyState.value = {
+      ...taxonomyState.value,
+      [key]: {
+        ...taxonomyStateFor(field),
+        loading: false,
+        error: error?.message ?? 'Failed to load taxonomy.',
+      },
+    }
+  }
+}
+
+const refreshTaxonomyFields = async (fields: ModelUIFieldSpec[]) => {
+  taxonomyLoadTicket += 1
+  const ticket = taxonomyLoadTicket
+  for (const field of fields) {
+    await loadTaxonomyField(field, ticket)
+  }
+}
+
+const slugify = (value: string) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+const createTaxonomyTerm = async (
+  field: ModelUIFieldSpec,
+  payload: TaxonomyCreatePayload,
+): Promise<TaxonomyTreeNode | null> => {
+  const binding = resolveFieldBinding(field)
+  if (binding.kind !== 'taxonomy') return null
+  if (!binding.actions.addTerm) {
+    throw new Error(`Taxonomy "${binding.taxonomyKey}" does not expose addTerm.`)
+  }
+
+  const key = slugify(payload.label)
+  if (!key) throw new Error('Term label is required.')
+  const termPayload = {
+    key,
+    label: payload.label,
+    parent: payload.parentId || '',
+  }
+
+  await $process(binding.actions.addTerm, termPayload, buildProcessOptions('mutate'))
+  await refreshTaxonomyFields([field])
+  const state = taxonomyStateFor(field)
+  const match = state.terms.find(entry => resolveTermId(entry) === key)
+  if (!match) {
+    return {
+      id: key,
+      label: payload.label,
+      children: [],
+    }
+  }
+  return {
+    id: resolveTermId(match),
+    label: String(match.label ?? match.title ?? payload.label),
+    children: [],
+  }
+}
+
 watch(
   [() => spec.value, () => sourceRecord.value],
   ([nextSpec, nextRecord]) => {
     if (!nextSpec) {
       activeTabSlug.value = ''
       fieldState.value = {}
+      taxonomyState.value = {}
       return
     }
 
@@ -217,8 +573,10 @@ watch(
     }
 
     fieldState.value = nextState
+    taxonomyState.value = {}
     notice.value = ''
     noticeTone.value = 'success'
+    void refreshTaxonomyFields(taxonomyFieldSpecs.value)
   },
   { immediate: true, deep: true },
 )
@@ -360,50 +718,38 @@ const resolveFieldProps = (field: ModelUIFieldSpec) => {
   }
 }
 
-const setFieldValue = (field: ModelUIFieldSpec, value: unknown) => {
+function setFieldValue(field: ModelUIFieldSpec, value: unknown) {
   const key = resolveFieldKey(field)
+  const nextValue = isTaxonomyField(field)
+    ? (Array.isArray(value)
+        ? value.map(entry => String(entry ?? '').trim()).filter(Boolean)
+        : [])
+    : value
   fieldState.value = {
     ...fieldState.value,
-    [key]: value,
+    [key]: nextValue,
   }
-}
-
-const persistPayload = async (
-  payload: Record<string, any>,
-  successMessage: string,
-) => {
-  const response = await $fetch<RuntimeUpdateResponse>(`/api/models/runtime/${modelParam.value}/record/${encodeURIComponent(ridParam.value)}`, {
-    method: 'POST',
-    body: {
-      id: recordIdentifiers.value?.subId || undefined,
-      payload,
-    },
-  })
-
-  notice.value = successMessage
-  noticeTone.value = 'success'
-
-  if (response.updated && typeof response.updated === 'object') {
-    const nextState = { ...fieldState.value }
-    for (const field of allFieldSpecs.value) {
-      const key = resolveFieldKey(field)
-      if (!key) continue
-      const valueFromRecord = resolveRecordFieldValue(response.updated, field)
-      if (typeof valueFromRecord !== 'undefined') {
-        nextState[key] = valueFromRecord
-      }
-    }
-    fieldState.value = nextState
-  }
-
-  await refreshRecord()
 }
 
 const saveDraft = async () => {
   saving.value = true
 
   try {
-    await persistPayload(payloadFromFields(allFieldSpecs.value), `Saved draft for ${ridParam.value}.`)
+    const payload = payloadFromFields(allFieldSpecs.value)
+    const status = await $process(
+      `${modelParam.value}.update`,
+      {
+        id: resolveMutationRecordId(),
+        payload,
+      },
+      buildProcessOptions('mutate'),
+    )
+    if (!status) {
+      throw new Error(`No response returned when saving ${ridParam.value}.`)
+    }
+    await refreshRecord()
+    notice.value = `Saved draft for ${ridParam.value}.`
+    noticeTone.value = 'success'
   }
   catch (error: any) {
     notice.value = error?.data?.statusMessage ?? error?.message ?? `Failed to save draft for ${ridParam.value}.`
@@ -416,16 +762,24 @@ const saveDraft = async () => {
 
 const statusFieldKey = computed(() => {
   const fromFields = allFieldSpecs.value.find((field) => {
+    const binding = resolveFieldBinding(field)
+    if (binding.kind !== 'model') return false
     const key = resolveFieldKey(field).toLowerCase()
     return key.includes('status')
   })
-  return fromFields ? resolveFieldKey(fromFields) : null
+  return fromFields ?? null
 })
 
 const publishRecord = async () => {
-  const statusKey = statusFieldKey.value
-  if (!statusKey) {
+  const statusField = statusFieldKey.value
+  if (!statusField) {
     notice.value = 'No status field is configured in this model tab layout.'
+    noticeTone.value = 'error'
+    return
+  }
+  const binding = resolveFieldBinding(statusField)
+  if (binding.kind !== 'model') {
+    notice.value = 'Status field binding must target the base model.'
     noticeTone.value = 'error'
     return
   }
@@ -433,7 +787,19 @@ const publishRecord = async () => {
   publishing.value = true
 
   try {
-    await persistPayload({ [statusKey]: 'publish' }, `Published ${ridParam.value}.`)
+    await $process(
+      binding.action,
+      {
+        id: resolveMutationRecordId(),
+        payload: {
+          [binding.payloadKey]: 'publish',
+        },
+      },
+      buildProcessOptions('mutate'),
+    )
+    await refreshRecord()
+    notice.value = `Published ${ridParam.value}.`
+    noticeTone.value = 'success'
   }
   catch (error: any) {
     notice.value = error?.data?.statusMessage ?? error?.message ?? `Failed to publish ${ridParam.value}.`
@@ -486,16 +852,129 @@ const widgetLayoutRows = (widget: ModelUIWidgetSpec): WidgetLayoutRowState[] => 
   })
 }
 
-const saveWidget = async (widget: ModelUIWidgetSpec) => {
-  const payload = payloadFromFields(widget.fields)
+const executeWidgetSave = async (widget: ModelUIWidgetSpec) => {
+  const modelPayloadByAction = new Map<string, Record<string, any>>()
+  const subtablePayloadByAction = new Map<string, Record<string, any>>()
+  const taxonomyFields: Array<{ field: ModelUIFieldSpec, binding: ModelUIFieldBindingTaxonomy }> = []
 
+  for (const field of widget.fields) {
+    const fieldKey = resolveFieldKey(field)
+    const binding = resolveFieldBinding(field)
+    const value = normalizePayloadValue(field, fieldState.value[fieldKey])
+
+    if (binding.kind === 'model') {
+      const payload = modelPayloadByAction.get(binding.action) ?? {}
+      payload[binding.payloadKey] = value
+      modelPayloadByAction.set(binding.action, payload)
+      continue
+    }
+
+    if (binding.kind === 'subtable') {
+      const payload = subtablePayloadByAction.get(binding.action) ?? {}
+      payload[binding.payloadKey] = value
+      subtablePayloadByAction.set(binding.action, payload)
+      continue
+    }
+
+    if (binding.kind === 'taxonomy') {
+      taxonomyFields.push({ field, binding })
+      continue
+    }
+
+    if (binding.kind === 'custom') {
+      throw new Error(`Custom save handlers are not implemented for widget save (${binding.handler}).`)
+    }
+  }
+
+  const recordId = resolveMutationRecordId()
+  if (!recordId) {
+    throw new Error('Could not resolve record id for save.')
+  }
+
+  for (const [action, payload] of modelPayloadByAction.entries()) {
+    await $process(
+      action,
+      {
+        id: recordId,
+        payload,
+      },
+      buildProcessOptions('mutate'),
+    )
+  }
+
+  for (const [action, payload] of subtablePayloadByAction.entries()) {
+    await $process(
+      action,
+      {
+        id: recordId,
+        payload,
+      },
+      buildProcessOptions('mutate'),
+    )
+  }
+
+  for (const entry of taxonomyFields) {
+    const field = entry.field
+    const binding = entry.binding
+    const key = resolveFieldKey(field)
+    const state = taxonomyStateFor(field)
+
+    const current = unique(
+      (Array.isArray(fieldState.value[key]) ? fieldState.value[key] : [])
+        .map((item: unknown) => String(item ?? '').trim())
+        .filter(Boolean),
+    )
+    const previous = unique(
+      (state.initialSelected ?? [])
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean),
+    )
+    const currentSet = new Set(current)
+    const previousSet = new Set(previous)
+
+    const added = current.filter(id => !previousSet.has(id))
+    const removed = previous.filter(id => !currentSet.has(id))
+
+    for (const term of removed) {
+      await $process(
+        binding.actions.detach,
+        { id: recordId, term },
+        buildProcessOptions('mutate'),
+      )
+    }
+    for (const term of added) {
+      await $process(
+        binding.actions.attach,
+        { id: recordId, term },
+        buildProcessOptions('mutate'),
+      )
+    }
+
+    taxonomyState.value = {
+      ...taxonomyState.value,
+      [key]: {
+        ...state,
+        initialSelected: current,
+      },
+    }
+  }
+}
+
+const saveWidget = async (widget: ModelUIWidgetSpec) => {
   widgetSaving.value = {
     ...widgetSaving.value,
     [widget.id]: true,
   }
 
   try {
-    await persistPayload(payload, `Saved ${widget.label || widget.name || widget.id}.`)
+    await executeWidgetSave(widget)
+    await refreshRecord()
+    notice.value = `Saved ${widget.label || widget.name || widget.id}.`
+    noticeTone.value = 'success'
+    const taxonomyInWidget = widget.fields.filter(field => isTaxonomyField(field))
+    if (taxonomyInWidget.length > 0) {
+      await refreshTaxonomyFields(taxonomyInWidget)
+    }
   }
   catch (error: any) {
     notice.value = error?.data?.statusMessage ?? error?.message ?? `Failed to save ${widget.label || widget.name || widget.id}.`
@@ -596,14 +1075,29 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
                         class="widget-fields__col"
                         :class="layoutColumn.class"
                       >
-                        <component
-                          :is="resolveFieldComponent(field.component.name)"
+                        <template
                           v-for="field in layoutColumn.fields"
                           :key="field.id"
-                          :model-value="fieldState[resolveFieldKey(field)]"
-                          v-bind="resolveFieldProps(field)"
-                          @update:model-value="setFieldValue(field, $event)"
-                        />
+                        >
+                          <ATaxonomyManager
+                            v-if="isTaxonomyField(field)"
+                            :model-value="taxonomyTreeForField(field)"
+                            :checked-ids="taxonomySelectedIdsForField(field)"
+                            :taxonomy-label="field.label || toLabel(resolveFieldKey(field))"
+                            :title="field.label || toLabel(resolveFieldKey(field))"
+                            :description="taxonomyState[resolveFieldKey(field)]?.error || 'Manage taxonomy terms for this record.'"
+                            :create-term-action="(payload) => createTaxonomyTerm(field, payload)"
+                            @update:model-value="setTaxonomyTreeForField(field, $event)"
+                            @update:checked-ids="setFieldValue(field, $event)"
+                          />
+                          <component
+                            :is="resolveFieldComponent(field.component.name)"
+                            v-else
+                            :model-value="fieldState[resolveFieldKey(field)]"
+                            v-bind="resolveFieldProps(field)"
+                            @update:model-value="setFieldValue(field, $event)"
+                          />
+                        </template>
                       </div>
                     </div>
                   </div>

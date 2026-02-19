@@ -648,6 +648,11 @@ const newFieldFromModel = (fieldName?: string): ModelUIFieldSpec => {
     label: baseField.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
     modelKey: baseField,
     action: `${modelParam.value || 'model'}.update`,
+    binding: {
+      kind: 'model',
+      action: `${modelParam.value || 'model'}.update`,
+      payloadKey: baseField,
+    },
     component: {
       name: componentName,
       options: componentName === 'ACombobox'
