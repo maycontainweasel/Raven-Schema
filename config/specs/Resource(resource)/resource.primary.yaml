@@ -1,0 +1,143 @@
+version: 1
+kind: table
+name: Resource
+primary: true
+tableType: primary
+description: Bookable resource such as a bay, coach, or facility lane.
+table:
+  model: resource
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: ResourceId
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - name:
+      type: string
+      required: true
+      default: ""
+  - type:
+      type: enum<"bay" | "coach" | "facility">
+      required: true
+      default: "bay"
+  - resourceCode:
+      type: string
+      required: true
+      default: ""
+  - handedness:
+      type: enum<"right_only" | "left_capable" | "n_a">
+      required: true
+      default: "n_a"
+  - capacity:
+      type: number
+      required: true
+      default: 4
+  - timezone:
+      type: string
+      required: true
+      default: "Africa/Johannesburg"
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - sortOrder:
+      type: number
+      required: false
+      default: 0
+  - metadata:
+      type: object
+      required: false
+      default: {}
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: key
+      validations:
+        required:
+          - key
+          - name
+          - type
+          - resourceCode
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: resource
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - name
+      - type
+      - resourceCode
+      - handedness
+      - capacity
+      - timezone
+      - active
+      - sortOrder
+      - metadata
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - key
+      - name
+      - type
+      - resourceCode
+      - active
+    functionMode: generate
+    function: viewResourceTypesense
+  schema:
+    collection: resource
+    fields:
+      - name: id
+        type: string
+      - name: key
+        type: string
+      - name: name
+        type: string
+      - name: type
+        type: string
+        facet: true
+      - name: resourceCode
+        type: string
+      - name: active
+        type: bool
+        facet: true
+    sortableFields:
+      - name
+admin:
+  slugPolicy: key
+  data: local
+delete:
+  enabled: true

@@ -1,0 +1,212 @@
+version: 1
+kind: table
+name: Booking
+primary: true
+tableType: primary
+description: Customer booking record from hold through paid confirmation and cancellation.
+table:
+  model: booking
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: reference
+  exportType: true
+  exportName: BookingId
+fields:
+  - reference:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("BK-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - service:
+      type: record<serviceDefinition>
+      required: true
+      default: ""
+  - status:
+      type: enum<"held" | "pending_payment" | "paid_confirmed" | "cancelled" | "expired">
+      required: true
+      default: "held"
+  - paymentStatus:
+      type: enum<"initiated" | "pending" | "paid" | "failed" | "cancelled">
+      required: true
+      default: "initiated"
+  - customerName:
+      type: string
+      required: true
+      default: ""
+  - customerEmail:
+      type: email
+      required: true
+      default: ""
+  - customerMobile:
+      type: string
+      required: true
+      default: ""
+  - startAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - endAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - timezone:
+      type: string
+      required: true
+      default: "Africa/Johannesburg"
+  - timeBand:
+      type: enum<"peak" | "off_peak" | "mixed">
+      required: true
+      default: "off_peak"
+  - players:
+      type: number
+      required: true
+      default: 1
+  - juniors:
+      type: number
+      required: false
+      default: 0
+  - seniors:
+      type: number
+      required: false
+      default: 0
+  - leftHandedRequired:
+      type: boolean
+      required: false
+      default: false
+  - termsAccepted:
+      type: boolean
+      required: true
+      default: false
+  - marketingConsent:
+      type: boolean
+      required: false
+      default: false
+  - specialRequests:
+      type: string
+      required: false
+      default: ""
+  - holdExpiresAt:
+      type: datetime
+      required: false
+      default: null
+  - subtotal:
+      type: number
+      required: true
+      default: 0
+  - discountTotal:
+      type: number
+      required: true
+      default: 0
+  - total:
+      type: number
+      required: true
+      default: 0
+  - currency:
+      type: string
+      required: true
+      default: "ZAR"
+  - promotionCode:
+      type: string
+      required: false
+      default: ""
+  - promotionLabel:
+      type: string
+      required: false
+      default: ""
+  - orderRef:
+      type: string
+      required: false
+      default: ""
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: BookingReference
+    mode: OVERWRITE
+    columns:
+      - reference
+    unique: true
+    comment: "Unique customer-facing booking reference"
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: reference
+      validations:
+        required:
+          - service
+          - customerName
+          - customerEmail
+          - customerMobile
+          - startAt
+          - endAt
+          - players
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: booking
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - reference
+      - service
+      - status
+      - paymentStatus
+      - customerName
+      - customerEmail
+      - customerMobile
+      - startAt
+      - endAt
+      - timezone
+      - timeBand
+      - players
+      - juniors
+      - seniors
+      - leftHandedRequired
+      - termsAccepted
+      - marketingConsent
+      - specialRequests
+      - holdExpiresAt
+      - subtotal
+      - discountTotal
+      - total
+      - currency
+      - promotionCode
+      - promotionLabel
+      - orderRef
+      - metadata
+    fetch:
+      - service
+admin:
+  slugPolicy: reference
+  data: local
+delete:
+  enabled: true

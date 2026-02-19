@@ -1,0 +1,157 @@
+version: 1
+kind: table
+name: ServiceDefinition
+primary: true
+tableType: primary
+description: Configured booking flow definition for a customer-facing CTA.
+table:
+  model: serviceDefinition
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: ServiceDefinitionId
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - name:
+      type: string
+      required: true
+      default: ""
+  - ctaSlug:
+      type: string
+      required: true
+      default: ""
+  - serviceType:
+      type: enum<"standard" | "driving_range" | "kids_party" | "corporate" | "coaching">
+      required: true
+      default: "standard"
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - durationMode:
+      type: enum<"fixed" | "selectable">
+      required: true
+      default: "selectable"
+  - fixedDurationMinutes:
+      type: number
+      required: false
+      default: 0
+  - minDurationHours:
+      type: number
+      required: false
+      default: 1
+  - maxDurationHours:
+      type: number
+      required: false
+      default: 4
+  - durationStepHours:
+      type: number
+      required: false
+      default: 1
+  - maxPlayersPerBay:
+      type: number
+      required: false
+      default: 4
+  - maxPeoplePerBay:
+      type: number
+      required: false
+      default: 6
+  - requiresBay:
+      type: boolean
+      required: true
+      default: true
+  - requiresCoach:
+      type: boolean
+      required: false
+      default: false
+  - requiresOffPeakOnly:
+      type: boolean
+      required: false
+      default: false
+  - supportsLeftHandedFilter:
+      type: boolean
+      required: false
+      default: false
+  - autoAssignResources:
+      type: boolean
+      required: true
+      default: true
+  - maxHoldMinutes:
+      type: number
+      required: true
+      default: 10
+  - settings:
+      type: object
+      required: false
+      default: {}
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: key
+      validations:
+        required:
+          - key
+          - name
+          - ctaSlug
+          - serviceType
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: serviceDefinition
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - name
+      - ctaSlug
+      - serviceType
+      - active
+      - durationMode
+      - fixedDurationMinutes
+      - minDurationHours
+      - maxDurationHours
+      - durationStepHours
+      - maxPlayersPerBay
+      - maxPeoplePerBay
+      - requiresBay
+      - requiresCoach
+      - requiresOffPeakOnly
+      - supportsLeftHandedFilter
+      - autoAssignResources
+      - maxHoldMinutes
+      - settings
+admin:
+  slugPolicy: key
+  data: local
+delete:
+  enabled: true
