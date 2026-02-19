@@ -1,0 +1,157 @@
+version: 1
+kind: table
+name: ResourceAvailabilityRule
+primary: true
+tableType: primary
+description: Availability windows and constraints for each bookable resource.
+table:
+  model: resourceAvailabilityRule
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: ResourceAvailabilityRuleId
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - resource:
+      type: record<resource>
+      required: true
+      default: ""
+  - service:
+      type: record<serviceDefinition>
+      required: false
+      default: ""
+  - dayOfWeek:
+      type: enum<"monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "all">
+      required: true
+      default: "all"
+  - startTime:
+      type: string
+      required: true
+      default: "00:00"
+  - endTime:
+      type: string
+      required: true
+      default: "23:59"
+  - band:
+      type: enum<"peak" | "off_peak" | "closed">
+      required: true
+      default: "off_peak"
+  - slotIntervalMinutes:
+      type: number
+      required: true
+      default: 15
+  - minDurationMinutes:
+      type: number
+      required: true
+      default: 60
+  - maxDurationMinutes:
+      type: number
+      required: true
+      default: 240
+  - dateFrom:
+      type: datetime
+      required: false
+      default: null
+  - dateTo:
+      type: datetime
+      required: false
+      default: null
+  - blackout:
+      type: boolean
+      required: false
+      default: false
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - priority:
+      type: number
+      required: false
+      default: 0
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: ResourceAvailabilityRuleByResource
+    mode: OVERWRITE
+    columns:
+      - resource
+      - dayOfWeek
+      - startTime
+      - endTime
+      - active
+    unique: false
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: key
+      validations:
+        required:
+          - key
+          - resource
+          - dayOfWeek
+          - startTime
+          - endTime
+          - band
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: resourceAvailabilityRule
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - resource
+      - service
+      - dayOfWeek
+      - startTime
+      - endTime
+      - band
+      - slotIntervalMinutes
+      - minDurationMinutes
+      - maxDurationMinutes
+      - dateFrom
+      - dateTo
+      - blackout
+      - active
+      - priority
+      - metadata
+    fetch:
+      - resource
+      - service
+admin:
+  slugPolicy: key
+  data: local
+delete:
+  enabled: true

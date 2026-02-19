@@ -1,0 +1,158 @@
+version: 1
+kind: table
+name: BookingHold
+primary: true
+tableType: primary
+description: Temporary slot reservation while customer completes checkout.
+table:
+  model: bookingHold
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: holdRef
+  exportType: true
+  exportName: BookingHoldId
+fields:
+  - holdRef:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("HL-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - booking:
+      type: record<booking>
+      required: false
+      default: ""
+  - service:
+      type: record<serviceDefinition>
+      required: true
+      default: ""
+  - status:
+      type: enum<"active" | "expired" | "released" | "consumed">
+      required: true
+      default: "active"
+  - startAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - endAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - timezone:
+      type: string
+      required: true
+      default: "Africa/Johannesburg"
+  - expiresAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - players:
+      type: number
+      required: true
+      default: 1
+  - leftHandedRequired:
+      type: boolean
+      required: false
+      default: false
+  - resourceCount:
+      type: number
+      required: true
+      default: 1
+  - assignedResources:
+      type: array
+      required: false
+      items:
+        type: record<resource>
+      default: []
+  - customerEmail:
+      type: email
+      required: false
+      default: ""
+  - quote:
+      type: object
+      required: false
+      default: {}
+  - source:
+      type: enum<"public" | "admin" | "system">
+      required: true
+      default: "public"
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: BookingHoldRef
+    mode: OVERWRITE
+    columns:
+      - holdRef
+    unique: true
+    comment: "Unique public hold reference"
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: holdRef
+      validations:
+        required:
+          - service
+          - startAt
+          - endAt
+          - expiresAt
+          - players
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: bookingHold
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - holdRef
+      - booking
+      - service
+      - status
+      - startAt
+      - endAt
+      - timezone
+      - expiresAt
+      - players
+      - leftHandedRequired
+      - resourceCount
+      - assignedResources
+      - customerEmail
+      - quote
+      - source
+      - metadata
+    fetch:
+      - booking
+      - service
+admin:
+  slugPolicy: holdRef
+  data: local
+delete:
+  enabled: true
