@@ -1,0 +1,168 @@
+version: 1
+kind: table
+name: PromotionRule
+primary: true
+tableType: primary
+description: Automatic or code-based promotions evaluated by booking quote rules.
+table:
+  model: promotionRule
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: PromotionRuleId
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - name:
+      type: string
+      required: true
+      default: ""
+  - service:
+      type: record<serviceDefinition>
+      required: false
+      default: ""
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - autoApply:
+      type: boolean
+      required: true
+      default: true
+  - promoCode:
+      type: string
+      required: false
+      default: ""
+  - discountType:
+      type: enum<"percentage" | "fixed_amount">
+      required: true
+      default: "percentage"
+  - discountValue:
+      type: number
+      required: true
+      default: 0
+  - applyMode:
+      type: enum<"best_only" | "stackable">
+      required: true
+      default: "best_only"
+  - target:
+      type: enum<"booking_total" | "player_line_item" | "service_total">
+      required: true
+      default: "booking_total"
+  - minBookingTotal:
+      type: number
+      required: false
+      default: 0
+  - maxDiscountAmount:
+      type: number
+      required: false
+      default: 0
+  - maxUses:
+      type: number
+      required: false
+      default: 0
+  - usedCount:
+      type: number
+      required: false
+      default: 0
+  - effectiveFrom:
+      type: datetime
+      required: false
+      default: null
+  - effectiveTo:
+      type: datetime
+      required: false
+      default: null
+  - priority:
+      type: number
+      required: false
+      default: 0
+  - conditions:
+      type: object
+      required: false
+      default: {}
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: PromotionRuleLookup
+    mode: OVERWRITE
+    columns:
+      - active
+      - autoApply
+      - service
+      - priority
+    unique: false
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: key
+      validations:
+        required:
+          - key
+          - name
+          - discountType
+          - discountValue
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: promotionRule
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - name
+      - service
+      - active
+      - autoApply
+      - promoCode
+      - discountType
+      - discountValue
+      - applyMode
+      - target
+      - minBookingTotal
+      - maxDiscountAmount
+      - maxUses
+      - usedCount
+      - effectiveFrom
+      - effectiveTo
+      - priority
+      - conditions
+      - metadata
+    fetch:
+      - service
+admin:
+  slugPolicy: key
+  data: local
+delete:
+  enabled: true
