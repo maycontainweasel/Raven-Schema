@@ -3,7 +3,7 @@ kind: table
 name: BookingResourceAssignment
 primary: true
 tableType: primary
-description: Resource assignments linked to booking windows for hold and confirmed states.
+description: Assigned resources for held/confirmed windows
 table:
   model: bookingResourceAssignment
   type: NORMAL
@@ -18,30 +18,30 @@ fields:
   - key:
       type: string
       required: true
-      default: |-
-        {
-          string::concat("BRA-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
-        }
+      default: ""
   - booking:
       type: record<booking>
       required: true
       default: ""
+      assign: true
   - hold:
       type: record<bookingHold>
-      required: false
       default: ""
+      assign: true
   - resource:
       type: record<resource>
       required: true
       default: ""
+      assign: true
   - service:
       type: record<serviceDefinition>
       required: true
       default: ""
+      assign: true
   - state:
       type: enum<"held" | "confirmed" | "cancelled" | "released">
       required: true
-      default: "held"
+      default: held
   - startAt:
       type: datetime
       required: true
@@ -53,33 +53,16 @@ fields:
   - timezone:
       type: string
       required: true
-      default: "Africa/Johannesburg"
+      default: Africa/Johannesburg
   - assignedAt:
       type: datetime
       required: true
       default: time::now()
   - releasedAt:
       type: datetime
-      required: false
       default: null
   - metadata:
       type: object
-      required: false
-      default: {}
-indexes:
-  - name: BookingResourceAssignmentKey
-    mode: OVERWRITE
-    columns:
-      - key
-    unique: true
-  - name: BookingResourceAssignmentWindow
-    mode: OVERWRITE
-    columns:
-      - resource
-      - startAt
-      - endAt
-      - state
-    unique: false
 crud:
   create:
     enabled: true
@@ -87,16 +70,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: key
-      validations:
-        required:
-          - key
-          - booking
-          - resource
-          - service
-          - startAt
-          - endAt
   update:
     enabled: true
     name: update__NAME__
@@ -134,13 +107,6 @@ views:
       - assignedAt
       - releasedAt
       - metadata
-    fetch:
-      - booking
-      - hold
-      - resource
-      - service
+refreshViews: true
 admin:
   slugPolicy: key
-  data: local
-delete:
-  enabled: true

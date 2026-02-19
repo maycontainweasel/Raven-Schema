@@ -3,7 +3,7 @@ kind: table
 name: ServiceDefinition
 primary: true
 tableType: primary
-description: Configured booking flow definition for a customer-facing CTA.
+description: Booking flow configuration per CTA/service
 table:
   model: serviceDefinition
   type: NORMAL
@@ -28,9 +28,10 @@ fields:
       required: true
       default: ""
   - serviceType:
-      type: enum<"standard" | "driving_range" | "kids_party" | "corporate" | "coaching">
+      type: enum<"standard" | "driving_range" | "kids_party" | "corporate" |
+        "coaching">
       required: true
-      default: "standard"
+      default: standard
   - active:
       type: boolean
       required: true
@@ -38,30 +39,24 @@ fields:
   - durationMode:
       type: enum<"fixed" | "selectable">
       required: true
-      default: "selectable"
+      default: selectable
   - fixedDurationMinutes:
       type: number
-      required: false
       default: 0
   - minDurationHours:
       type: number
-      required: false
       default: 1
   - maxDurationHours:
       type: number
-      required: false
       default: 4
   - durationStepHours:
       type: number
-      required: false
       default: 1
   - maxPlayersPerBay:
       type: number
-      required: false
       default: 4
   - maxPeoplePerBay:
       type: number
-      required: false
       default: 6
   - requiresBay:
       type: boolean
@@ -69,15 +64,12 @@ fields:
       default: true
   - requiresCoach:
       type: boolean
-      required: false
       default: false
   - requiresOffPeakOnly:
       type: boolean
-      required: false
       default: false
   - supportsLeftHandedFilter:
       type: boolean
-      required: false
       default: false
   - autoAssignResources:
       type: boolean
@@ -89,8 +81,6 @@ fields:
       default: 10
   - settings:
       type: object
-      required: false
-      default: {}
 crud:
   create:
     enabled: true
@@ -98,14 +88,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: key
-      validations:
-        required:
-          - key
-          - name
-          - ctaSlug
-          - serviceType
   update:
     enabled: true
     name: update__NAME__
@@ -150,8 +132,6 @@ views:
       - autoAssignResources
       - maxHoldMinutes
       - settings
+refreshViews: true
 admin:
   slugPolicy: key
-  data: local
-delete:
-  enabled: true

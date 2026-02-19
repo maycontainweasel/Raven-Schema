@@ -3,7 +3,7 @@ kind: table
 name: Resource
 primary: true
 tableType: primary
-description: Bookable resource such as a bay, coach, or facility lane.
+description: Bookable resource such as bay, coach, or facility
 table:
   model: resource
   type: NORMAL
@@ -26,7 +26,7 @@ fields:
   - type:
       type: enum<"bay" | "coach" | "facility">
       required: true
-      default: "bay"
+      default: bay
   - resourceCode:
       type: string
       required: true
@@ -34,7 +34,7 @@ fields:
   - handedness:
       type: enum<"right_only" | "left_capable" | "n_a">
       required: true
-      default: "n_a"
+      default: n_a
   - capacity:
       type: number
       required: true
@@ -42,19 +42,16 @@ fields:
   - timezone:
       type: string
       required: true
-      default: "Africa/Johannesburg"
+      default: Africa/Johannesburg
   - active:
       type: boolean
       required: true
       default: true
   - sortOrder:
       type: number
-      required: false
       default: 0
   - metadata:
       type: object
-      required: false
-      default: {}
 crud:
   create:
     enabled: true
@@ -62,14 +59,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: key
-      validations:
-        required:
-          - key
-          - name
-          - type
-          - resourceCode
   update:
     enabled: true
     name: update__NAME__
@@ -117,6 +106,9 @@ typesense:
       - active
     functionMode: generate
     function: viewResourceTypesense
+    as:
+      - type: $type
+      - active: $active
   schema:
     collection: resource
     fields:
@@ -136,8 +128,22 @@ typesense:
         facet: true
     sortableFields:
       - name
+    settings:
+      enable_nested_fields: true
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - key
+        - name
+        - resourceCode
+        - type
+      filters:
+        - type
+        - active
+refreshViews: true
 admin:
   slugPolicy: key
-  data: local
-delete:
-  enabled: true

@@ -3,7 +3,7 @@ kind: table
 name: LeadConsent
 primary: true
 tableType: primary
-description: Consent capture record for terms acceptance and marketing opt-in.
+description: Terms and marketing consent capture
 table:
   model: leadConsent
   type: NORMAL
@@ -18,25 +18,20 @@ fields:
   - key:
       type: string
       required: true
-      default: |-
-        {
-          string::concat("LC-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
-        }
+      default: ""
   - booking:
       type: record<booking>
-      required: false
       default: ""
+      assign: true
   - email:
       type: email
       required: true
       default: ""
   - mobile:
       type: string
-      required: false
       default: ""
   - fullName:
       type: string
-      required: false
       default: ""
   - termsAccepted:
       type: boolean
@@ -49,30 +44,19 @@ fields:
   - source:
       type: enum<"public" | "admin" | "import">
       required: true
-      default: "public"
+      default: public
   - capturedAt:
       type: datetime
       required: true
       default: time::now()
   - ipAddress:
       type: string
-      required: false
       default: ""
   - userAgent:
       type: string
-      required: false
       default: ""
   - metadata:
       type: object
-      required: false
-      default: {}
-indexes:
-  - name: LeadConsentByEmail
-    mode: OVERWRITE
-    columns:
-      - email
-      - capturedAt
-    unique: false
 crud:
   create:
     enabled: true
@@ -80,13 +64,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: key
-      validations:
-        required:
-          - email
-          - termsAccepted
-          - marketingConsent
   update:
     enabled: true
     name: update__NAME__
@@ -124,10 +101,6 @@ views:
       - ipAddress
       - userAgent
       - metadata
-    fetch:
-      - booking
+refreshViews: true
 admin:
   slugPolicy: key
-  data: local
-delete:
-  enabled: true

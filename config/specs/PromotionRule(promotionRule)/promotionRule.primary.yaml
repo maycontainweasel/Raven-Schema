@@ -3,7 +3,7 @@ kind: table
 name: PromotionRule
 primary: true
 tableType: primary
-description: Automatic or code-based promotions evaluated by booking quote rules.
+description: Promotional discounts evaluated against quote context
 table:
   model: promotionRule
   type: NORMAL
@@ -25,8 +25,8 @@ fields:
       default: ""
   - service:
       type: record<serviceDefinition>
-      required: false
       default: ""
+      assign: true
   - active:
       type: boolean
       required: true
@@ -37,12 +37,11 @@ fields:
       default: true
   - promoCode:
       type: string
-      required: false
       default: ""
   - discountType:
       type: enum<"percentage" | "fixed_amount">
       required: true
-      default: "percentage"
+      default: percentage
   - discountValue:
       type: number
       required: true
@@ -50,56 +49,36 @@ fields:
   - applyMode:
       type: enum<"best_only" | "stackable">
       required: true
-      default: "best_only"
+      default: best_only
   - target:
       type: enum<"booking_total" | "player_line_item" | "service_total">
       required: true
-      default: "booking_total"
+      default: booking_total
   - minBookingTotal:
       type: number
-      required: false
       default: 0
   - maxDiscountAmount:
       type: number
-      required: false
       default: 0
   - maxUses:
       type: number
-      required: false
       default: 0
   - usedCount:
       type: number
-      required: false
       default: 0
   - effectiveFrom:
       type: datetime
-      required: false
       default: null
   - effectiveTo:
       type: datetime
-      required: false
       default: null
   - priority:
       type: number
-      required: false
       default: 0
   - conditions:
       type: object
-      required: false
-      default: {}
   - metadata:
       type: object
-      required: false
-      default: {}
-indexes:
-  - name: PromotionRuleLookup
-    mode: OVERWRITE
-    columns:
-      - active
-      - autoApply
-      - service
-      - priority
-    unique: false
 crud:
   create:
     enabled: true
@@ -107,14 +86,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: key
-      validations:
-        required:
-          - key
-          - name
-          - discountType
-          - discountValue
   update:
     enabled: true
     name: update__NAME__
@@ -159,10 +130,6 @@ views:
       - priority
       - conditions
       - metadata
-    fetch:
-      - service
+refreshViews: true
 admin:
   slugPolicy: key
-  data: local
-delete:
-  enabled: true

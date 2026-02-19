@@ -3,7 +3,7 @@ kind: table
 name: Order
 primary: true
 tableType: primary
-description: Commercial order linked to a booking and payment lifecycle.
+description: Commercial order record for a booking
 table:
   model: order
   type: NORMAL
@@ -18,25 +18,22 @@ fields:
   - orderRef:
       type: string
       required: true
-      default: |-
-        {
-          string::concat("ORD-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
-        }
+      default: ""
   - booking:
       type: record<booking>
       required: true
       default: ""
+      assign: true
   - status:
       type: enum<"pending" | "paid" | "failed" | "cancelled" | "refunded_manual">
       required: true
-      default: "pending"
+      default: pending
   - paymentProvider:
-      type: enum<"paygate">
+      type: '"paygate"'
       required: true
-      default: "paygate"
+      default: paygate
   - paymentReference:
       type: string
-      required: false
       default: ""
   - customerName:
       type: string
@@ -65,31 +62,15 @@ fields:
   - currency:
       type: string
       required: true
-      default: "ZAR"
+      default: ZAR
   - paidAt:
       type: datetime
-      required: false
       default: null
   - cancelledAt:
       type: datetime
-      required: false
       default: null
   - metadata:
       type: object
-      required: false
-      default: {}
-indexes:
-  - name: OrderReference
-    mode: OVERWRITE
-    columns:
-      - orderRef
-    unique: true
-  - name: OrderByBooking
-    mode: OVERWRITE
-    columns:
-      - booking
-      - status
-    unique: false
 crud:
   create:
     enabled: true
@@ -97,16 +78,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: orderRef
-      validations:
-        required:
-          - booking
-          - customerName
-          - customerEmail
-          - customerMobile
-          - total
-          - currency
   update:
     enabled: true
     name: update__NAME__
@@ -147,10 +118,6 @@ views:
       - paidAt
       - cancelledAt
       - metadata
-    fetch:
-      - booking
+refreshViews: true
 admin:
   slugPolicy: orderRef
-  data: local
-delete:
-  enabled: true

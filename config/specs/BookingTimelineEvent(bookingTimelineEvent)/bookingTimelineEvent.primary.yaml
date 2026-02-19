@@ -3,7 +3,7 @@ kind: table
 name: BookingTimelineEvent
 primary: true
 tableType: primary
-description: Immutable audit trail events for booking lifecycle changes.
+description: Audit trail events for booking lifecycle
 table:
   model: bookingTimelineEvent
   type: NORMAL
@@ -18,25 +18,25 @@ fields:
   - eventRef:
       type: string
       required: true
-      default: |-
-        {
-          string::concat("EVT-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
-        }
+      default: ""
   - booking:
       type: record<booking>
       required: true
       default: ""
+      assign: true
   - eventType:
-      type: enum<"hold_created" | "hold_expired" | "payment_initiated" | "payment_paid" | "payment_failed" | "booking_confirmed" | "booking_cancelled" | "assignment_created" | "assignment_released" | "admin_updated">
+      type: enum<"hold_created" | "hold_expired" | "payment_initiated" |
+        "payment_paid" | "payment_failed" | "booking_confirmed" |
+        "booking_cancelled" | "assignment_created" | "assignment_released" |
+        "admin_updated">
       required: true
-      default: "admin_updated"
+      default: admin_updated
   - actorType:
       type: enum<"customer" | "admin" | "system" | "provider">
       required: true
-      default: "system"
+      default: system
   - actorId:
       type: string
-      required: false
       default: ""
   - summary:
       type: string
@@ -48,24 +48,8 @@ fields:
       default: time::now()
   - payload:
       type: object
-      required: false
-      default: {}
   - metadata:
       type: object
-      required: false
-      default: {}
-indexes:
-  - name: BookingTimelineRef
-    mode: OVERWRITE
-    columns:
-      - eventRef
-    unique: true
-  - name: BookingTimelineByBooking
-    mode: OVERWRITE
-    columns:
-      - booking
-      - occurredAt
-    unique: false
 crud:
   create:
     enabled: true
@@ -73,14 +57,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: eventRef
-      validations:
-        required:
-          - booking
-          - eventType
-          - actorType
-          - summary
   update:
     enabled: true
     name: update__NAME__
@@ -115,10 +91,6 @@ views:
       - occurredAt
       - payload
       - metadata
-    fetch:
-      - booking
+refreshViews: true
 admin:
   slugPolicy: eventRef
-  data: local
-delete:
-  enabled: true

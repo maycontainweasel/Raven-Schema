@@ -3,7 +3,7 @@ kind: table
 name: ResourceAvailabilityRule
 primary: true
 tableType: primary
-description: Availability windows and constraints for each bookable resource.
+description: Resource availability and peak/off-peak windows
 table:
   model: resourceAvailabilityRule
   type: NORMAL
@@ -23,26 +23,28 @@ fields:
       type: record<resource>
       required: true
       default: ""
+      assign: true
   - service:
       type: record<serviceDefinition>
-      required: false
       default: ""
+      assign: true
   - dayOfWeek:
-      type: enum<"monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "all">
+      type: enum<"monday" | "tuesday" | "wednesday" | "thursday" | "friday" |
+        "saturday" | "sunday" | "all">
       required: true
-      default: "all"
+      default: all
   - startTime:
       type: string
       required: true
-      default: "00:00"
+      default: 00:00
   - endTime:
       type: string
       required: true
-      default: "23:59"
+      default: 23:59
   - band:
       type: enum<"peak" | "off_peak" | "closed">
       required: true
-      default: "off_peak"
+      default: off_peak
   - slotIntervalMinutes:
       type: number
       required: true
@@ -57,15 +59,12 @@ fields:
       default: 240
   - dateFrom:
       type: datetime
-      required: false
       default: null
   - dateTo:
       type: datetime
-      required: false
       default: null
   - blackout:
       type: boolean
-      required: false
       default: false
   - active:
       type: boolean
@@ -73,22 +72,9 @@ fields:
       default: true
   - priority:
       type: number
-      required: false
       default: 0
   - metadata:
       type: object
-      required: false
-      default: {}
-indexes:
-  - name: ResourceAvailabilityRuleByResource
-    mode: OVERWRITE
-    columns:
-      - resource
-      - dayOfWeek
-      - startTime
-      - endTime
-      - active
-    unique: false
 crud:
   create:
     enabled: true
@@ -96,16 +82,6 @@ crud:
     params:
       - name: payload
         type: object
-    options:
-      idSource: key
-      validations:
-        required:
-          - key
-          - resource
-          - dayOfWeek
-          - startTime
-          - endTime
-          - band
   update:
     enabled: true
     name: update__NAME__
@@ -147,11 +123,6 @@ views:
       - active
       - priority
       - metadata
-    fetch:
-      - resource
-      - service
+refreshViews: true
 admin:
   slugPolicy: key
-  data: local
-delete:
-  enabled: true

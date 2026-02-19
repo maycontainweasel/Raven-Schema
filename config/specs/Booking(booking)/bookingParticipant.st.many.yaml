@@ -1,0 +1,79 @@
+version: 1
+kind: table
+name: BookingParticipant
+primary: false
+tableType: submany
+description: Booking participant snapshot
+table:
+  model: bookingParticipant
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: stringID<parent, index>
+  exportType: true
+  exportName: BookingParticipantId
+fields:
+  - booking:
+      type: record<booking>
+      default: $parent
+      assign: true
+  - index:
+      type: number
+      required: true
+      default: 0
+  - fullName:
+      type: string
+      required: true
+      default: ""
+  - ageCategory:
+      type: enum<"adult" | "junior" | "senior">
+      required: true
+      default: adult
+  - handedness:
+      type: enum<"right" | "left">
+      required: true
+      default: right
+  - isPrimary:
+      type: boolean
+      required: true
+      default: false
+  - order:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: BookingParticipant
+      in: booking
+      out: bookingParticipant
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: bookingParticipant
+  parent: booking
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true
