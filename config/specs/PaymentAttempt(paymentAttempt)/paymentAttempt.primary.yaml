@@ -1,0 +1,172 @@
+version: 1
+kind: table
+name: PaymentAttempt
+primary: true
+tableType: primary
+description: Payment provider redirect/callback transaction trace per booking/order.
+table:
+  model: paymentAttempt
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: attemptRef
+  exportType: true
+  exportName: PaymentAttemptId
+fields:
+  - attemptRef:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("PAY-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - booking:
+      type: record<booking>
+      required: true
+      default: ""
+  - order:
+      type: record<order>
+      required: false
+      default: ""
+  - provider:
+      type: enum<"paygate">
+      required: true
+      default: "paygate"
+  - status:
+      type: enum<"initiated" | "redirected" | "pending_callback" | "paid" | "failed" | "cancelled" | "error">
+      required: true
+      default: "initiated"
+  - providerReference:
+      type: string
+      required: false
+      default: ""
+  - providerStatus:
+      type: string
+      required: false
+      default: ""
+  - amount:
+      type: number
+      required: true
+      default: 0
+  - currency:
+      type: string
+      required: true
+      default: "ZAR"
+  - redirectUrl:
+      type: string
+      required: false
+      default: ""
+  - returnUrl:
+      type: string
+      required: false
+      default: ""
+  - notifyUrl:
+      type: string
+      required: false
+      default: ""
+  - errorMessage:
+      type: string
+      required: false
+      default: ""
+  - requestPayload:
+      type: object
+      required: false
+      default: {}
+  - responsePayload:
+      type: object
+      required: false
+      default: {}
+  - startedAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - completedAt:
+      type: datetime
+      required: false
+      default: null
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: PaymentAttemptRef
+    mode: OVERWRITE
+    columns:
+      - attemptRef
+    unique: true
+  - name: PaymentAttemptByBooking
+    mode: OVERWRITE
+    columns:
+      - booking
+      - status
+      - startedAt
+    unique: false
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: attemptRef
+      validations:
+        required:
+          - booking
+          - provider
+          - status
+          - amount
+          - currency
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: paymentAttempt
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - attemptRef
+      - booking
+      - order
+      - provider
+      - status
+      - providerReference
+      - providerStatus
+      - amount
+      - currency
+      - redirectUrl
+      - returnUrl
+      - notifyUrl
+      - errorMessage
+      - requestPayload
+      - responsePayload
+      - startedAt
+      - completedAt
+      - metadata
+    fetch:
+      - booking
+      - order
+admin:
+  slugPolicy: attemptRef
+  data: local
+delete:
+  enabled: true

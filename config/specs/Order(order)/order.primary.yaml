@@ -1,0 +1,156 @@
+version: 1
+kind: table
+name: Order
+primary: true
+tableType: primary
+description: Commercial order linked to a booking and payment lifecycle.
+table:
+  model: order
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: orderRef
+  exportType: true
+  exportName: OrderId
+fields:
+  - orderRef:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("ORD-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - booking:
+      type: record<booking>
+      required: true
+      default: ""
+  - status:
+      type: enum<"pending" | "paid" | "failed" | "cancelled" | "refunded_manual">
+      required: true
+      default: "pending"
+  - paymentProvider:
+      type: enum<"paygate">
+      required: true
+      default: "paygate"
+  - paymentReference:
+      type: string
+      required: false
+      default: ""
+  - customerName:
+      type: string
+      required: true
+      default: ""
+  - customerEmail:
+      type: email
+      required: true
+      default: ""
+  - customerMobile:
+      type: string
+      required: true
+      default: ""
+  - subtotal:
+      type: number
+      required: true
+      default: 0
+  - discountTotal:
+      type: number
+      required: true
+      default: 0
+  - total:
+      type: number
+      required: true
+      default: 0
+  - currency:
+      type: string
+      required: true
+      default: "ZAR"
+  - paidAt:
+      type: datetime
+      required: false
+      default: null
+  - cancelledAt:
+      type: datetime
+      required: false
+      default: null
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: OrderReference
+    mode: OVERWRITE
+    columns:
+      - orderRef
+    unique: true
+  - name: OrderByBooking
+    mode: OVERWRITE
+    columns:
+      - booking
+      - status
+    unique: false
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: orderRef
+      validations:
+        required:
+          - booking
+          - customerName
+          - customerEmail
+          - customerMobile
+          - total
+          - currency
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: order
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - orderRef
+      - booking
+      - status
+      - paymentProvider
+      - paymentReference
+      - customerName
+      - customerEmail
+      - customerMobile
+      - subtotal
+      - discountTotal
+      - total
+      - currency
+      - paidAt
+      - cancelledAt
+      - metadata
+    fetch:
+      - booking
+admin:
+  slugPolicy: orderRef
+  data: local
+delete:
+  enabled: true
