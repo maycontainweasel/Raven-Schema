@@ -1,0 +1,132 @@
+version: 1
+kind: table
+name: ContentItem
+primary: true
+tableType: primary
+description: Basic CMS content item record for blog posts, videos, and photos.
+table:
+  model: contentItem
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: ContentItemId
+fields:
+  - key:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("CNT-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - title:
+      type: string
+      required: true
+      default: ""
+  - slug:
+      type: string
+      required: true
+      default: ""
+  - type:
+      type: enum<"blog" | "video" | "photo">
+      required: true
+      default: "blog"
+  - status:
+      type: enum<"draft" | "published" | "archived">
+      required: true
+      default: "draft"
+  - excerpt:
+      type: string
+      required: false
+      default: ""
+  - body:
+      type: string
+      required: false
+      default: ""
+  - mediaUrl:
+      type: string
+      required: false
+      default: ""
+  - coverImageUrl:
+      type: string
+      required: false
+      default: ""
+  - publishedAt:
+      type: datetime
+      required: false
+      default: null
+  - createdBy:
+      type: record<u>
+      required: false
+      default: ""
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: ContentItemSlug
+    mode: OVERWRITE
+    columns:
+      - slug
+    unique: true
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: key
+      validations:
+        required:
+          - title
+          - slug
+          - type
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: contentItem
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - title
+      - slug
+      - type
+      - status
+      - excerpt
+      - body
+      - mediaUrl
+      - coverImageUrl
+      - publishedAt
+      - createdBy
+      - metadata
+    fetch:
+      - createdBy
+admin:
+  slugPolicy: slug
+  data: local
+delete:
+  enabled: true

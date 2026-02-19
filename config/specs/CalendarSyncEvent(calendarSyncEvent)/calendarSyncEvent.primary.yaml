@@ -1,0 +1,157 @@
+version: 1
+kind: table
+name: CalendarSyncEvent
+primary: true
+tableType: primary
+description: Outbound Google Calendar sync attempts and outcomes per booking/resource.
+table:
+  model: calendarSyncEvent
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: syncRef
+  exportType: true
+  exportName: CalendarSyncEventId
+fields:
+  - syncRef:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("SYNC-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - provider:
+      type: enum<"google_calendar">
+      required: true
+      default: "google_calendar"
+  - booking:
+      type: record<booking>
+      required: false
+      default: ""
+  - resource:
+      type: record<resource>
+      required: false
+      default: ""
+  - calendarId:
+      type: string
+      required: true
+      default: ""
+  - providerEventId:
+      type: string
+      required: false
+      default: ""
+  - action:
+      type: enum<"create" | "update" | "delete">
+      required: true
+      default: "create"
+  - status:
+      type: enum<"pending" | "success" | "failed" | "retrying">
+      required: true
+      default: "pending"
+  - attemptCount:
+      type: number
+      required: true
+      default: 0
+  - lastAttemptAt:
+      type: datetime
+      required: false
+      default: null
+  - nextRetryAt:
+      type: datetime
+      required: false
+      default: null
+  - errorMessage:
+      type: string
+      required: false
+      default: ""
+  - requestPayload:
+      type: object
+      required: false
+      default: {}
+  - responsePayload:
+      type: object
+      required: false
+      default: {}
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: CalendarSyncEventRef
+    mode: OVERWRITE
+    columns:
+      - syncRef
+    unique: true
+  - name: CalendarSyncEventStatus
+    mode: OVERWRITE
+    columns:
+      - provider
+      - status
+      - attemptCount
+      - nextRetryAt
+    unique: false
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: syncRef
+      validations:
+        required:
+          - provider
+          - calendarId
+          - action
+          - status
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: calendarSyncEvent
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - syncRef
+      - provider
+      - booking
+      - resource
+      - calendarId
+      - providerEventId
+      - action
+      - status
+      - attemptCount
+      - lastAttemptAt
+      - nextRetryAt
+      - errorMessage
+      - requestPayload
+      - responsePayload
+      - metadata
+    fetch:
+      - booking
+      - resource
+admin:
+  slugPolicy: syncRef
+  data: local
+delete:
+  enabled: true

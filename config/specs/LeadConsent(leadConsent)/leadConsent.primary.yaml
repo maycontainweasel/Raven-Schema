@@ -1,0 +1,133 @@
+version: 1
+kind: table
+name: LeadConsent
+primary: true
+tableType: primary
+description: Consent capture record for terms acceptance and marketing opt-in.
+table:
+  model: leadConsent
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  structure: key
+  exportType: true
+  exportName: LeadConsentId
+fields:
+  - key:
+      type: string
+      required: true
+      default: |-
+        {
+          string::concat("LC-", string::uppercase(string::slice(rand::ulid(), 0, 10)))
+        }
+  - booking:
+      type: record<booking>
+      required: false
+      default: ""
+  - email:
+      type: email
+      required: true
+      default: ""
+  - mobile:
+      type: string
+      required: false
+      default: ""
+  - fullName:
+      type: string
+      required: false
+      default: ""
+  - termsAccepted:
+      type: boolean
+      required: true
+      default: false
+  - marketingConsent:
+      type: boolean
+      required: true
+      default: false
+  - source:
+      type: enum<"public" | "admin" | "import">
+      required: true
+      default: "public"
+  - capturedAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - ipAddress:
+      type: string
+      required: false
+      default: ""
+  - userAgent:
+      type: string
+      required: false
+      default: ""
+  - metadata:
+      type: object
+      required: false
+      default: {}
+indexes:
+  - name: LeadConsentByEmail
+    mode: OVERWRITE
+    columns:
+      - email
+      - capturedAt
+    unique: false
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+    options:
+      idSource: key
+      validations:
+        required:
+          - email
+          - termsAccepted
+          - marketingConsent
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: leadConsent
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - booking
+      - email
+      - mobile
+      - fullName
+      - termsAccepted
+      - marketingConsent
+      - source
+      - capturedAt
+      - ipAddress
+      - userAgent
+      - metadata
+    fetch:
+      - booking
+admin:
+  slugPolicy: key
+  data: local
+delete:
+  enabled: true
