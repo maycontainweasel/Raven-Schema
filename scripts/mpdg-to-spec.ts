@@ -2889,6 +2889,7 @@ function buildRelations(table: TableAst, raw: string): any[] {
       cardinality: entry.cardinality,
       storeOnModel: entry.storeOnModel,
       payloadField: entry.payloadField,
+      linkOnCreate: entry.linkOnCreate,
       required: entry.required,
       processor: entry.processor,
       hook: entry.hook,
@@ -2910,6 +2911,7 @@ function parseRelationEntries(
   cardinality: 'one' | 'many';
   storeOnModel: boolean;
   payloadField: string;
+  linkOnCreate: boolean;
   required: boolean;
   processor: 'functions' | 'events' | 'none';
   hook: string;
@@ -2923,6 +2925,7 @@ function parseRelationEntries(
     cardinality: 'one' | 'many';
     storeOnModel: boolean;
     payloadField: string;
+    linkOnCreate: boolean;
     required: boolean;
     processor: 'functions' | 'events' | 'none';
     hook: string;
@@ -2960,6 +2963,8 @@ function parseRelationEntries(
       settings?.payloadField ??
       settings?.payload ??
       (cardinality === 'one' ? left : `${left}s`);
+    const linkOnCreate =
+      typeof settings?.linkOnCreate === 'boolean' ? settings.linkOnCreate : true;
 
     const functions =
       settings?.functions && typeof settings.functions === 'object'
@@ -2973,6 +2978,7 @@ function parseRelationEntries(
       cardinality,
       storeOnModel,
       payloadField,
+      linkOnCreate,
       required,
       processor,
       hook,

@@ -63,6 +63,7 @@ import { runSiteDeploy } from './cli/siteDeploy';
 import { runSitePm2Logs } from './cli/sitePm2Logs';
 import { runSiteAdopt } from './cli/siteAdopt';
 import { runSiteMigrate } from './cli/siteMigrate';
+import { ensureHeliosAppScaffold } from './cli/heliosBootstrap';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures, applySchemaKitDefaults } from './lib/schemaKitConfig';
@@ -820,6 +821,11 @@ const argv = yargs(hideBin(process.argv))
       });
       await writeGeneratedNuxtConfig(appRoot, effectiveConfig);
 
+      const heliosAdded = layersToAdd.includes('helios');
+      const heliosBootstrapResult = heliosAdded
+        ? await ensureHeliosAppScaffold(appRoot)
+        : null;
+
       if (args['no-sync'] !== true) {
         await syncProjectLayers({
           projectRoot,
@@ -840,6 +846,13 @@ const argv = yargs(hideBin(process.argv))
         if (args['no-install'] !== true) {
           await runChildProcess('pnpm', ['-C', repoRoot, '--filter', specEntry.spec.slug, 'install'], repoRoot);
         }
+      }
+
+      if (heliosAdded) {
+        if (heliosBootstrapResult?.rootRedirectCreated) {
+          console.log(`↪️  Added root redirect: ${path.relative(repoRoot, path.join(appRoot, 'app/pages/index.vue'))}`);
+        }
+        console.log(`ℹ️  Next step: pnpm -C apps/schema run site:helios:setup ${specEntry.spec.slug}`);
       }
     }
   )
@@ -985,6 +998,8 @@ const argv = yargs(hideBin(process.argv))
         await writeFile(typeFragmentPath, JSON.stringify(typeFragmentDefault, null, 2), 'utf-8');
       }
 
+      const bootstrapResult = await ensureHeliosAppScaffold(appRoot);
+
       if (resolvedIcons && resolvedIconPack !== defaultIconPack) {
         const specAny = specEntry.spec as any;
         const packages = (specAny.packages && typeof specAny.packages === 'object' && !Array.isArray(specAny.packages))
@@ -1034,6 +1049,14 @@ const argv = yargs(hideBin(process.argv))
       console.log(
         `✅ Helios setup completed for ${specEntry.spec.slug} (${hadHelios ? 'layer already present' : 'layer added'}).`
       );
+      if (bootstrapResult.appShellCreated) {
+        console.log(`🧱 Added app shell: ${path.relative(repoRoot, path.join(appRoot, 'app/app.vue'))}`);
+      } else if (bootstrapResult.appShellUpdated) {
+        console.log(`🧱 Updated app shell to NuxtPage: ${path.relative(repoRoot, path.join(appRoot, 'app/app.vue'))}`);
+      }
+      if (bootstrapResult.rootRedirectCreated) {
+        console.log(`↪️  Added root redirect: ${path.relative(repoRoot, path.join(appRoot, 'app/pages/index.vue'))}`);
+      }
       console.log(`🧩 Setup fragment: ${path.relative(repoRoot, setupFragmentPath)}`);
       console.log(`✍️  Open /helios and click Commit to regenerate app/helios/generated + app/helios/scss artifacts.`);
     }

@@ -1457,6 +1457,9 @@ function buildRelationPostProcessLines(
     }
 
     if (mode === 'create') {
+      if (!relation.linkOnCreate) {
+        continue;
+      }
       if (relation.cardinality === 'one') {
         lines.push(
           `\tif type::is_array(${normVar}) {`,

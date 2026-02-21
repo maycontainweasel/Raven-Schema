@@ -117,6 +117,7 @@ Defaults:
 - `cardinality`: many
 - `storeOnModel`: true
 - `payloadField`: left model (pluralized if many)
+- `linkOnCreate`: true
 - `processor`: functions
 - `hook`: table where the relation is declared
 

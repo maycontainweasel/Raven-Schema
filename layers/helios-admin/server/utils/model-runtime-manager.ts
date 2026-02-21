@@ -430,53 +430,66 @@ export const readModelDirectoryRecords = async (
     .map((entry) => String(entry || '').trim())
     .filter((entry) => entry.length > 0)
 
-  if (spec?.directory?.typesense?.enabled) {
-    const page = await readTypesenseDocumentsPage(collectionName, {
-      query: options?.query,
-      queryBy,
-      limit: typeof options?.limit === 'number' ? options.limit : 250,
-      start: typeof options?.start === 'number' ? options.start : 0,
-      filterBy: options?.filterBy,
-      sortBy: options?.sortBy,
-    })
-
-    return {
-      records: page.documents.map((record) => normalizeDirectoryRecord(record, model.table)),
-      count: page.count,
-      source: 'typesense' as const,
-      collection: page.collection,
-      queryBy: page.queryBy,
-    }
-  }
-
   const resolvedModelCaller = await resolveModelCaller(event, model)
   const modelCaller = resolvedModelCaller.caller
-  const typesense = modelCaller.typesense
-  if (!typesense?.list || !typesense?.count) {
+  const readFallback = async () => {
+    const typesense = modelCaller.typesense
+    if (!typesense?.list || !typesense?.count) {
+      return {
+        records: [] as AnyRecord[],
+        count: 0,
+        source: 'fallback' as const,
+        collection: collectionName,
+        queryBy: queryBy[0] || 'id',
+      }
+    }
+
+    const listRaw = await typesense.list({
+      data: {
+        limit: typeof options?.limit === 'number' ? options.limit : 250,
+        start: typeof options?.start === 'number' ? options.start : 0,
+      },
+    })
+    const countRaw = await typesense.count({ data: {} })
+
     return {
-      records: [] as AnyRecord[],
-      count: 0,
+      records: normalizeList(listRaw).map(record => normalizeDirectoryRecord(record, model.table)),
+      count: resolveCount(countRaw),
       source: 'fallback' as const,
       collection: collectionName,
       queryBy: queryBy[0] || 'id',
     }
   }
 
-  const listRaw = await typesense.list({
-    data: {
-      limit: typeof options?.limit === 'number' ? options.limit : 250,
-      start: typeof options?.start === 'number' ? options.start : 0,
-    },
-  })
-  const countRaw = await typesense.count({ data: {} })
+  if (spec?.directory?.typesense?.enabled) {
+    try {
+      const page = await readTypesenseDocumentsPage(collectionName, {
+        query: options?.query,
+        queryBy,
+        limit: typeof options?.limit === 'number' ? options.limit : 250,
+        start: typeof options?.start === 'number' ? options.start : 0,
+        filterBy: options?.filterBy,
+        sortBy: options?.sortBy,
+      })
 
-  return {
-    records: normalizeList(listRaw).map(record => normalizeDirectoryRecord(record, model.table)),
-    count: resolveCount(countRaw),
-    source: 'fallback' as const,
-    collection: collectionName,
-    queryBy: queryBy[0] || 'id',
+      return {
+        records: page.documents.map((record) => normalizeDirectoryRecord(record, model.table)),
+        count: page.count,
+        source: 'typesense' as const,
+        collection: page.collection,
+        queryBy: page.queryBy,
+      }
+    }
+    catch (error: any) {
+      console.warn(
+        `[helios-admin] Typesense read failed for "${model.modelKey}" (${collectionName}); using fallback list/count.`,
+        error?.message || error,
+      )
+      return await readFallback()
+    }
   }
+
+  return await readFallback()
 }
 
 const buildSyncResult = async (

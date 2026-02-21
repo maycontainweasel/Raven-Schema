@@ -11,10 +11,14 @@ DEFINE FUNCTION OVERWRITE fn::createInstance($payload: object) {
 		throw "createInstance | payload is required";
 	};
 
-	if !$payload.key {
+	let $subtable_instanceSettings = $payload.instanceSettings;
+
+	let $payload = fn::objectRemove($payload, ["instanceSettings"]);
+
+	if $payload.key = NONE || $payload.key = null || (type::is_string($payload.key) && string::len($payload.key) = 0) {
 		throw "createInstance | requires key";
 	};
-	if !$payload.title {
+	if $payload.title = NONE || $payload.title = null || (type::is_string($payload.title) && string::len($payload.title) = 0) {
 		throw "createInstance | requires title";
 	};
 
@@ -37,6 +41,34 @@ DEFINE FUNCTION OVERWRITE fn::createInstance($payload: object) {
 		let $fallback = select * from only $rid;
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
+
+	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+		$record.id
+	} else if type::is_record($record) {
+		$record
+	} else {
+		null
+	};
+
+	if !$recordID {
+		throw "createInstance | failed to create instance";
+	};
+
+	if type::is_array($subtable_instanceSettings) {
+		if array::len($subtable_instanceSettings) > 0 {
+			let $subtable_item_instanceSettings_instanceSettings = array::first($subtable_instanceSettings);
+			let $subtable_payload_instanceSettings_instanceSettings = if type::is_object($subtable_item_instanceSettings_instanceSettings) { $subtable_item_instanceSettings_instanceSettings } else if $subtable_item_instanceSettings_instanceSettings = NONE || $subtable_item_instanceSettings_instanceSettings = null { {} } else { { currencies: $subtable_item_instanceSettings_instanceSettings } };
+			fn::createInstanceSettings($recordID, fn::objectAssign($subtable_payload_instanceSettings_instanceSettings, { skipExists: true }));
+		} else if true {
+			fn::createInstanceSettings($recordID, { skipExists: true });
+		};
+	} else if type::is_object($subtable_instanceSettings) || $subtable_instanceSettings {
+		let $subtable_payload_instanceSettings_instanceSettings = if type::is_object($subtable_instanceSettings) { $subtable_instanceSettings } else if $subtable_instanceSettings = NONE || $subtable_instanceSettings = null { {} } else { { currencies: $subtable_instanceSettings } };
+		fn::createInstanceSettings($recordID, fn::objectAssign($subtable_payload_instanceSettings_instanceSettings, { skipExists: true }));
+	} else if true {
+		fn::createInstanceSettings($recordID, { skipExists: true });
+	};
+
 
 	return if $record {
 		return $record;
@@ -110,7 +142,7 @@ DEFINE FUNCTION OVERWRITE fn::updateInstance($InstanceID: any, $payload: object)
 
 -- ---------- EVENTS ----------
 
--- File: E_InstanceDelete.surql
+-- File: E_Instance.surql
 DEFINE EVENT OVERWRITE InstanceDelete ON TABLE instance WHEN $event = "DELETE" THEN {
   let $id = $before.id;
   if !$id {
@@ -122,7 +154,6 @@ DEFINE EVENT OVERWRITE InstanceDelete ON TABLE instance WHEN $event = "DELETE" T
   fn::deleteEdgeFromIn($id, 'Instances', false);
 };
 
--- File: E_InstancePostCreate.surql
 DEFINE EVENT OVERWRITE InstancePostCreate ON TABLE instance WHEN $event = "CREATE" THEN { let $RID = $after.id;
 if !type::is_record($RID) { throw "InstancePostCreate | invalid record id"; };
 
@@ -143,14 +174,12 @@ if($after.status == 'publish') {
   });
 } };
 
--- File: E_InstancePostDelete.surql
 DEFINE EVENT OVERWRITE InstancePostDelete ON TABLE instance WHEN $event = "DELETE" THEN { let $RID = $before.id;
 if !type::is_record($RID) { throw "InstancePostDelete | invalid record id"; };
 let $PID = fn::PID($RID);
 fn::deleteEdge($PID, "Post", $RID, { boundId: true });
-fn::deletePost($PID, { skipExists: true }) };
+fn::deletePost($PID) };
 
--- File: E_InstancePostUpdate.surql
 DEFINE EVENT OVERWRITE InstancePostUpdate ON TABLE instance WHEN $event = "UPDATE" THEN { let $RID = $after.id;
 if !type::is_record($RID) { throw "InstancePostUpdate | invalid record id"; };
 let $PID = fn::PID($RID);
@@ -168,7 +197,6 @@ if($after.status == "publish" and $before.status != "publish") {
   });
 } };
 
--- File: E_InstancesCreate.surql
 DEFINE EVENT OVERWRITE InstancesCreate ON TABLE instance WHEN $event = "CREATE" THEN { if (type::is_array($after.instances) and array::len($after.instances) > 0) {
   let $RID = $after.id;
   if !type::is_record($RID) { throw "InstancesCreate | invalid record id"; };
@@ -179,12 +207,10 @@ DEFINE EVENT OVERWRITE InstancesCreate ON TABLE instance WHEN $event = "CREATE" 
   };
 } };
 
--- File: E_InstancesDelete.surql
 DEFINE EVENT OVERWRITE InstancesDelete ON TABLE instance WHEN $event = "DELETE" THEN { let $RID = $before.id;
 if !type::is_record($RID) { throw "InstancesDelete | invalid record id"; };
 fn::clearEdgesForRecord($RID, "Instances") };
 
--- File: E_InstancesUpdate.surql
 DEFINE EVENT OVERWRITE InstancesUpdate ON TABLE instance WHEN $event = "UPDATE" THEN { if ($after.instances != $before.instances) {
   let $RID = $after.id;
   if !type::is_record($RID) { throw "InstancesUpdate | invalid record id"; };

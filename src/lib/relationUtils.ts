@@ -11,6 +11,7 @@ export type NormalizedRelation = {
   cardinality: 'one' | 'many';
   storeOnModel: boolean;
   payloadField: string;
+  linkOnCreate: boolean;
   required: boolean;
   requiredOnHook: boolean;
   processor: 'functions' | 'events' | 'none';
@@ -27,6 +28,7 @@ export type NormalizedRelation = {
 type RelationDefaults = {
   cardinality: 'one' | 'many';
   storeOnModel: boolean;
+  linkOnCreate: boolean;
   processor: 'functions' | 'events' | 'none';
   functionsEnabled: boolean;
 };
@@ -34,6 +36,7 @@ type RelationDefaults = {
 const DEFAULTS: RelationDefaults = {
   cardinality: 'many',
   storeOnModel: true,
+  linkOnCreate: true,
   processor: 'functions',
   functionsEnabled: true,
 };
@@ -98,6 +101,8 @@ function normalizeRelation(
 
   const cardinality = relation.cardinality ?? DEFAULTS.cardinality;
   const storeOnModel = relation.storeOnModel ?? DEFAULTS.storeOnModel;
+  const linkOnCreate =
+    typeof relation.linkOnCreate === 'boolean' ? relation.linkOnCreate : DEFAULTS.linkOnCreate;
   const processor = relation.processor ?? DEFAULTS.processor;
   const functionsEnabled =
     typeof relation.functions === 'boolean' ? relation.functions : DEFAULTS.functionsEnabled;
@@ -127,6 +132,7 @@ function normalizeRelation(
     cardinality,
     storeOnModel,
     payloadField,
+    linkOnCreate,
     required: relation.required ?? false,
     requiredOnHook: relation.requiredOnHook ?? false,
     processor,
@@ -163,6 +169,7 @@ function relationsEquivalent(a: NormalizedRelation, b: NormalizedRelation): bool
     a.cardinality === b.cardinality &&
     a.storeOnModel === b.storeOnModel &&
     a.payloadField === b.payloadField &&
+    a.linkOnCreate === b.linkOnCreate &&
     a.required === b.required &&
     a.requiredOnHook === b.requiredOnHook &&
     a.processor === b.processor &&
@@ -177,6 +184,7 @@ function formatRelation(rel: NormalizedRelation): string {
     `cardinality=${rel.cardinality}`,
     `storeOnModel=${rel.storeOnModel}`,
     `payloadField=${rel.payloadField}`,
+    `linkOnCreate=${rel.linkOnCreate}`,
     `required=${rel.required}`,
     `requiredOnHook=${rel.requiredOnHook}`,
     `processor=${rel.processor}`,

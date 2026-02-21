@@ -1,6 +1,6 @@
-<!-- <script setup lang="ts">
+<script setup lang="ts">
 import AppToaster from '#helios-admin/app/components/ui/AppToaster.client.vue'
-</script> -->
+</script>
 
 <template>
   <NuxtLayout>

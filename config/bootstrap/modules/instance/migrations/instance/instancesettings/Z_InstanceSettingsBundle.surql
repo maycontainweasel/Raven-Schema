@@ -5,14 +5,25 @@
 -- ---------- FUNCTIONS ----------
 
 -- File: F_createInstanceSettings.surql
-DEFINE FUNCTION OVERWRITE fn::createInstanceSettings($PARENT_ID: record<instance>, $payload: option<object>) {
+DEFINE FUNCTION OVERWRITE fn::createInstanceSettings($PARENT_ID: any, $payload: option<object>) {
 
 	let $payloadInput = if type::is_object($payload) {
 		$payload
+	} else if type::is_object($PARENT_ID) && !type::is_record($PARENT_ID) {
+		$PARENT_ID
 	} else {
 		{}
 	};
 
+	let $parentInput = if type::is_record($PARENT_ID) {
+		$PARENT_ID
+	} else if !type::is_object($PARENT_ID) && $PARENT_ID != NONE && $PARENT_ID != null && (!type::is_string($PARENT_ID) || string::len($PARENT_ID) > 0) {
+		$PARENT_ID
+	} else {
+		NONE
+	};
+
+	let $PARENT_ID = fn::ridParam("instance", $parentInput);
 	if !type::is_record($PARENT_ID) {
 		throw "createInstanceSettings | requires valid parent record";
 	};
@@ -127,7 +138,7 @@ DEFINE FUNCTION OVERWRITE fn::updateInstanceSettings($InstanceSettingsID: any, $
 
 -- ---------- EVENTS ----------
 
--- File: E_InstanceSettingsDelete.surql
+-- File: E_InstanceSettings.surql
 DEFINE EVENT OVERWRITE InstanceSettingsDelete ON TABLE instanceSettings WHEN $event = "DELETE" THEN {
   let $id = $before.id;
   if !$id {

@@ -15,6 +15,7 @@ import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList, mergeOverride
 import { normalizeConfigValue, writeGeneratedNuxtConfig } from '../lib/siteNuxtConfig';
 import { ensureSchemaKitModule } from '../lib/schemaKitModule';
 import { syncProjectLayers } from '../lib/layerSync';
+import { ensureHeliosAppScaffold } from './heliosBootstrap';
 
 interface SiteSpec {
   name: string;
@@ -217,6 +218,9 @@ export async function runSiteCreate(options: {
 
   if (spec.layers?.includes('admin-core')) {
     await writeAdminAppShell(targetPath);
+  }
+  if (spec.layers?.includes('helios')) {
+    await ensureHeliosAppScaffold(targetPath);
   }
 
   if (nginxAnswers && !nginxAnswers.skipNginxApply) {

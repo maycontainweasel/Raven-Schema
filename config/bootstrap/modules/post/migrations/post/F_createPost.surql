@@ -35,6 +35,18 @@ DEFINE FUNCTION OVERWRITE fn::createPost($payload: object) {
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
 
+	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+		$record.id
+	} else if type::is_record($record) {
+		$record
+	} else {
+		null
+	};
+
+	if !$recordID {
+		throw "createPost | failed to create p";
+	};
+
 	return if $record {
 		return $record;
 	} else {

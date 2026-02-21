@@ -590,6 +590,7 @@ export interface TableRelationConfig {
   cardinality?: 'one' | 'many';
   storeOnModel?: boolean;
   payloadField?: string;
+  linkOnCreate?: boolean;
   required?: boolean;
   requiredOnHook?: boolean;
   processor?: 'functions' | 'events' | 'none';

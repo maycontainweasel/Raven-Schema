@@ -15,6 +15,7 @@ type SettingsPanel =
   | 'directory'
   | 'typesense'
   | 'typesense-api'
+  | 'audit'
   | 'listing-fields'
   | 'directory-filters'
   | 'create-dialog'
@@ -32,6 +33,47 @@ type TypesenseModelAction =
   | 'inspectRecord'
   | 'addRecord'
   | 'removeRecord'
+
+type RuntimeAuditStatus = 'pass' | 'warn' | 'fail'
+
+type RuntimeAuditCheck = {
+  id: string
+  status: RuntimeAuditStatus
+  message: string
+  detail?: string
+  meta?: Record<string, any>
+}
+
+type RuntimeAuditGate = {
+  id: string
+  label: string
+  status: RuntimeAuditStatus
+  checks: RuntimeAuditCheck[]
+}
+
+type RuntimeAuditResponse = {
+  ok: boolean
+  status: RuntimeAuditStatus
+  model?: {
+    key?: string
+    table?: string
+    route?: string
+    source?: string
+    dataMode?: string
+    hasTypesense?: boolean
+    taxonomyKeys?: string[]
+    subtableKeys?: string[]
+  }
+  summary?: {
+    gates?: number
+    checks?: number
+    passed?: number
+    warned?: number
+    failed?: number
+    status?: RuntimeAuditStatus
+  }
+  gates?: RuntimeAuditGate[]
+}
 
 const route = useRoute()
 
@@ -54,6 +96,10 @@ const typesenseStart = ref('0')
 const typesenseServiceBusy = ref(false)
 const typesenseServiceStatus = ref<Record<string, any> | null>(null)
 const typesenseServiceError = ref('')
+const auditBusy = ref(false)
+const auditNotice = ref('')
+const auditError = ref('')
+const auditResult = ref<RuntimeAuditResponse | null>(null)
 const overrideBusy = ref(false)
 const overrideNotice = ref('')
 const overrideError = ref('')
@@ -95,6 +141,7 @@ const settingsSections = computed<{ id: SettingsPanel, label: string }[]>(() => 
   const sections: { id: SettingsPanel, label: string }[] = [
     { id: 'directory', label: 'Directory' },
     { id: 'typesense', label: 'Typesense' },
+    { id: 'audit', label: 'Runtime Audit' },
     { id: 'listing-fields', label: 'Listing Fields' },
     { id: 'directory-filters', label: 'Directory Filters' },
     { id: 'create-dialog', label: 'Create Dialog' },
@@ -166,6 +213,17 @@ const typesenseCollectionExists = computed(() => {
 })
 
 const hasTypesenseRecordId = computed(() => typesenseRecordId.value.trim().length > 0)
+const auditSummary = computed(() => auditResult.value?.summary ?? null)
+const auditGates = computed<RuntimeAuditGate[]>(() => {
+  return Array.isArray(auditResult.value?.gates) ? auditResult.value!.gates : []
+})
+const auditStatusClass = (status: RuntimeAuditStatus | string | undefined) => {
+  if (status === 'pass') return 'a-status--published'
+  if (status === 'warn') return 'a-status--review'
+  return 'a-status--draft'
+}
+const toUpperStatus = (status: RuntimeAuditStatus | string | undefined) =>
+  String(status || 'fail').trim().toUpperCase()
 const modelRequiredCreateKeys = computed(() => {
   const required = modelInfo.value?.requiredFields
   if (!Array.isArray(required)) return []
@@ -446,6 +504,31 @@ const runCreateSyncSmoke = async () => {
   }
 }
 
+const runRuntimeAudit = async () => {
+  auditBusy.value = true
+  auditNotice.value = ''
+  auditError.value = ''
+  apiConsole.maybeClearBeforeRun()
+  apiConsole.message(`REQUEST runtimeAudit model=${modelParam.value}`)
+
+  try {
+    const response = await $fetch<RuntimeAuditResponse>(`/api/models/runtime/${modelParam.value}/audit`)
+    auditResult.value = response
+    auditNotice.value = response.ok
+      ? 'Runtime audit passed without hard failures.'
+      : 'Runtime audit reported contract failures.'
+    apiConsole.success(response, 'Runtime audit completed.')
+  }
+  catch (apiError: any) {
+    const message = apiError?.data?.statusMessage ?? apiError?.message ?? 'Runtime audit failed.'
+    auditError.value = message
+    apiConsole.error({ error: message }, 'Runtime audit failed.')
+  }
+  finally {
+    auditBusy.value = false
+  }
+}
+
 const generateCreateDialogOverride = async (force = false) => {
   overrideBusy.value = true
   overrideError.value = ''
@@ -518,6 +601,9 @@ watch(
     typesenseActionResult.value = null
     typesenseServiceStatus.value = null
     typesenseServiceError.value = ''
+    auditNotice.value = ''
+    auditError.value = ''
+    auditResult.value = null
     overrideNotice.value = ''
     overrideError.value = ''
     overrideResult.value = null
@@ -1860,6 +1946,100 @@ const commitState = async () => {
             </div>
           </article>
 
+          <article v-else-if="activeSettingsPanel === 'audit'" class="a-card">
+            <div class="panel-row">
+              <h2 class="panel-title">Runtime Audit</h2>
+              <button
+                class="a-btn a-btn--subtle"
+                type="button"
+                :disabled="auditBusy"
+                @click="runRuntimeAudit"
+              >
+                {{ auditBusy ? 'Running…' : 'Run Audit' }}
+              </button>
+            </div>
+            <p class="a-copy smt-025">
+              File-first contract audit for this model. Validates spec shape, binding contracts, action routing,
+              and generated artifact wiring before runtime operations.
+            </p>
+
+            <div v-if="auditSummary" class="audit-summary smt-050">
+              <div class="audit-summary__status">
+                <span class="a-status" :class="auditStatusClass(auditSummary.status)">
+                  {{ toUpperStatus(auditSummary.status) }}
+                </span>
+              </div>
+
+              <div class="api-meta-grid smt-025">
+                <div class="file-item">
+                  <p class="a-eyebrow">Passed</p>
+                  <code>{{ Number(auditSummary.passed || 0) }}</code>
+                </div>
+                <div class="file-item">
+                  <p class="a-eyebrow">Warnings</p>
+                  <code>{{ Number(auditSummary.warned || 0) }}</code>
+                </div>
+                <div class="file-item">
+                  <p class="a-eyebrow">Failed</p>
+                  <code>{{ Number(auditSummary.failed || 0) }}</code>
+                </div>
+                <div class="file-item">
+                  <p class="a-eyebrow">Checks</p>
+                  <code>{{ Number(auditSummary.checks || 0) }} across {{ Number(auditSummary.gates || 0) }} gates</code>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="auditNotice" class="builder-notice smt-050">
+              {{ auditNotice }}
+            </p>
+            <p v-if="auditError" class="builder-notice is-error smt-050">
+              {{ auditError }}
+            </p>
+
+            <div v-if="auditResult" class="audit-workbench smt-050">
+              <div class="audit-workbench__gates">
+                <article
+                  v-for="gate in auditGates"
+                  :key="gate.id"
+                  class="audit-gate-card"
+                >
+                  <div class="audit-gate-card__head">
+                    <h3>{{ gate.label }}</h3>
+                    <span class="a-status" :class="auditStatusClass(gate.status)">
+                      {{ toUpperStatus(gate.status) }}
+                    </span>
+                  </div>
+
+                  <div class="audit-check-list">
+                    <div
+                      v-for="check in gate.checks"
+                      :key="`${gate.id}-${check.id}`"
+                      class="audit-check-item"
+                    >
+                      <span class="a-status" :class="auditStatusClass(check.status)">
+                        {{ toUpperStatus(check.status) }}
+                      </span>
+                      <div class="audit-check-item__body">
+                        <p>{{ check.message }}</p>
+                        <p v-if="check.detail" class="a-copy smt-025">{{ check.detail }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="audit-workbench__result">
+                <p class="a-eyebrow">Audit Payload</p>
+                <pre class="api-result">{{ JSON.stringify(auditResult, null, 2) }}</pre>
+              </div>
+            </div>
+
+            <p v-else class="a-copy smt-050">
+              Run audit to inspect this model’s runtime contract gates.
+            </p>
+          </article>
+
           <article v-else-if="activeSettingsPanel === 'listing-fields'" class="a-card">
             <div class="panel-row">
               <h2 class="panel-title">Directory Listing Fields</h2>
@@ -2906,7 +3086,22 @@ const commitState = async () => {
   gap: 0.42rem;
 }
 
+.audit-summary {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-muted);
+  padding: 0.62rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
 .typesense-summary__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.audit-summary__status {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
@@ -2919,12 +3114,29 @@ const commitState = async () => {
   align-items: start;
 }
 
+.audit-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  gap: 0.62rem;
+  align-items: start;
+}
+
 .typesense-workbench__steps {
   display: grid;
   gap: 0.52rem;
 }
 
+.audit-workbench__gates {
+  display: grid;
+  gap: 0.52rem;
+}
+
 .typesense-workbench__console {
+  position: sticky;
+  top: 0.72rem;
+}
+
+.audit-workbench__result {
   position: sticky;
   top: 0.72rem;
 }
@@ -2938,11 +3150,34 @@ const commitState = async () => {
   gap: 0.48rem;
 }
 
+.audit-gate-card {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-muted);
+  padding: 0.62rem;
+  display: grid;
+  gap: 0.48rem;
+}
+
 .typesense-step-card__head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.48rem;
   align-items: start;
+}
+
+.audit-gate-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.48rem;
+}
+
+.audit-gate-card__head h3 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: var(--fs--025, 0.94rem);
+  font-weight: 600;
 }
 
 .typesense-step-card__head h3 {
@@ -2970,6 +3205,22 @@ const commitState = async () => {
   color: var(--admin-brand-text);
   background: color-mix(in srgb, var(--admin-brand) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--admin-brand) 30%, transparent);
+}
+
+.audit-check-list {
+  display: grid;
+  gap: 0.36rem;
+}
+
+.audit-check-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.42rem;
+  align-items: flex-start;
+}
+
+.audit-check-item__body p {
+  margin: 0;
 }
 
 .api-result {
@@ -3300,7 +3551,15 @@ const commitState = async () => {
     grid-template-columns: 1fr;
   }
 
+  .audit-workbench {
+    grid-template-columns: 1fr;
+  }
+
   .typesense-workbench__console {
+    position: static;
+  }
+
+  .audit-workbench__result {
     position: static;
   }
 }

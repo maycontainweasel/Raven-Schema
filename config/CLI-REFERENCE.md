@@ -95,6 +95,15 @@ pnpm -C apps/schema run site:project:setup -- --project admin
 
 ## Other utilities
 
+- Helios standard setup (new app)
+  1. `pnpm -C apps/schema run site:create <name> -- --setup`
+  2. `pnpm -C apps/schema run site:layers:add <name> helios`
+  3. `pnpm -C apps/schema run site:helios:setup <name>`
+  4. Start the app and open `/helios`, then click **Commit** once per breakpoint.
+  Notes:
+  - `site:helios:setup` now ensures a safe root route by creating `app/pages/index.vue` with `/ -> /helios` redirect when missing.
+  - It also ensures `app/app.vue` is Nuxt page-shell compatible when the file is missing or still using `NuxtWelcome`.
+
 - `site:create [name]`  
   Generate a Nuxt app scaffold from a local template and write a site spec.  
   Examples:
@@ -107,6 +116,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - Merges `packageJson` from the site spec into `package.json` (arrays override, objects merge).
   - Writes `.env` and `.env.staging` when `env` is present in the site spec.
   - Writes `ecosystem.config.cjs` when `deploy.ecosystem` is present.
+  - If the site spec already includes `helios`, creates a safe root redirect (`/ -> /helios`) when missing.
   Flags:
   - `--nginx` run nginx setup
   - `--nginx-config` capture nginx settings without applying
@@ -204,6 +214,19 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   Examples:
   - `pnpm -C apps/schema run site:layers:add public scale-kit`
   - `pnpm -C apps/schema run site:layers:add public scale-kit,auth`
+  Notes:
+  - Adding `helios` now also creates a safe root redirect (`/ -> /helios`) when missing.
+  - After adding `helios`, run `site:helios:setup` to generate Helios setup fragments and Uno options.
+
+- `site:helios:setup [name]`
+  Add/configure the `helios` layer baseline and write Helios setup fragments.
+  Examples:
+  - `pnpm -C apps/schema run site:helios:setup target`
+  - `pnpm -C apps/schema run site:helios:setup -- --spec sites/target.yaml --yes`
+  Notes:
+  - Creates `app/helios/fragments/setup.json` and default `app/helios/fragments/type.json` if missing.
+  - Ensures `app/pages/index.vue` redirects `/` to `/helios` when no root page exists.
+  - Ensures `app/app.vue` uses a Nuxt page shell when missing or still on `NuxtWelcome`.
 
 - `site:layers:remove [name] <layers..>`  
   Remove layers from a site (use `--force` to remove `schema-core`).  

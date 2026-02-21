@@ -350,6 +350,7 @@ Options (defaults in parentheses):
 - `cardinality`: `one` | `many` (many)
 - `storeOnModel`: boolean (true)
 - `payloadField`: string (defaults to left model, pluralized if `many`)
+- `linkOnCreate`: boolean (true)
 - `required`: boolean (false)
 - `processor`: `functions` | `events` | `none` (functions)
 - `hook`: `left` | `right` | model name (defaults to the table where the relation is declared)
@@ -364,7 +365,7 @@ Attach/detach inputs:
 - Inputs are normalized via `fn::toRecordArray(model, values)` before relating.
 
 If `processor: functions`, CRUD functions on the hook model will:
-- create: attach all provided IDs
+- create: attach all provided IDs when `linkOnCreate` is `true`
 - update: delete existing edges, then reattach (if payload provided)
 - delete: remove all edges for the record
 

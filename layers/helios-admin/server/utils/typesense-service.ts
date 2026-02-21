@@ -98,7 +98,8 @@ export const getTypesenseClient = () => {
       },
     ],
     apiKey: config.apiKey,
-    connectionTimeoutSeconds: 2,
+    connectionTimeoutSeconds: 1,
+    numRetries: 0,
   })
   cachedKey = key
   return cachedClient

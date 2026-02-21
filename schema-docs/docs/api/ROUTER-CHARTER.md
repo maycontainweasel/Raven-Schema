@@ -169,6 +169,46 @@ const record = await $process('catapult.delete', {}, { instance: 'test' })
 - `catapult.typesense.collection` (query)
   - input: RequestSchema<typesense payload>
 
+### frame
+- CRUD: create, update, delete
+- Taxonomies:
+  - relations: attach, detach
+- Other: frame.relations.page.list
+
+Endpoints:
+- `frame.create` (mutation)
+  - fields: id (optional), label (optional), page (required), parent (optional), styles (optional)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('frame.create', {
+  "label": "",
+  "page": "",
+  "parent": "",
+  "styles": ""
+}, { instance: 'test' })
+```
+- `frame.update` (mutation)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('frame.update', {}, { instance: 'test' })
+```
+- `frame.delete` (mutation)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('frame.delete', {}, { instance: 'test' })
+```
+- `frame.relations.page.attach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `frame.relations.page.detach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `frame.relations.page.list` (query)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('frame.relations.page.list', {}, { instance: 'test' })
+```
+
 ### fruit
 - CRUD: create, update, delete
 - Taxonomies:
@@ -252,6 +292,93 @@ const record = await $process('fruit.subtables.fruitMeta.get', {}, { instance: '
   - input: RequestSchema<typesense payload>
 - `fruit.typesense.collection` (query)
   - input: RequestSchema<typesense payload>
+
+### page
+- CRUD: create, update, delete
+- Taxonomies:
+  - relations: attach, detach, attach, detach
+- Other: page.relations.frame.list, page.relations.site.list
+
+Endpoints:
+- `page.create` (mutation)
+  - fields: id (optional), title (optional), permalink (optional)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('page.create', {
+  "title": "",
+  "permalink": ""
+}, { instance: 'test' })
+```
+- `page.update` (mutation)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('page.update', {}, { instance: 'test' })
+```
+- `page.delete` (mutation)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('page.delete', {}, { instance: 'test' })
+```
+- `page.relations.frame.attach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `page.relations.frame.detach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `page.relations.frame.list` (query)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('page.relations.frame.list', {}, { instance: 'test' })
+```
+- `page.relations.site.attach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `page.relations.site.detach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `page.relations.site.list` (query)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('page.relations.site.list', {}, { instance: 'test' })
+```
+
+### site
+- CRUD: create, update, delete
+- Taxonomies:
+  - relations: attach, detach
+- Other: site.relations.page.list
+
+Endpoints:
+- `site.create` (mutation)
+  - fields: id (optional), key (required), name (required), description (optional)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('site.create', {
+  "key": "",
+  "name": "",
+  "description": ""
+}, { instance: 'test' })
+```
+- `site.update` (mutation)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('site.update', {}, { instance: 'test' })
+```
+- `site.delete` (mutation)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('site.delete', {}, { instance: 'test' })
+```
+- `site.relations.page.attach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `site.relations.page.detach` (mutation)
+  - data: { id: <record sub-id>, term: <term key> }
+- `site.relations.page.list` (query)
+  - fields: id (required)
+  ```ts
+const { $process } = useCRUD()
+const record = await $process('site.relations.page.list', {}, { instance: 'test' })
+```
 
 ### user
 - CRUD: create, update, delete

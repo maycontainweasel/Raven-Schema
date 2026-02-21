@@ -463,15 +463,6 @@ const buildUnoGenerated = (
     "    [/^mw-g-([\\d.]+)$/, ([, num]) => ({ 'max-width': `calc(100% - calc(var(--lh) * ${num}rem))` })],",
     "    [/^cg-([\\d.]+)$/, ([, num]) => ({ 'column-gap': `calc(var(--lh) * ${num}rem)` })],",
     "    [/^mx-a$/, () => ({ margin: '0 auto' })],",
-    "    [/^grid-cols-(\\d+)(px|em|rem|vw|vh)?$/, ([, minWidth, unit = 'px']) => ({ display: 'grid', 'grid-template-columns': `repeat(auto-fit, minmax(${minWidth}${unit}, 1fr))` })],",
-    "    [/^grid-cols-(\\d+)(px|em|rem|vw|vh)?-fit$/, ([, minWidth, unit = 'px']) => ({ display: 'grid', 'grid-template-columns': `repeat(auto-fit, minmax(${minWidth}${unit}, 1fr))` })],",
-    "    [/^grid-cols-(\\d+)(px|em|rem|vw|vh)?-fill$/, ([, minWidth, unit = 'px']) => ({ display: 'grid', 'grid-template-columns': `repeat(auto-fill, minmax(${minWidth}${unit}, 1fr))` })],",
-    "    [/^gc-(\\d+)(px|em|rem|vw|vh)?$/, ([, minWidth, unit = 'px']) => ({ display: 'grid', 'grid-template-columns': `repeat(auto-fit, minmax(${minWidth}${unit}, 1fr))` })],",
-    "    [/^gc-(\\d+)(px|em|rem|vw|vh)?-fit$/, ([, minWidth, unit = 'px']) => ({ display: 'grid', 'grid-template-columns': `repeat(auto-fit, minmax(${minWidth}${unit}, 1fr))` })],",
-    "    [/^gc-(\\d+)(px|em|rem|vw|vh)?-fill$/, ([, minWidth, unit = 'px']) => ({ display: 'grid', 'grid-template-columns': `repeat(auto-fill, minmax(${minWidth}${unit}, 1fr))` })],",
-    "    [/^gc-auto-fit$/, () => ({ display: 'grid', 'grid-template-columns': 'repeat(auto-fit, minmax(auto, 1fr))' })],",
-    "    [/^gc-auto$/, () => ({ display: 'grid', 'grid-template-columns': 'repeat(auto-fit, minmax(auto, 1fr))' })],",
-    "    [/^gc-auto-fill$/, () => ({ display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(auto, 1fr))' })],",
     '  ],',
     '  theme: {',
     '    breakpoints: heliosBreakpoints,',
@@ -633,6 +624,11 @@ const ensureUnoConfigBridge = async (rootDir: string): Promise<string[]> => {
   }
 
   if (source.includes(marker)) {
+    if (source.includes('globalThis._importMeta_.url')) {
+      const normalized = source.replaceAll('globalThis._importMeta_.url', 'import.meta.url')
+      await fs.writeFile(filePath, normalized, 'utf-8')
+      notes.push('Normalized uno.config.ts import.meta bridge token.')
+    }
     return notes
   }
 
@@ -643,6 +639,7 @@ const ensureUnoConfigBridge = async (rootDir: string): Promise<string[]> => {
   }
 
   let updated = source.replace(mergePattern, 'mergeConfigs([base, heliosGenerated, overrides])')
+  updated = updated.replaceAll('globalThis._importMeta_.url', 'import.meta.url')
 
   if (!updated.includes("const heliosPath = new URL('./app/helios/generated/uno.generated.ts', import.meta.url)")) {
     const insertBlock = [
