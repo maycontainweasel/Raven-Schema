@@ -10,6 +10,7 @@ import type {
   ModelUITabSpec,
   ModelUIWidgetSpec,
 } from '../../../types/model-spec'
+import FieldSectionCard from '#layers/helios-ui/app/components/fields/FieldSectionCard.vue'
 // Components are auto-imported from the active layer.
 
 type RuntimeRecordResponse = {

@@ -94,12 +94,19 @@ const directoryFilterBy = computed(() => {
   return statements.join(' && ')
 })
 
-const directoryQuery = computed(() => ({
-  limit: 250,
-  start: 0,
-  search: search.value.trim() || undefined,
-  filterBy: directoryFilterBy.value || undefined,
-}))
+const directoryEndpoint = computed(() => {
+  const params = new URLSearchParams()
+  params.set('limit', '250')
+  params.set('start', '0')
+
+  const query = search.value.trim()
+  if (query) params.set('search', query)
+
+  const filterBy = directoryFilterBy.value.trim()
+  if (filterBy) params.set('filterBy', filterBy)
+
+  return `/api/models/runtime/${modelParam.value}/directory?${params.toString()}`
+})
 
 const {
   data: directoryData,
@@ -107,10 +114,9 @@ const {
   error: directoryError,
   refresh: refreshDirectory,
 } = await useFetch<DirectoryRuntimeResponse>(
-  () => `/api/models/runtime/${modelParam.value}/directory`,
+  () => directoryEndpoint.value,
   {
-    query: directoryQuery,
-    watch: [modelParam, search, directoryFilterBy],
+    watch: [directoryEndpoint],
   },
 )
 

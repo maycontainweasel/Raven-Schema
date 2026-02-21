@@ -38,7 +38,8 @@ export default defineNuxtPlugin(() => {
       },
     ],
     apiKey,
-    connectionTimeoutSeconds: 2,
+    connectionTimeoutSeconds: 1,
+    numRetries: 0,
   })
 
   return {

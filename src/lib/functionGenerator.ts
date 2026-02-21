@@ -2531,6 +2531,8 @@ function resolveDefaultValue(meta: TableFieldMeta): string {
   }
 
   const primarySegment = meta.type?.split('|')[0]?.trim().toLowerCase() ?? 'string';
+  if (primarySegment === 'object') return '{}';
+  if (primarySegment === 'object[]') return '[]';
   if (primarySegment.startsWith('array')) return '[]';
   if (primarySegment === 'bool' || primarySegment === 'boolean') return 'false';
   if (primarySegment === 'int' || primarySegment === 'integer' || primarySegment === 'number' || primarySegment === 'float' || primarySegment === 'decimal') return '0';

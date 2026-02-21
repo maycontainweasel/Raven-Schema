@@ -177,13 +177,14 @@ const record = await $process('catapult.delete', {}, { instance: 'test' })
 
 Endpoints:
 - `frame.create` (mutation)
-  - fields: id (optional), label (optional), page (required), parent (optional), styles (optional)
+  - fields: id (optional), label (optional), page (required), parent (optional), order (optional), styles (optional)
   ```ts
 const { $process } = useCRUD()
 const record = await $process('frame.create', {
   "label": "",
   "page": "",
   "parent": "",
+  "order": 0,
   "styles": ""
 }, { instance: 'test' })
 ```

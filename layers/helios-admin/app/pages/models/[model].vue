@@ -9,6 +9,7 @@ import type {
   ModelUITabSpec,
   ModelUIWidgetSpec,
 } from '#helios-admin/app/types/model-spec'
+import FieldSectionCard from '#layers/helios-ui/app/components/fields/FieldSectionCard.vue'
 
 type BuilderRootTab = 'settings' | 'page-builder' | 'page-builder-2'
 type SettingsPanel =

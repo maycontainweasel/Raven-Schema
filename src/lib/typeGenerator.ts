@@ -248,6 +248,8 @@ function buildSingleType(typeSegment: string, field: NormalizedField): string {
   }
 
   if (lower === 'string') return 'z.string()';
+  if (lower === 'object') return 'z.record(z.any())';
+  if (lower === 'object[]') return 'z.array(z.record(z.any()))';
   if (lower === 'uuid' || lower.startsWith('uuid<')) return 'uuid_z';
   if (lower === 'bool' || lower === 'boolean') return 'z.boolean()';
   if (lower === 'int' || lower === 'integer') return 'z.number().int()';
