@@ -2894,7 +2894,9 @@ function buildRelations(table: TableAst, raw: string): any[] {
       processor: entry.processor,
       hook: entry.hook,
     };
-    if (entry.functions && Object.keys(entry.functions).length > 0) {
+    if (typeof entry.functions === 'boolean') {
+      out.functions = entry.functions;
+    } else if (entry.functions && Object.keys(entry.functions).length > 0) {
       out.functions = entry.functions;
     }
     return out;
@@ -2915,7 +2917,7 @@ function parseRelationEntries(
   required: boolean;
   processor: 'functions' | 'events' | 'none';
   hook: string;
-  functions?: Record<string, string>;
+  functions?: boolean | Record<string, string>;
 }> {
   const lines = mergeTaxonomyEntryLines(splitTopLevelLines(raw));
   const entries: Array<{
@@ -2929,7 +2931,7 @@ function parseRelationEntries(
     required: boolean;
     processor: 'functions' | 'events' | 'none';
     hook: string;
-    functions?: Record<string, string>;
+    functions?: boolean | Record<string, string>;
   }> = [];
 
   for (const rawLine of lines) {
@@ -2967,9 +2969,11 @@ function parseRelationEntries(
       typeof settings?.linkOnCreate === 'boolean' ? settings.linkOnCreate : true;
 
     const functions =
-      settings?.functions && typeof settings.functions === 'object'
+      typeof settings?.functions === 'boolean'
         ? settings.functions
-        : undefined;
+        : settings?.functions && typeof settings.functions === 'object'
+          ? settings.functions
+          : undefined;
 
     entries.push({
       edge,

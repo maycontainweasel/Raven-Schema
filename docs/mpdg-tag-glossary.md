@@ -125,6 +125,8 @@ Notes:
 - Relations can be declared on either table. Each declaration applies to the table where it appears.
   Edge tables + attach/detach helpers are still generated once per relation key.
 - CRUD functions can auto-attach/detach when `processor: functions`.
+- Set `functions: false` to skip relation helper functions (`attach*`, `detach*`, `get*`).
+  CRUD auto-linking still works via direct edge writes.
 - `storeOnModel: false` makes the payload field transient (not stored + not in base Zod schema + not in CRUD inputs).
 - `attach*` / `detach*` accept record IDs, strings, or arrays; inputs are normalized via `fn::toRecordArray`.
 

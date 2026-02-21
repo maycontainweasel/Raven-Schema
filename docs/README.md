@@ -97,6 +97,7 @@ It reads `layers.lock.json` when available, falling back to `layer.yaml` metadat
 - Relation edge runner builds Surreal relation tables from `edges.has` / `edges.belongs` definitions. Provide `table` to enforce a specific relation table name (e.g., `u_has_uSettings`); `in`/`out` default to the parent model when omitted, and unique indexes are added unless `unique: false`/`index: nonunique` is specified.
 - Automatic delete events now guard downstream views: when `post` or `delete` blocks are enabled (delete defaults on), cascade events clean up sub-table records via their generated CRUD functions and prune declared edges using the `deleteEdgeFromIn` / `deleteEdgeFromOut` helpers.
 - Edge helpers now provide a single, dynamic API for relation tables: `fn::createEdge`, `fn::updateEdge`, `fn::deleteEdge` (uses `INSERT RELATION` and supports bound IDs + optional payload data).
+- Relation helper wrappers are now optional per relation (`functions: false`). When disabled, CRUD relation processing still links/unlinks records using direct edge operations.
 - Taxonomy helpers now route through the generic API in `config/bootstrap/functions/utility/taxonomyTerms.surql` (`fn::createTerm`, `fn::removeTerm`, `fn::attachTerm`, `fn::detachTerm`, `fn::getTerms`, `fn::getRecordTerms`); per‑taxonomy functions are thin wrappers.
 - CRUD hooks + return modes: CRUD generators accept `hooks` (pre/post validate/process) and per-op `return` (`record`/`id`); update auto-injects a postProcess hook to call `fn::refreshRecordViews` when `refreshViews` is true, replacing the old refreshViews event.
 - Instance defaults: tables with the `instance` capability now default `instances` via `fn::defaultInstance({ returnArray: true })`, so callers can omit `instances` on single-instance apps.
@@ -219,6 +220,8 @@ pnpm run schema:bootstrap --force --database ph
 - Generated SURQL assets (tables, views, indexes, events, CRUD functions) now default to `DEFINE ... OVERWRITE` unless you explicitly set `mode: IF NOT EXISTS`, so database applies stay idempotent.
 - Asset imports support `--only-changed` (compare against `app:schemaAssets`) and `--force` to override; set `importFilters.onlyChanged: true` to default to only-changed imports.
 - `schema:import` and `schema:bootstrap` now rebuild indexes by default; pass `--no-rebuild-indexes` to skip.
+- For targeted function refreshes during relation/debug work, prefer explicit imports:
+  - `pnpm -C apps/schema run schema:import frame -- --database helios --layers functions --force`
 - You can also rebuild indexes manually with `pnpm run schema:indexes:rebuild` (add `--table` or a specific index name to scope).
 - `schema:assets:diff` now hashes files from disk by default so any manual edits are detected even if `schema-assets.json` is stale.
 - Router default names now use the table label in camelCase (e.g., `User` → `user`, `UserSettings` → `userSettings`), falling back to the table model if no label is set.

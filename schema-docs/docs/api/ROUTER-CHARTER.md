@@ -171,9 +171,6 @@ const record = await $process('catapult.delete', {}, { instance: 'test' })
 
 ### frame
 - CRUD: create, update, delete
-- Taxonomies:
-  - relations: attach, detach
-- Other: frame.relations.page.list
 
 Endpoints:
 - `frame.create` (mutation)
@@ -198,16 +195,6 @@ const record = await $process('frame.update', {}, { instance: 'test' })
   ```ts
 const { $process } = useCRUD()
 const record = await $process('frame.delete', {}, { instance: 'test' })
-```
-- `frame.relations.page.attach` (mutation)
-  - data: { id: <record sub-id>, term: <term key> }
-- `frame.relations.page.detach` (mutation)
-  - data: { id: <record sub-id>, term: <term key> }
-- `frame.relations.page.list` (query)
-  - fields: id (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('frame.relations.page.list', {}, { instance: 'test' })
 ```
 
 ### fruit
@@ -297,8 +284,8 @@ const record = await $process('fruit.subtables.fruitMeta.get', {}, { instance: '
 ### page
 - CRUD: create, update, delete
 - Taxonomies:
-  - relations: attach, detach, attach, detach
-- Other: page.relations.frame.list, page.relations.site.list
+  - relations: attach, detach
+- Other: page.relations.site.list
 
 Endpoints:
 - `page.create` (mutation)
@@ -320,16 +307,6 @@ const record = await $process('page.update', {}, { instance: 'test' })
   ```ts
 const { $process } = useCRUD()
 const record = await $process('page.delete', {}, { instance: 'test' })
-```
-- `page.relations.frame.attach` (mutation)
-  - data: { id: <record sub-id>, term: <term key> }
-- `page.relations.frame.detach` (mutation)
-  - data: { id: <record sub-id>, term: <term key> }
-- `page.relations.frame.list` (query)
-  - fields: id (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('page.relations.frame.list', {}, { instance: 'test' })
 ```
 - `page.relations.site.attach` (mutation)
   - data: { id: <record sub-id>, term: <term key> }

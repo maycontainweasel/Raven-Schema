@@ -156,6 +156,22 @@ We ship a simple **rsync-based** sync tool to copy selected files to one or more
   - `assign: true` + default present → defaults use `""`; assign step uses payload if present, else fallback default.
   - `assign: false` + non‑empty default → defaults use `type::record("model", <default>)`.
   - Empty defaults stay empty (no `type::record("model","")`).
+- Relations helper wrappers are optional:
+  - set `functions: false` in a relation block to skip `attach*`, `detach*`, `get*` helper generation.
+  - CRUD relation linking still runs (direct edge writes via `fn::createEdge(...)` and edge deletes).
+- For one-to-many parent links where create payload sends a single parent id (for example `frame.page`):
+  - use `cardinality: one`
+  - use `payloadField: page`
+  - keep `linkOnCreate: true` to auto-link after create.
+
+### Relation import/debug tip
+
+If runtime behavior looks stale after DSL changes, import functions explicitly to the intended DB:
+
+```bash
+pnpm -C apps/schema run schema:generate
+pnpm -C apps/schema run schema:import frame -- --database helios --layers functions --force
+```
 
 ## Event file mode
 

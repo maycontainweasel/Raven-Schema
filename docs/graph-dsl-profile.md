@@ -355,6 +355,8 @@ Options (defaults in parentheses):
 - `processor`: `functions` | `events` | `none` (functions)
 - `hook`: `left` | `right` | model name (defaults to the table where the relation is declared)
 - `functions`: boolean or object of function name overrides
+  - `functions: false` skips generation of `attach*/detach*/get*` relation helper functions.
+  - CRUD relation processing still works and uses direct `fn::createEdge(...)` / edge deletes.
 
 Generated helpers (default names):
 - `attach<Right><Left>()` / `detach<Right><Left>()`

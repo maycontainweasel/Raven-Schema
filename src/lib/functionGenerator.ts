@@ -1376,13 +1376,19 @@ function buildRelationNormalizationLines(
       if (mode === 'create') {
         lines.push(
           `\tlet ${payloadVar} = fn::objectAssign(${payloadVar}, {`,
-          `\t\t${field}: ${normVar}`,
+          `\t\t${field}: if type::is_array(${varName}) { ${normVar} } else { ${payloadVar}.${field} }`,
           `\t});`
         );
       } else {
         lines.push(
           `\tlet ${payloadVar} = fn::objectAssign(${payloadVar}, {`,
-          `\t\t${field}: if type::is_array(${varName}) || ${varName} { ${normVar} } else { ${payloadVar}.${field} }`,
+          `\t\t${field}: if type::is_array(${varName}) {`,
+          `\t\t\t${normVar}`,
+          `\t\t} else if ${varName} {`,
+          `\t\t\t${varName}`,
+          `\t\t} else {`,
+          `\t\t\t${payloadVar}.${field}`,
+          `\t\t}`,
           `\t});`
         );
       }
@@ -1424,16 +1430,16 @@ function buildRelationPostProcessLines(
         lines.push(
           `\tif type::is_array(${varName}) {`,
           `\t\tif array::len(${normVar}) > 1 {`,
-          `\t\t\tthrow "${relation.functions.attach} | expects single relation";`,
+          `\t\t\tthrow "${relationSingleRelationErrorLabel(relation)} | expects single relation";`,
           `\t\t};`,
           deleteLine,
           `\t\tif array::len(${normVar}) == 1 {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, array::first(${normVar}));`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           deleteLine,
           `\t\tif array::len(${normVar}) > 0 {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, array::first(${normVar}));`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
           `\t\t};`,
           `\t};`
         );
@@ -1442,12 +1448,12 @@ function buildRelationPostProcessLines(
           `\tif type::is_array(${varName}) {`,
           deleteLine,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, $rel);`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, '$rel')}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           deleteLine,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, $rel);`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, '$rel')}`,
           `\t\t};`,
           `\t};`
         );
@@ -1464,14 +1470,14 @@ function buildRelationPostProcessLines(
         lines.push(
           `\tif type::is_array(${normVar}) {`,
           `\t\tif array::len(${normVar}) > 1 {`,
-          `\t\t\tthrow "${relation.functions.attach} | expects single relation";`,
+          `\t\t\tthrow "${relationSingleRelationErrorLabel(relation)} | expects single relation";`,
           `\t\t};`,
           `\t\tif array::len(${normVar}) == 1 {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, array::first(${normVar}));`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tif array::len(${normVar}) > 0 {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, array::first(${normVar}));`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
           `\t\t};`,
           `\t};`
         );
@@ -1479,11 +1485,11 @@ function buildRelationPostProcessLines(
         lines.push(
           `\tif type::is_array(${normVar}) {`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, $rel);`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, '$rel')}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${relation.functions.attach}(${recordIdExpr}, $rel);`,
+          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, '$rel')}`,
           `\t\t};`,
           `\t};`
         );
@@ -1493,6 +1499,25 @@ function buildRelationPostProcessLines(
   }
 
   return lines;
+}
+
+function relationSingleRelationErrorLabel(relation: NormalizedRelation): string {
+  if (relation.functionsEnabled) {
+    return relation.functions.attach;
+  }
+  return `attach:${relation.edge}`;
+}
+
+function buildRelationAttachStatement(
+  relation: NormalizedRelation,
+  recordIdExpr: string,
+  leftRelationExpr: string
+): string {
+  if (relation.functionsEnabled) {
+    return `fn::${relation.functions.attach}(${recordIdExpr}, ${leftRelationExpr});`;
+  }
+  // When relation helper functions are disabled, CRUD hooks write edges directly.
+  return `fn::createEdge(${leftRelationExpr}, "${relation.edge}", ${recordIdExpr}, { boundId: true, overwrite: false, skipExists: true });`;
 }
 
 function taxonomyVarName(field: string): string {
