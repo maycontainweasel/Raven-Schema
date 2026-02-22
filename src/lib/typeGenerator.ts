@@ -68,7 +68,7 @@ export async function generateTableTypes(options: GenerateTypesOptions): Promise
     const lines: string[] = [ZOD_IMPORT];
 
     const coreImports = new Set<string>();
-    if (idBlocks?.schema) {
+    if (idBlocks?.schema || usesRecordField(filteredFields)) {
       coreImports.add('RecordID_z');
     }
     if (usesUuidField(filteredFields)) {
@@ -151,6 +151,15 @@ function usesUuidField(fields: NormalizedField[]): boolean {
     const hasUuid = typeof rawType === 'string' && rawType.toLowerCase().startsWith('uuid');
     if (hasUuid) return true;
     return field.children.length > 0 && usesUuidField(field.children);
+  });
+}
+
+function usesRecordField(fields: NormalizedField[]): boolean {
+  return fields.some((field) => {
+    const rawType = field.meta?.type;
+    const hasRecord = typeof rawType === 'string' && rawType.toLowerCase().includes('record<');
+    if (hasRecord) return true;
+    return field.children.length > 0 && usesRecordField(field.children);
   });
 }
 
@@ -269,7 +278,7 @@ function buildSingleType(typeSegment: string, field: NormalizedField): string {
   }
 
   if (lower.startsWith('record<')) {
-    return 'z.string()';
+    return 'z.union([z.string(), z.number(), RecordID_z])';
   }
 
   if (/[a-z0-9]+id$/i.test(typeSegment)) {

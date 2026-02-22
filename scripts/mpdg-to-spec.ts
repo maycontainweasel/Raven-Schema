@@ -433,6 +433,9 @@ function auditTable(table: TableAst, errors: AuditIssue[], warnings: AuditIssue[
 
     if (field.isId && field.idKind === 'field' && field.idSource) {
       const sourceKey = field.idSource.toLowerCase();
+      if (sourceKey === 'default') {
+        return;
+      }
       const stringIdMatch = sourceKey.match(/^stringid<(.+)>$/i);
       if (stringIdMatch && stringIdMatch[1]) {
         const rawArgs = stringIdMatch[1]
@@ -816,7 +819,9 @@ export function parseFields(body: string): FieldDef[] {
       const directRef = defaultToken.match(/^\$([a-zA-Z0-9_.]+)$/);
       if (directRef && directRef[1]) {
         const raw = directRef[1].trim();
-        if (raw.toLowerCase() === 'parent') {
+        if (raw.toLowerCase() === 'default') {
+          idKind = 'default';
+        } else if (raw.toLowerCase() === 'parent') {
           idKind = 'parent';
         } else {
           idKind = 'field';
@@ -2730,6 +2735,11 @@ function normalizeDataLocationSetting(value: unknown): 'local' | 'remote' | unde
 function buildSpec(t: TableAst): any {
   const idField = t.fields.find((f) => f.isId);
   const dataFields = t.fields.filter((f) => !f.isId);
+  const defaultIdConfig = {
+    type: 'string',
+    exportType: true,
+    exportName: `${toPascal(t.label)}Id`,
+  };
   const normalizedModelSettings = normalizeModelSettingsObject(t.modelSettings);
   const schemaTypeOverride = normalizeSchemaTypeSetting(normalizedModelSettings?.schemaType);
   const schemaModeOverride = schemaTypeOverride === 'schemafull' ? 'schemaful' : schemaTypeOverride;
@@ -2779,6 +2789,7 @@ function buildSpec(t: TableAst): any {
       schemaMode: schemaModeOverride ?? 'schemaless',
       permissions: 'full',
     },
+    id: defaultIdConfig,
   };
 
   if (normalizedModelSettings) {
@@ -2795,24 +2806,20 @@ function buildSpec(t: TableAst): any {
       if (parentModel) {
         out.structure = { type: 'parent', parentModel };
       }
-      out.id = { type: 'string', exportType: true, exportName: `${toPascal(t.label)}Id` };
+      out.id = defaultIdConfig;
     } else if (idField.idKind === 'field') {
       out.id = {
-        type: 'string',
+        ...defaultIdConfig,
         structure: idField.idSource,
-        exportType: true,
-        exportName: `${toPascal(t.label)}Id`,
       };
     } else if (idField.idKind === 'template') {
       out.id = {
-        type: 'string',
+        ...defaultIdConfig,
         structure: idField.idTemplate,
-        exportType: true,
-        exportName: `${toPascal(t.label)}Id`,
       };
     } else {
-    out.id = { type: 'string', exportType: true, exportName: `${toPascal(t.label)}Id` };
-  }
+      out.id = defaultIdConfig;
+    }
   }
 
   if (normalizedFields.length) {

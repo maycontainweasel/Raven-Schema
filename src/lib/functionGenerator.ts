@@ -461,6 +461,15 @@ function buildCreateFunctionContent(
   if (recordFieldNormalize.length > 0) {
     lines.push(...recordFieldNormalize, '');
   }
+  const recordFieldContracts = buildRecordFieldContractLines(
+    fields,
+    '$payload',
+    functionName,
+    requiredFields
+  );
+  if (recordFieldContracts.length > 0) {
+    lines.push(...recordFieldContracts, '');
+  }
 
   const relationCapture = buildRelationCaptureLines(relationHooks, '$payload');
   if (relationCapture.length > 0) {
@@ -665,6 +674,14 @@ function buildUpdateFunctionContent(
   const recordFieldNormalize = buildRecordFieldNormalizationLines(fields, payloadParam);
   if (recordFieldNormalize.length > 0) {
     lines.push(...recordFieldNormalize, '');
+  }
+  const recordFieldContracts = buildRecordFieldContractLines(
+    fields,
+    payloadParam,
+    functionName
+  );
+  if (recordFieldContracts.length > 0) {
+    lines.push(...recordFieldContracts, '');
   }
 
   if (enumValidations.length > 0) {
@@ -2041,6 +2058,15 @@ function buildSubtableCreateFunctionContent(
   if (recordFieldNormalize.length > 0) {
     lines.push(...recordFieldNormalize, '');
   }
+  const recordFieldContracts = buildRecordFieldContractLines(
+    fields,
+    '$payload',
+    functionName,
+    requiredFields
+  );
+  if (recordFieldContracts.length > 0) {
+    lines.push(...recordFieldContracts, '');
+  }
 
   const taxonomyCapture = buildTaxonomyCaptureLines(taxonomyHooks, '$payload');
   if (taxonomyCapture.length > 0) {
@@ -2782,6 +2808,57 @@ function buildRecordValueMissingExpression(valueExpr: string): string {
 function buildRecordValueNormalizationExpression(recordModel: string, valueExpr: string): string {
   const missingExpr = buildRecordValueMissingExpression(valueExpr);
   return `if type::is_array(${valueExpr}) { ${valueExpr} } else if ${missingExpr} { ${valueExpr} } else { fn::ridParam("${recordModel}", ${valueExpr}) }`;
+}
+
+function buildRecordFieldContractLines(
+  fields: NormalizedField[],
+  payloadVar: string,
+  functionName: string,
+  requiredFields: readonly string[] = []
+): string[] {
+  const lines: string[] = [];
+  const requiredSet = new Set(requiredFields);
+
+  for (const field of fields) {
+    const recordModel = extractRecordModel(field.meta.type);
+    if (!recordModel) continue;
+    if (isRecordCollectionType(field.meta.type)) continue;
+
+    const accessor = `${payloadVar}.${field.name}`;
+    const missingExpr = buildRecordValueMissingExpression(accessor);
+    const invalidRecordExpr = `!type::is_record(${accessor}) || !record::exists(${accessor})`;
+    const isRequired = field.meta.required === true || requiredSet.has(field.name);
+
+    if (isRequired) {
+      lines.push(
+        `\tif !(${missingExpr}) && (${invalidRecordExpr}) {`,
+        `\t\tthrow "${functionName} | ${field.name} must reference an existing ${recordModel} record";`,
+        `\t};`
+      );
+      continue;
+    }
+
+    const objectKey = formatObjectKey(field.name);
+    lines.push(
+      `\tlet ${payloadVar} = if !(${missingExpr}) && (${invalidRecordExpr}) {`,
+      `\t\tfn::objectAssign(${payloadVar}, {`,
+      `\t\t\t${objectKey}: NONE,`,
+      `\t\t})`,
+      `\t} else {`,
+      `\t\t${payloadVar}`,
+      `\t};`
+    );
+  }
+
+  return lines;
+}
+
+function isRecordCollectionType(typeValue?: string): boolean {
+  if (!typeValue) return false;
+  const compact = typeValue.replace(/\s+/g, '').toLowerCase();
+  if (compact.startsWith('array<record<')) return true;
+  if (compact.startsWith('set<record<')) return true;
+  return /record<[^>]+>\[\]$/.test(compact);
 }
 
 function buildExplicitAssignOverrides(
