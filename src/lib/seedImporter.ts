@@ -87,6 +87,8 @@ export async function importSeeds(
 
     if (options.onlyChanged && importedCount === 0) {
       console.log('ℹ️  No changed seed files to import (only-changed enabled).');
+    } else if (importedCount > 0) {
+      await tryInitTaxonomies(db, databaseKey);
     }
   } finally {
     await db.close();
@@ -103,3 +105,21 @@ async function fileExists(p: string): Promise<boolean> {
 }
 
 // Uses connectSurreal helper.
+
+async function tryInitTaxonomies(db: Awaited<ReturnType<typeof connectSurreal>>, databaseKey: string): Promise<void> {
+  try {
+    await db.query('RETURN fn::initTaxonomies();');
+    console.log(`🧬 Taxonomies initialized for "${databaseKey}".`);
+  } catch (error: any) {
+    const message = String(error?.message ?? error ?? '');
+    if (
+      message.toLowerCase().includes('inittaxonomies') ||
+      message.toLowerCase().includes('function') ||
+      message.toLowerCase().includes('does not exist')
+    ) {
+      console.warn(`⚠️  Skipping taxonomy init for "${databaseKey}": ${message}`);
+      return;
+    }
+    throw error;
+  }
+}

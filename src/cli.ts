@@ -49,7 +49,7 @@ import { scaffoldContextOverrides } from './lib/contextScaffold';
 import { importSurqlAssets } from './lib/surqlImporter';
 import { importModules } from './lib/modulesImporter';
 import { resolveModulesConfig } from './lib/configLoader';
-import { runBootstrapFunctions } from './lib/bootstrapRunner';
+import { runBootstrapFunctions, runBootstrapTables } from './lib/bootstrapRunner';
 import { rebuildIndexes } from './lib/indexRebuilder';
 import { generateModules } from './cli/moduleGenerate';
 import { runSiteCreate } from './cli/siteCreate';
@@ -4528,6 +4528,7 @@ export type AppRouter = typeof appRouter
       const schemaOverrides = { functions: schemaOverridesRoot };
       const schemaFileFilters = bundle.app.importFilters?.files;
       const schemaCleanupFilters = bundle.app.importFilters?.cleanup;
+      const modelsManifestPath = resolveCanonicalModelsManifestPath(bundle.app, projectRoot);
 
       const successes: string[] = [];
       const failures: Array<{ name: string; error: unknown }> = [];
@@ -4551,6 +4552,18 @@ export type AppRouter = typeof appRouter
                 },
             { dryRun: Boolean(args['dry-run']), onExisting, assetTracking: { projectRoot, trackSeeds: false }, onlyChanged },
             path.resolve(projectRoot, 'config', 'bootstrap', 'functions')
+          );
+
+          // Ensure all model/taxonomy tables exist before seed/runtime usage.
+          await runBootstrapTables(
+            target.config,
+            bundle.imports?.bootstrap?.tables,
+            {
+              dryRun: Boolean(args['dry-run']),
+              manifestPath: modelsManifestPath,
+              tables: schemaFunctionTables,
+              projectRoot,
+            }
           );
 
           // Modules
@@ -6342,6 +6355,14 @@ function warnMissingCrudOrRouter(tables: TableMigrationConfig[]): void {
   if (missing.length === 0) return;
   const list = missing.map((t) => t.name || t.table?.model || 'table').join(', ');
   console.warn(`⚠️  No CRUD/router defined for: ${list}. Generation may emit only partial assets.`);
+}
+
+function resolveCanonicalModelsManifestPath(app: AppConfig, projectRoot: string): string {
+  const output = app.modelsExport?.output;
+  const modelsTsPath = output
+    ? (path.isAbsolute(output) ? output : path.resolve(projectRoot, output))
+    : path.resolve(projectRoot, 'config', 'generated', 'models.ts');
+  return path.join(path.dirname(modelsTsPath), 'models.manifest.json');
 }
 
 interface DatabaseTarget {

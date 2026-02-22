@@ -7,6 +7,7 @@ import type {
   BootstrapFunctionImports,
   BootstrapTableImports,
   OnExistingMode,
+  TableMigrationConfig,
 } from '../types';
 import type { AssetTrackingOptions } from './assetTracker';
 import { createAssetTracker, DEFAULT_ASSET_RECORD_ID } from './assetTracker';
@@ -19,6 +20,9 @@ export interface BootstrapOptions {
   onExisting?: OnExistingMode;
   assetTracking?: AssetTrackingOptions;
   onlyChanged?: boolean;
+  manifestPath?: string;
+  tables?: TableMigrationConfig[];
+  projectRoot?: string;
 }
 
 export async function runBootstrapFunctions(
@@ -146,11 +150,386 @@ export async function runBootstrapFunctions(
 }
 
 export async function runBootstrapTables(
-  _database: AppDatabaseConfig,
-  _config: BootstrapTableImports | undefined,
-  _options: BootstrapOptions = {}
+  database: AppDatabaseConfig,
+  config: BootstrapTableImports | undefined,
+  options: BootstrapOptions = {}
 ): Promise<void> {
-  console.log('ℹ️  Bootstrap tables processing is not yet implemented.');
+  const manifestPath = options.manifestPath ?? resolve(process.cwd(), 'config', 'generated', 'models.manifest.json');
+  const projectRoot = options.projectRoot ?? process.cwd();
+  const includeModels = normalizeIncludeModels(config?.files);
+
+  const manifestDefinitions = await loadManifestBootstrapTables(manifestPath);
+  const fallbackDefinitions = buildFallbackBootstrapTables(options.tables ?? []);
+  const merged = mergeBootstrapTableDefinitions([
+    ...manifestDefinitions,
+    ...fallbackDefinitions,
+  ]);
+  const filtered = filterBootstrapTables(merged, includeModels);
+
+  if (filtered.length === 0) {
+    console.log('ℹ️  No bootstrap tables resolved; skipping.');
+    return;
+  }
+
+  if (options.dryRun) {
+    for (const table of filtered) {
+      console.log(`[dry-run] ${buildDefineTableStatement(table)}`);
+    }
+    return;
+  }
+
+  const db = await connectSurreal(database);
+  try {
+    for (const table of filtered) {
+      const statement = buildDefineTableStatement(table);
+      await db.query(statement);
+      console.log(`✅ Ensured table ${table.model} (${table.type.toUpperCase()}, ${table.schemaType.toUpperCase()})`);
+    }
+  } finally {
+    await db.close();
+  }
+
+  const manifestRelative = normalizeRelativePath(projectRoot, manifestPath);
+  console.log(`🧱 Bootstrap tables ensured (${filtered.length}) using ${manifestRelative}`);
+}
+
+type BootstrapSchemaType = 'schemaless' | 'schemafull';
+
+interface BootstrapTableDefinition {
+  model: string;
+  type: string;
+  schemaType: BootstrapSchemaType;
+  permissions: string;
+  in?: string;
+  out?: string;
+}
+
+interface ManifestModelBootstrap {
+  ensureTable?: boolean;
+  tableDefinition?: {
+    model?: string;
+    type?: string;
+    schemaType?: string;
+    permissions?: string;
+    in?: string;
+    out?: string;
+  };
+  taxonomyTables?: Array<{
+    model?: string;
+    type?: string;
+    schemaType?: string;
+    permissions?: string;
+    in?: string;
+    out?: string;
+  }>;
+  taxonomyEdges?: Array<{
+    model?: string;
+    type?: string;
+    schemaType?: string;
+    permissions?: string;
+    in?: string;
+    out?: string;
+  }>;
+}
+
+interface CanonicalModelsManifest {
+  bootstrapTables?: Array<{
+    model?: string;
+    type?: string;
+    schemaType?: string;
+    permissions?: string;
+    in?: string;
+    out?: string;
+  }>;
+  models?: Record<string, { bootstrap?: ManifestModelBootstrap }>;
+}
+
+async function loadManifestBootstrapTables(manifestPath: string): Promise<BootstrapTableDefinition[]> {
+  try {
+    const raw = await readFile(manifestPath, 'utf-8');
+    const parsed = JSON.parse(raw) as CanonicalModelsManifest;
+
+    if (Array.isArray(parsed.bootstrapTables) && parsed.bootstrapTables.length > 0) {
+      return parsed.bootstrapTables
+        .map((entry) => normalizeBootstrapTableDefinition(entry))
+        .filter((entry): entry is BootstrapTableDefinition => Boolean(entry));
+    }
+
+    const fromModels: BootstrapTableDefinition[] = [];
+    const models = parsed.models ?? {};
+    for (const modelEntry of Object.values(models)) {
+      const bootstrap = modelEntry?.bootstrap;
+      if (!bootstrap || bootstrap.ensureTable === false) continue;
+      if (bootstrap.tableDefinition) {
+        const normalized = normalizeBootstrapTableDefinition(bootstrap.tableDefinition);
+        if (normalized) fromModels.push(normalized);
+      }
+      for (const taxonomyTable of bootstrap.taxonomyTables ?? []) {
+        const normalized = normalizeBootstrapTableDefinition(taxonomyTable);
+        if (normalized) fromModels.push(normalized);
+      }
+      for (const taxonomyEdge of bootstrap.taxonomyEdges ?? []) {
+        const normalized = normalizeBootstrapTableDefinition(taxonomyEdge);
+        if (normalized) fromModels.push(normalized);
+      }
+    }
+
+    return fromModels;
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') {
+      console.warn(`⚠️  Failed reading models manifest at ${manifestPath}:`, error?.message ?? error);
+    }
+    return [];
+  }
+}
+
+function buildFallbackBootstrapTables(tables: TableMigrationConfig[]): BootstrapTableDefinition[] {
+  const definitions: BootstrapTableDefinition[] = [];
+  if (tables.length === 0) {
+    return definitions;
+  }
+
+  definitions.push({
+    model: 'app',
+    type: 'NORMAL',
+    schemaType: 'schemaless',
+    permissions: 'full',
+  });
+
+  for (const table of tables) {
+    const tableModel = sanitizeIdentifier(table.table?.model ?? '');
+    if (!tableModel) continue;
+
+    const ensureTable = resolveEnsureTableSetting(table);
+    if (ensureTable) {
+      definitions.push({
+        model: tableModel,
+        type: String(table.table?.type ?? 'NORMAL').trim().toUpperCase() || 'NORMAL',
+        schemaType: resolveSchemaType(table),
+        permissions: String(table.table?.permissions ?? 'full').trim().toLowerCase() || 'full',
+      });
+    }
+
+    for (const relation of table.relations ?? []) {
+      const edge = sanitizeIdentifier(relation.edge ?? '');
+      const left = sanitizeIdentifier(relation.left ?? '');
+      const right = sanitizeIdentifier(relation.right ?? '');
+      if (!edge || !left || !right) continue;
+      definitions.push({
+        model: edge,
+        type: 'RELATION',
+        schemaType: 'schemafull',
+        permissions: 'full',
+        in: left,
+        out: right,
+      });
+    }
+
+    const tableLabel = toPascalCase(table.name || tableModel);
+    for (const taxonomy of table.taxonomies ?? []) {
+      const taxonomyKey = sanitizeIdentifier(taxonomy.key ?? '');
+      if (!taxonomyKey) continue;
+
+      const taxonomyModel = sanitizeIdentifier(taxonomy.taxonomy?.model ?? 'tax');
+      const termModel = sanitizeIdentifier(
+        taxonomy.term?.model ?? `t_${sanitizeIdentifier(tableModel).toLowerCase()}_${taxonomyKey.toLowerCase()}`
+      );
+
+      if (taxonomyModel) {
+        definitions.push({
+          model: taxonomyModel,
+          type: 'NORMAL',
+          schemaType: 'schemaless',
+          permissions: 'full',
+        });
+      }
+
+      if (termModel) {
+        definitions.push({
+          model: termModel,
+          type: 'NORMAL',
+          schemaType: 'schemaless',
+          permissions: 'full',
+        });
+      }
+
+      const defaultTaxonomyToTerms = sanitizeIdentifier(`${tableLabel}${toPascalCase(taxonomyKey)}Terms`);
+      const defaultRecordToTerm = sanitizeIdentifier(`${tableLabel}${toPascalCase(taxonomyKey)}s`);
+      const edgeTaxonomyToTerm = sanitizeIdentifier(
+        taxonomy.edges?.taxonomyToTerms ?? defaultTaxonomyToTerms
+      );
+      const edgeRecordToTerm = sanitizeIdentifier(
+        taxonomy.edges?.recordToTerm ?? defaultRecordToTerm
+      );
+
+      if (edgeTaxonomyToTerm && taxonomyModel && termModel) {
+        definitions.push({
+          model: edgeTaxonomyToTerm,
+          type: 'RELATION',
+          schemaType: 'schemafull',
+          permissions: 'full',
+          in: taxonomyModel,
+          out: termModel,
+        });
+      }
+
+      if (edgeRecordToTerm && tableModel && termModel) {
+        definitions.push({
+          model: edgeRecordToTerm,
+          type: 'RELATION',
+          schemaType: 'schemafull',
+          permissions: 'full',
+          in: tableModel,
+          out: termModel,
+        });
+      }
+    }
+  }
+
+  return definitions;
+}
+
+function resolveEnsureTableSetting(table: TableMigrationConfig): boolean {
+  const modelSettings = (table as any).modelSettings;
+  if (
+    modelSettings &&
+    typeof modelSettings === 'object' &&
+    modelSettings.bootstrap &&
+    typeof modelSettings.bootstrap === 'object' &&
+    typeof modelSettings.bootstrap.ensureTable === 'boolean'
+  ) {
+    return modelSettings.bootstrap.ensureTable;
+  }
+  return true;
+}
+
+function resolveSchemaType(table: TableMigrationConfig): BootstrapSchemaType {
+  const modelSettings = (table as any).modelSettings;
+  const configuredSchemaType = String(modelSettings?.schemaType ?? '').trim().toLowerCase();
+  if (configuredSchemaType === 'schemafull' || configuredSchemaType === 'schemaful') {
+    return 'schemafull';
+  }
+
+  const schemaMode = String(table.table?.schemaMode ?? '').trim().toLowerCase();
+  if (schemaMode === 'schemaful' || schemaMode === 'schemafull') {
+    return 'schemafull';
+  }
+
+  return 'schemaless';
+}
+
+function normalizeBootstrapTableDefinition(
+  value: {
+    model?: string;
+    type?: string;
+    schemaType?: string;
+    permissions?: string;
+    in?: string;
+    out?: string;
+  }
+): BootstrapTableDefinition | null {
+  const model = sanitizeIdentifier(value.model ?? '');
+  if (!model) return null;
+
+  const type = String(value.type ?? 'NORMAL').trim().toUpperCase() || 'NORMAL';
+  const schemaRaw = String(value.schemaType ?? 'schemaless').trim().toLowerCase();
+  const schemaType: BootstrapSchemaType =
+    schemaRaw === 'schemafull' || schemaRaw === 'schemaful' ? 'schemafull' : 'schemaless';
+  const permissions = String(value.permissions ?? 'full').trim().toLowerCase() || 'full';
+  const inModel = sanitizeIdentifier(value.in ?? '');
+  const outModel = sanitizeIdentifier(value.out ?? '');
+
+  return {
+    model,
+    type,
+    schemaType,
+    permissions,
+    ...(inModel ? { in: inModel } : {}),
+    ...(outModel ? { out: outModel } : {}),
+  };
+}
+
+function mergeBootstrapTableDefinitions(
+  entries: BootstrapTableDefinition[]
+): BootstrapTableDefinition[] {
+  const byTable = new Map<string, BootstrapTableDefinition>();
+
+  for (const entry of entries) {
+    const key = entry.model.toLowerCase();
+    const existing = byTable.get(key);
+    if (!existing) {
+      byTable.set(key, entry);
+      continue;
+    }
+
+    const merged: BootstrapTableDefinition = {
+      model: existing.model,
+      type: existing.type === 'RELATION' || entry.type !== 'RELATION' ? existing.type : 'RELATION',
+      schemaType:
+        existing.schemaType === 'schemafull' || entry.schemaType !== 'schemafull'
+          ? existing.schemaType
+          : 'schemafull',
+      permissions: existing.permissions || entry.permissions || 'full',
+      ...(existing.in ? { in: existing.in } : entry.in ? { in: entry.in } : {}),
+      ...(existing.out ? { out: existing.out } : entry.out ? { out: entry.out } : {}),
+    };
+
+    byTable.set(key, merged);
+  }
+
+  return Array.from(byTable.values()).sort((a, b) => a.model.localeCompare(b.model));
+}
+
+function filterBootstrapTables(
+  entries: BootstrapTableDefinition[],
+  includeModels: Set<string> | null
+): BootstrapTableDefinition[] {
+  if (!includeModels || includeModels.size === 0) return entries;
+  return entries.filter((entry) => includeModels.has(entry.model.toLowerCase()));
+}
+
+function buildDefineTableStatement(entry: BootstrapTableDefinition): string {
+  const schemaMode = entry.schemaType === 'schemafull' ? 'SCHEMAFULL' : 'SCHEMALESS';
+  const tableType = String(entry.type || 'NORMAL').trim().toUpperCase() || 'NORMAL';
+  const permissions = String(entry.permissions || 'full').trim().toUpperCase() || 'FULL';
+
+  if (tableType === 'RELATION') {
+    const inModel = sanitizeIdentifier(entry.in ?? '') || 'record';
+    const outModel = sanitizeIdentifier(entry.out ?? '') || 'record';
+    return `DEFINE TABLE IF NOT EXISTS ${entry.model} ${schemaMode} TYPE RELATION IN ${inModel} OUT ${outModel} PERMISSIONS ${permissions};`;
+  }
+
+  return `DEFINE TABLE IF NOT EXISTS ${entry.model} ${schemaMode} TYPE ${tableType} PERMISSIONS ${permissions};`;
+}
+
+function normalizeIncludeModels(files?: string[]): Set<string> | null {
+  if (!files || files.length === 0) return null;
+  const normalized = files
+    .map((entry) => parse(entry).name.trim().toLowerCase())
+    .filter(Boolean);
+  return normalized.length > 0 ? new Set(normalized) : null;
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('');
+}
+
+function sanitizeIdentifier(value: string): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normalizeRelativePath(projectRoot: string, targetPath: string): string {
+  const rel = targetPath.startsWith(projectRoot) ? targetPath.slice(projectRoot.length + 1) : targetPath;
+  return rel || targetPath;
 }
 
 async function collectSurqlFiles(
