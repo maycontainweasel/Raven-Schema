@@ -497,6 +497,7 @@ export interface TableMigrationConfig {
   taxonomies?: TableTaxonomyConfig[];
   relations?: TableRelationConfig[];
   admin?: TableAdminConfig;
+  modelSettings?: TableModelSettingsConfig;
   bundle?: boolean;
   __filePath?: string;
 }
@@ -510,6 +511,50 @@ export interface TableAdminConfig {
    * Where the data is sourced for admin operations.
    */
   data?: 'local' | 'remote';
+  /**
+   * Enable/disable model exposure in admin tooling.
+   */
+  enabled?: boolean;
+}
+
+export interface TableModelSettingsConfig {
+  /**
+   * Preferred schema mode used to define this table.
+   */
+  schemaType?: 'schemaless' | 'schemafull' | 'schemaful';
+  /**
+   * Model data location mode for app consumers.
+   */
+  dataLocation?: 'local' | 'remote';
+  /**
+   * Bootstrap-specific table options.
+   */
+  bootstrap?: {
+    /**
+     * When false, bootstrap table ensure/create should be skipped.
+     */
+    ensureTable?: boolean;
+    /**
+     * Optional custom permissions metadata consumed by runtime tooling.
+     */
+    permissions?: Record<string, unknown>;
+  };
+  /**
+   * Admin model toggles.
+   */
+  admin?: {
+    enabled?: boolean;
+  };
+  /**
+   * Typesense model toggles.
+   */
+  typesense?: {
+    enabled?: boolean;
+  };
+  /**
+   * Forward-compatible custom settings passthrough.
+   */
+  [key: string]: unknown;
 }
 
 export interface TypesenseDefinition {

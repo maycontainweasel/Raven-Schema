@@ -228,6 +228,10 @@ const GENERATED_ADMIN_MANIFEST_FILES = [
   'modules/schema-kit/runtime/generated/admin-models.json',
   './modules/schema-kit/runtime/generated/admin-models.json',
 ]
+const GENERATED_CANONICAL_MANIFEST_FILES = [
+  'modules/schema-kit/runtime/generated/models.manifest.json',
+  './modules/schema-kit/runtime/generated/models.manifest.json',
+]
 
 const ensureUnique = <T>(values: T[]) => Array.from(new Set(values))
 
@@ -1073,6 +1077,7 @@ type GeneratedAdminManifestEntry = {
   key: string
   table: string
   dataMode: ModelDataMode
+  adminEnabled: boolean
   capabilities: string[]
   hasTypesense: boolean
   typesenseCollection: string | null
@@ -1099,9 +1104,27 @@ type GeneratedAdminManifestDocument = {
   models?: Record<string, any>
 }
 
+type GeneratedCanonicalManifestDocument = {
+  manifestVersion?: string
+  generatedAt?: string
+  models?: Record<string, any>
+}
+
 const resolveGeneratedAdminManifestFile = async (cwd = process.cwd()) => {
   const candidates = ensureUnique(
     GENERATED_ADMIN_MANIFEST_FILES.map(candidate => resolve(cwd, candidate)),
+  )
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) return candidate
+  }
+
+  return null
+}
+
+const resolveGeneratedCanonicalManifestFile = async (cwd = process.cwd()) => {
+  const candidates = ensureUnique(
+    GENERATED_CANONICAL_MANIFEST_FILES.map(candidate => resolve(cwd, candidate)),
   )
 
   for (const candidate of candidates) {
@@ -1145,6 +1168,140 @@ const normalizeGeneratedSubtableActions = (
   }
 }
 
+const normalizeGeneratedManifestEntry = (
+  entryKey: string,
+  modelValue: Record<string, any>,
+): GeneratedAdminManifestEntry | null => {
+  const key = normalizeModelKey(String(modelValue.key ?? entryKey))
+  const table = normalizeModelKey(String(modelValue.table ?? ''))
+  if (!key || !table) return null
+
+  const dataModeRaw = String(modelValue.data ?? modelValue.dataMode ?? '').trim().toLowerCase()
+  const dataMode: ModelDataMode = dataModeRaw === 'remote' ? 'remote' : 'local'
+
+  const fields = ensureUnique(safeArray(modelValue.fields).map(normalizeModelKey).filter(Boolean))
+  const requiredFields = ensureUnique(safeArray(modelValue.requiredFields).map(normalizeModelKey).filter(Boolean))
+  const capabilities = ensureUnique(safeArray(modelValue.capabilities).map(normalizeModelKey).filter(Boolean))
+
+  const typesenseRaw = modelValue.typesense && typeof modelValue.typesense === 'object'
+    ? modelValue.typesense as Record<string, any>
+    : {}
+  const hasTypesense = Boolean(typesenseRaw.enabled ?? modelValue.hasTypesense)
+  const typesenseCollectionRaw = String(
+    typesenseRaw.collection ?? modelValue.typesenseCollection ?? '',
+  ).trim()
+  const typesenseCollection = hasTypesense ? (typesenseCollectionRaw || table) : null
+  const typesenseFields = ensureUnique(
+    safeArray(typesenseRaw.fields ?? modelValue.typesenseFields)
+      .map(normalizeModelKey)
+      .filter(Boolean),
+  )
+
+  const taxonomyKeys = ensureUnique(
+    safeArray(modelValue.taxonomyKeys).map(normalizeModelKey).filter(Boolean),
+  )
+  const subtableKeys = ensureUnique(
+    safeArray(modelValue.subtableKeys).map(toCamelCase).filter(Boolean),
+  )
+
+  const taxonomyMap = new Map<string, {
+    key: string
+    actions: ModelManagerModel['taxonomies'][number]['actions']
+  }>()
+  const taxonomiesRaw = Array.isArray(modelValue.taxonomies) ? modelValue.taxonomies : []
+  for (const entry of taxonomiesRaw) {
+    if (!entry || typeof entry !== 'object') continue
+    const taxonomyKey = normalizeModelKey(String((entry as any).key ?? ''))
+    if (!taxonomyKey) continue
+    taxonomyMap.set(taxonomyKey, {
+      key: taxonomyKey,
+      actions: normalizeGeneratedTaxonomyActions((entry as any).actions, key, taxonomyKey),
+    })
+  }
+  for (const taxonomyKey of taxonomyKeys) {
+    if (taxonomyMap.has(taxonomyKey)) continue
+    taxonomyMap.set(taxonomyKey, {
+      key: taxonomyKey,
+      actions: normalizeGeneratedTaxonomyActions(undefined, key, taxonomyKey),
+    })
+  }
+
+  const subtableMap = new Map<string, {
+    key: string
+    actions: ModelManagerModel['subtables'][number]['actions']
+  }>()
+  const subtablesRaw = Array.isArray(modelValue.subtables) ? modelValue.subtables : []
+  for (const entry of subtablesRaw) {
+    if (!entry || typeof entry !== 'object') continue
+    const subtableKey = toCamelCase((entry as any).key ?? '')
+    if (!subtableKey) continue
+    subtableMap.set(subtableKey, {
+      key: subtableKey,
+      actions: normalizeGeneratedSubtableActions((entry as any).actions, key, subtableKey),
+    })
+  }
+  for (const subtableKey of subtableKeys) {
+    if (subtableMap.has(subtableKey)) continue
+    subtableMap.set(subtableKey, {
+      key: subtableKey,
+      actions: normalizeGeneratedSubtableActions(undefined, key, subtableKey),
+    })
+  }
+
+  const adminRaw = modelValue.admin && typeof modelValue.admin === 'object'
+    ? modelValue.admin as Record<string, any>
+    : {}
+
+  return {
+    key,
+    table,
+    dataMode,
+    adminEnabled: typeof adminRaw.enabled === 'boolean'
+      ? adminRaw.enabled
+      : true,
+    capabilities,
+    hasTypesense,
+    typesenseCollection,
+    typesenseFields,
+    taxonomyKeys: ensureUnique([
+      ...taxonomyKeys,
+      ...Array.from(taxonomyMap.keys()),
+    ]),
+    subtableKeys: ensureUnique([
+      ...subtableKeys,
+      ...Array.from(subtableMap.keys()),
+    ]),
+    taxonomies: Array.from(taxonomyMap.values()),
+    subtables: Array.from(subtableMap.values()),
+    fields,
+    requiredFields,
+    normalizedKey: normalizeModelKey(key),
+    normalizedTable: normalizeModelKey(table),
+  }
+}
+
+const loadGeneratedCanonicalManifest = async (
+  cwd = process.cwd(),
+): Promise<GeneratedAdminManifestEntry[]> => {
+  const manifestFile = await resolveGeneratedCanonicalManifestFile(cwd)
+  if (!manifestFile) return []
+
+  const source = await readJsonFile<GeneratedCanonicalManifestDocument>(manifestFile)
+  if (!source || !source.models || typeof source.models !== 'object' || Array.isArray(source.models)) {
+    return []
+  }
+
+  const entries: GeneratedAdminManifestEntry[] = []
+  for (const [entryKey, value] of Object.entries(source.models)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const normalized = normalizeGeneratedManifestEntry(entryKey, value as Record<string, any>)
+    if (!normalized) continue
+    entries.push(normalized)
+  }
+
+  return entries
+}
+
 const loadGeneratedAdminManifest = async (
   cwd = process.cwd(),
 ): Promise<GeneratedAdminManifestEntry[]> => {
@@ -1160,106 +1317,9 @@ const loadGeneratedAdminManifest = async (
 
   for (const [entryKey, value] of Object.entries(source.models)) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue
-    const modelValue = value as Record<string, any>
-    const key = normalizeModelKey(String(modelValue.key ?? entryKey))
-    const table = normalizeModelKey(String(modelValue.table ?? ''))
-    if (!key || !table) continue
-
-    const dataModeRaw = String(modelValue.data ?? modelValue.dataMode ?? '').trim().toLowerCase()
-    const dataMode: ModelDataMode = dataModeRaw === 'remote' ? 'remote' : 'local'
-
-    const fields = ensureUnique(safeArray(modelValue.fields).map(normalizeModelKey).filter(Boolean))
-    const requiredFields = ensureUnique(safeArray(modelValue.requiredFields).map(normalizeModelKey).filter(Boolean))
-    const capabilities = ensureUnique(safeArray(modelValue.capabilities).map(normalizeModelKey).filter(Boolean))
-
-    const typesenseRaw = modelValue.typesense && typeof modelValue.typesense === 'object'
-      ? modelValue.typesense as Record<string, any>
-      : {}
-    const hasTypesense = Boolean(typesenseRaw.enabled ?? modelValue.hasTypesense)
-    const typesenseCollectionRaw = String(
-      typesenseRaw.collection ?? modelValue.typesenseCollection ?? '',
-    ).trim()
-    const typesenseCollection = hasTypesense ? (typesenseCollectionRaw || table) : null
-    const typesenseFields = ensureUnique(
-      safeArray(typesenseRaw.fields ?? modelValue.typesenseFields)
-        .map(normalizeModelKey)
-        .filter(Boolean),
-    )
-
-    const taxonomyKeys = ensureUnique(
-      safeArray(modelValue.taxonomyKeys).map(normalizeModelKey).filter(Boolean),
-    )
-    const subtableKeys = ensureUnique(
-      safeArray(modelValue.subtableKeys).map(toCamelCase).filter(Boolean),
-    )
-
-    const taxonomyMap = new Map<string, {
-      key: string
-      actions: ModelManagerModel['taxonomies'][number]['actions']
-    }>()
-    const taxonomiesRaw = Array.isArray(modelValue.taxonomies) ? modelValue.taxonomies : []
-    for (const entry of taxonomiesRaw) {
-      if (!entry || typeof entry !== 'object') continue
-      const taxonomyKey = normalizeModelKey(String((entry as any).key ?? ''))
-      if (!taxonomyKey) continue
-      taxonomyMap.set(taxonomyKey, {
-        key: taxonomyKey,
-        actions: normalizeGeneratedTaxonomyActions((entry as any).actions, key, taxonomyKey),
-      })
-    }
-    for (const taxonomyKey of taxonomyKeys) {
-      if (taxonomyMap.has(taxonomyKey)) continue
-      taxonomyMap.set(taxonomyKey, {
-        key: taxonomyKey,
-        actions: normalizeGeneratedTaxonomyActions(undefined, key, taxonomyKey),
-      })
-    }
-
-    const subtableMap = new Map<string, {
-      key: string
-      actions: ModelManagerModel['subtables'][number]['actions']
-    }>()
-    const subtablesRaw = Array.isArray(modelValue.subtables) ? modelValue.subtables : []
-    for (const entry of subtablesRaw) {
-      if (!entry || typeof entry !== 'object') continue
-      const subtableKey = toCamelCase((entry as any).key ?? '')
-      if (!subtableKey) continue
-      subtableMap.set(subtableKey, {
-        key: subtableKey,
-        actions: normalizeGeneratedSubtableActions((entry as any).actions, key, subtableKey),
-      })
-    }
-    for (const subtableKey of subtableKeys) {
-      if (subtableMap.has(subtableKey)) continue
-      subtableMap.set(subtableKey, {
-        key: subtableKey,
-        actions: normalizeGeneratedSubtableActions(undefined, key, subtableKey),
-      })
-    }
-
-    entries.push({
-      key,
-      table,
-      dataMode,
-      capabilities,
-      hasTypesense,
-      typesenseCollection,
-      typesenseFields,
-      taxonomyKeys: ensureUnique([
-        ...taxonomyKeys,
-        ...Array.from(taxonomyMap.keys()),
-      ]),
-      subtableKeys: ensureUnique([
-        ...subtableKeys,
-        ...Array.from(subtableMap.keys()),
-      ]),
-      taxonomies: Array.from(taxonomyMap.values()),
-      subtables: Array.from(subtableMap.values()),
-      fields,
-      requiredFields,
-      normalizedKey: normalizeModelKey(key),
-      normalizedTable: normalizeModelKey(table),
-    })
+    const normalized = normalizeGeneratedManifestEntry(entryKey, value as Record<string, any>)
+    if (!normalized) continue
+    entries.push(normalized)
   }
 
   return entries
@@ -1534,7 +1594,11 @@ const parseGraphModels = (source: string): InternalModel[] => {
 }
 
 export const listModelManagerModels = async (cwd = process.cwd()): Promise<ModelManagerModel[]> => {
-  const generatedAdminManifest = await loadGeneratedAdminManifest(cwd)
+  const graphFallbackEnabled = process.env.HELIOS_ADMIN_ENABLE_GRAPH_FALLBACK !== 'false'
+  const generatedCanonicalManifest = await loadGeneratedCanonicalManifest(cwd)
+  const generatedAdminManifest = generatedCanonicalManifest.length
+    ? generatedCanonicalManifest
+    : await loadGeneratedAdminManifest(cwd)
   const baseModels: InternalModel[] = generatedAdminManifest.length
     ? generatedAdminManifest.map((entry) => {
         const modelKey = normalizeModelKey(entry.table)
@@ -1558,12 +1622,21 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
           subtables: entry.subtables,
           fields: ensureUnique(entry.fields),
           requiredFields: ensureUnique(entry.requiredFields),
-          canManage: true,
+          canManage: entry.adminEnabled,
         }
       })
     : await (async () => {
+        if (!graphFallbackEnabled) {
+          throw new Error(
+            'No generated model manifest found. Set HELIOS_ADMIN_ENABLE_GRAPH_FALLBACK=true to allow graph fallback.',
+          )
+        }
         const graphFile = await resolveGraphFile(cwd)
         const source = await fs.readFile(graphFile, 'utf-8')
+        console.warn(
+          `[helios-admin:model-manager] Falling back to graph parsing (${graphFile}). ` +
+            `Set HELIOS_ADMIN_ENABLE_GRAPH_FALLBACK=false to disable fallback.`,
+        )
         return parseGraphModels(source)
       })()
   const { fragmentFile, generatedFile } = resolveModelManagerPaths(cwd)
@@ -1597,7 +1670,7 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
         ...model,
         routerKey,
         dataMode: generatedEntry?.dataMode ?? model.dataMode ?? 'local',
-        canManage: true,
+        canManage: model.canManage,
         directoryRoute,
         hasFragment,
         hasGenerated: await fileExists(generatedFile(model.modelKey)),

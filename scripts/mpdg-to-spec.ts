@@ -84,10 +84,19 @@ export type TableAst = {
   tableType?: 'primary' | 'subsingle' | 'submany';
   description?: string;
   fields: FieldDef[];
+  modelSettings?: Record<string, any>;
   caps: CapFlag;
   edges: EdgeDef[];
   subTables: SubTableStub[];
 };
+
+const KNOWN_MODEL_SETTINGS_KEYS = new Set([
+  'schemaType',
+  'dataLocation',
+  'bootstrap',
+  'admin',
+  'typesense',
+]);
 
 const args = process.argv.slice(2);
 const inputFlag = flagVal('--input');
@@ -581,15 +590,20 @@ export function parseTableChunk(block: string): TableAst {
     description = description.split('{')[0].split('\n')[0].trim();
   }
 
-  // Extract blocks in order: fields { }, caps [ ], connections ( )
+  // Extract blocks in order: fields { }, optional model settings & { }, caps [ ], connections ( )
   const fieldsInfo = findEnclosure(block, '{', '}', block.indexOf('{'));
   const fieldsBlock = fieldsInfo?.inner ?? '';
 
-  const capsStart = fieldsInfo ? block.indexOf('[', fieldsInfo.end) : -1;
+  const settingsInfo = fieldsInfo
+    ? parseOptionalModelSettings(block, fieldsInfo.end, model)
+    : { settings: undefined, end: fieldsInfo?.end ?? 0 };
+  const settingsEnd = settingsInfo.end ?? (fieldsInfo?.end ?? 0);
+
+  const capsStart = block.indexOf('[', settingsEnd);
   const capsInfo = capsStart !== -1 ? findEnclosure(block, '[', ']', capsStart) : null;
   const capsBlock = capsInfo?.inner ?? '';
 
-  const connStartSearch = capsInfo ? capsInfo.end : (fieldsInfo ? fieldsInfo.end : 0);
+  const connStartSearch = capsInfo ? capsInfo.end : settingsEnd;
   const connStart = block.indexOf('(', connStartSearch);
   const connInfo = connStart !== -1 ? findEnclosure(block, '(', ')', connStart) : null;
   const connBlock = connInfo?.inner ?? '';
@@ -598,7 +612,93 @@ export function parseTableChunk(block: string): TableAst {
   const caps = parseCaps(capsBlock);
   const { edges, subTables } = parseConnections(connBlock);
 
-  return { label, model, description, fields, caps, edges, subTables };
+  return {
+    label,
+    model,
+    description,
+    fields,
+    ...(settingsInfo.settings ? { modelSettings: settingsInfo.settings } : {}),
+    caps,
+    edges,
+    subTables,
+  };
+}
+
+function parseOptionalModelSettings(
+  block: string,
+  fromIndex: number,
+  model: string
+): { settings?: Record<string, any>; end: number } {
+  let cursor = skipModelSettingsGap(block, fromIndex);
+
+  if (cursor >= block.length || block[cursor] !== '&') {
+    return { end: fromIndex };
+  }
+
+  cursor = skipModelSettingsGap(block, cursor + 1);
+
+  if (cursor >= block.length || block[cursor] !== '{') {
+    console.warn(`⚠️  Model settings block for "${model}" must use "& { ... }".`);
+    return { end: cursor };
+  }
+
+  const info = findEnclosure(block, '{', '}', cursor);
+  if (!info) {
+    console.warn(`⚠️  Could not parse model settings block for "${model}".`);
+    return { end: cursor };
+  }
+
+  const blockText = `{${info.inner}}`;
+  let parsed: Record<string, any> | null = null;
+
+  try {
+    parsed = parseJsObject(blockText).value;
+  } catch {
+    parsed = parseSettingsBlockLoose(blockText);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.warn(`⚠️  Ignoring invalid model settings block for "${model}".`);
+    return { end: info.end };
+  }
+
+  warnUnknownModelSettings(model, parsed);
+  return {
+    settings: parsed,
+    end: info.end,
+  };
+}
+
+function skipModelSettingsGap(source: string, start: number): number {
+  let cursor = start;
+  while (cursor < source.length) {
+    const token = source[cursor];
+    if (!token) {
+      cursor += 1;
+      continue;
+    }
+    if (/\s|,/.test(token)) {
+      cursor += 1;
+      continue;
+    }
+    if (token === '#' || (token === '/' && source[cursor + 1] === '/')) {
+      while (cursor < source.length && source[cursor] !== '\n') {
+        cursor += 1;
+      }
+      continue;
+    }
+    break;
+  }
+  return cursor;
+}
+
+function warnUnknownModelSettings(model: string, settings: Record<string, any>): void {
+  const unknown = Object.keys(settings).filter((key) => !KNOWN_MODEL_SETTINGS_KEYS.has(key));
+  if (unknown.length === 0) return;
+  console.warn(
+    `⚠️  Model "${model}" has unknown model settings key(s): ${unknown.join(', ')}. ` +
+      `These keys are preserved as passthrough metadata.`
+  );
 }
 
 function matchEnclosure(text: string, open: string, close: string, occurrence: number): string {
@@ -2573,9 +2673,73 @@ function resolveSubtableInputIndex(target: string, subTables: SubTableStub[]): n
   return -1;
 }
 
+function normalizeModelSettingsObject(raw: unknown): Record<string, any> | null {
+  if (!isPlainObject(raw)) return null;
+  const source = raw as Record<string, any>;
+  const normalized: Record<string, any> = {};
+
+  const schemaType = normalizeSchemaTypeSetting(source.schemaType);
+  if (schemaType) normalized.schemaType = schemaType;
+
+  const dataLocation = normalizeDataLocationSetting(source.dataLocation);
+  if (dataLocation) normalized.dataLocation = dataLocation;
+
+  if (isPlainObject(source.bootstrap)) {
+    const bootstrap: Record<string, any> = {};
+    if (typeof source.bootstrap.ensureTable === 'boolean') {
+      bootstrap.ensureTable = source.bootstrap.ensureTable;
+    }
+    if (isPlainObject(source.bootstrap.permissions)) {
+      bootstrap.permissions = source.bootstrap.permissions;
+    }
+    if (Object.keys(bootstrap).length > 0) normalized.bootstrap = bootstrap;
+  }
+
+  if (isPlainObject(source.admin) && typeof source.admin.enabled === 'boolean') {
+    normalized.admin = { enabled: source.admin.enabled };
+  }
+
+  if (isPlainObject(source.typesense) && typeof source.typesense.enabled === 'boolean') {
+    normalized.typesense = { enabled: source.typesense.enabled };
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    if (KNOWN_MODEL_SETTINGS_KEYS.has(key)) continue;
+    normalized[key] = value;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function normalizeSchemaTypeSetting(value: unknown): 'schemaless' | 'schemafull' | undefined {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'schemaless') return 'schemaless';
+  if (normalized === 'schemafull' || normalized === 'schemaful') return 'schemafull';
+  return undefined;
+}
+
+function normalizeDataLocationSetting(value: unknown): 'local' | 'remote' | undefined {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'remote') return 'remote';
+  if (normalized === 'local') return 'local';
+  return undefined;
+}
+
 function buildSpec(t: TableAst): any {
   const idField = t.fields.find((f) => f.isId);
   const dataFields = t.fields.filter((f) => !f.isId);
+  const normalizedModelSettings = normalizeModelSettingsObject(t.modelSettings);
+  const schemaTypeOverride = normalizeSchemaTypeSetting(normalizedModelSettings?.schemaType);
+  const schemaModeOverride = schemaTypeOverride === 'schemafull' ? 'schemaful' : schemaTypeOverride;
+  const dataLocationOverride = normalizeDataLocationSetting(normalizedModelSettings?.dataLocation);
+  const adminEnabledOverride = isPlainObject(normalizedModelSettings?.admin)
+    ? normalizedModelSettings?.admin?.enabled
+    : undefined;
+  const typesenseEnabledOverride = isPlainObject(normalizedModelSettings?.typesense)
+    ? normalizedModelSettings?.typesense?.enabled
+    : undefined;
   const subtableInputBindings = extractSubtableInputBindings(dataFields, t.subTables ?? []);
   const subtableInputFieldNames = new Set(subtableInputBindings.map((binding) => binding.field.name));
   const fields = dataFields.filter((field) => !subtableInputFieldNames.has(field.name));
@@ -2612,10 +2776,14 @@ function buildSpec(t: TableAst): any {
     table: {
       model: t.model,
       type: 'NORMAL',
-      schemaMode: 'schemaless',
+      schemaMode: schemaModeOverride ?? 'schemaless',
       permissions: 'full',
     },
   };
+
+  if (normalizedModelSettings) {
+    out.modelSettings = normalizedModelSettings;
+  }
 
   if (t.parentModel && tableType === 'subsingle') {
     out.structure = { type: 'parent', parentModel: t.parentModel };
@@ -2767,6 +2935,9 @@ function buildSpec(t: TableAst): any {
       out.typesense = buildInstanceTypesenseFallback(t);
     }
   }
+  if (typesenseEnabledOverride === false && out.typesense) {
+    delete out.typesense;
+  }
 
   if (t.caps.rawTaxonomies !== undefined) {
     const defaults = appConfig?.taxonomies ?? {};
@@ -2808,10 +2979,15 @@ function buildSpec(t: TableAst): any {
   if (t.caps.crudSlug) {
     adminMeta.slugPolicy = t.caps.crudSlug;
   }
-  if (t.caps.instance) {
+  if (dataLocationOverride) {
+    adminMeta.data = dataLocationOverride;
+  } else if (t.caps.instance) {
     adminMeta.data = t.caps.instanceMode ?? 'local';
   } else if (t.caps.instanceMode) {
     adminMeta.data = t.caps.instanceMode;
+  }
+  if (typeof adminEnabledOverride === 'boolean') {
+    adminMeta.enabled = adminEnabledOverride;
   }
   if (Object.keys(adminMeta).length > 0) {
     out.admin = adminMeta;

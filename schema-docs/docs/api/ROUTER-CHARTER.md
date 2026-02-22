@@ -367,7 +367,7 @@ const record = await $process('site.relations.page.list', {}, { instance: 'test'
 
 Endpoints:
 - `user.create` (mutation)
-  - fields: id (optional), email (required), firstName (required), surname (required), password (required), uniqueId (optional), customerId (optional), profile (optional), state (optional), settings (optional), role (required), instances (optional)
+  - fields: id (optional), email (required), firstName (required), surname (required), password (required), uniqueId (optional), customerId (optional), profile (optional), state (optional), settings (optional), role (required)
   ```ts
 const { $process } = useCRUD()
 const record = await $process('user.create', {
@@ -380,8 +380,7 @@ const record = await $process('user.create', {
   "profile": "",
   "state": "",
   "settings": "",
-  "role": "",
-  "instances": ""
+  "role": ""
 }, { instance: 'test' })
 ```
 - `user.update` (mutation)
@@ -427,82 +426,4 @@ const record = await $process('user.resource', {
 - `user.typesense.count` (query)
   - input: RequestSchema<typesense payload>
 - `user.typesense.collection` (query)
-  - input: RequestSchema<typesense payload>
-
-### instance
-- CRUD: create, update, delete
-- Views/Resources: resource
-- Typesense: resource, list, refresh, count, collection
-- Other: instance.subtables.settings.create, instance.subtables.settings.update, instance.subtables.settings.delete, instance.subtables.settings.get
-
-Endpoints:
-- `instance.create` (mutation)
-  - fields: id (optional), key (required), instance (optional), title (required), status (optional), active (optional)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.create', {
-  "key": "",
-  "instance": "",
-  "title": "",
-  "status": "",
-  "active": false
-}, { instance: 'test' })
-```
-- `instance.update` (mutation)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.update', {}, { instance: 'test' })
-```
-- `instance.delete` (mutation)
-  - fields: id (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.delete', {}, { instance: 'test' })
-```
-- `instance.resource` (query)
-  - fields: id (required), key (optional), resource (optional)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.resource', {
-  "key": "",
-  "resource": ""
-}, { instance: 'test' })
-```
-- `instance.subtables.settings.create` (mutation)
-  - fields: id (required), payload (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.subtables.settings.create', {
-  "payload": ""
-}, { instance: 'test' })
-```
-- `instance.subtables.settings.update` (mutation)
-  - fields: id (required), payload (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.subtables.settings.update', {
-  "payload": ""
-}, { instance: 'test' })
-```
-- `instance.subtables.settings.delete` (mutation)
-  - fields: id (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.subtables.settings.delete', {}, { instance: 'test' })
-```
-- `instance.subtables.settings.get` (query)
-  - fields: id (required)
-  ```ts
-const { $process } = useCRUD()
-const record = await $process('instance.subtables.settings.get', {}, { instance: 'test' })
-```
-- `instance.typesense.resource` (query)
-  - input: RequestSchema<typesense payload>
-- `instance.typesense.list` (query)
-  - input: RequestSchema<typesense payload>
-- `instance.typesense.refresh` (mutation)
-  - input: RequestSchema<typesense payload>
-- `instance.typesense.count` (query)
-  - input: RequestSchema<typesense payload>
-- `instance.typesense.collection` (query)
   - input: RequestSchema<typesense payload>

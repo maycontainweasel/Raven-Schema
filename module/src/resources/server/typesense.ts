@@ -39,6 +39,14 @@ const buildClient = () => {
   if (!apiKey) {
     throw new Error('Typesense apiKey is required')
   }
+  const timeoutRaw = Number(typesense.connectionTimeoutSeconds ?? typesense.timeoutSeconds ?? 8)
+  const connectionTimeoutSeconds =
+    Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : 8
+  const retriesRaw = Number(typesense.numRetries ?? 0)
+  const numRetries = Number.isFinite(retriesRaw) && retriesRaw >= 0 ? Math.floor(retriesRaw) : 0
+  const retryIntervalRaw = Number(typesense.retryIntervalSeconds ?? 0.25)
+  const retryIntervalSeconds =
+    Number.isFinite(retryIntervalRaw) && retryIntervalRaw >= 0 ? retryIntervalRaw : 0.25
 
   const cacheKey = `${protocol}://${host}:${port}|${apiKey}`
   if (cachedClient && cachedKey === cacheKey) {
@@ -54,8 +62,9 @@ const buildClient = () => {
       },
     ],
     apiKey,
-    connectionTimeoutSeconds: 1,
-    numRetries: 0,
+    connectionTimeoutSeconds,
+    numRetries,
+    retryIntervalSeconds,
   })
   cachedKey = cacheKey
   return cachedClient

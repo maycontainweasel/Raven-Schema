@@ -39,7 +39,7 @@ DEFINE FUNCTION OVERWRITE fn::createInstanceSettings($PARENT_ID: any, $payload: 
 		timezone: "Europe/London",
 		currency: "GBP",
 		pricingOptions: "[1, 2, 3, 6]",
-		content: "",
+		content: {},
 	};
 
 	let $payload = fn::objectAssign($defaultData, $payloadInput);

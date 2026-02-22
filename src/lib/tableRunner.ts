@@ -61,6 +61,19 @@ export class MigrationRunner {
     if (!tableName) {
       throw new Error(`Table config "${table.name}" missing table.model`);
     }
+    const modelSettings = (table as any).modelSettings;
+    const ensureTable =
+      modelSettings &&
+      typeof modelSettings === 'object' &&
+      modelSettings.bootstrap &&
+      typeof modelSettings.bootstrap === 'object' &&
+      typeof modelSettings.bootstrap.ensureTable === 'boolean'
+        ? modelSettings.bootstrap.ensureTable
+        : true;
+    if (!ensureTable) {
+      console.log(`Skipping table definition for ${table.name} (${tableName}) via modelSettings.bootstrap.ensureTable=false`);
+      return;
+    }
     const mode = (this.options.tableDefineMode ?? 'OVERWRITE').toUpperCase();
     const normalizedMode = mode === 'IF NOT EXISTS' ? 'IF NOT EXISTS' : 'OVERWRITE';
 
