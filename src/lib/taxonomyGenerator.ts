@@ -47,12 +47,14 @@ export async function generateTableTaxonomies(
       initTaxonomyFns.add(cfg.functions.createTaxonomy);
       edgeStatements.push(...buildTaxonomyEdges(cfg));
       functionBlocks.push(buildCreateTaxonomyFunction(cfg));
-      functionBlocks.push(buildAddTermFunction(cfg));
-      functionBlocks.push(buildRemoveTermFunction(cfg));
-      functionBlocks.push(buildAttachTermFunction(cfg));
-      functionBlocks.push(buildDetachTermFunction(cfg));
-      functionBlocks.push(buildGetModelTermsFunction(cfg));
-      functionBlocks.push(buildGetTableTermsFunction(cfg));
+      if (cfg.generateNamedFunctions) {
+        functionBlocks.push(buildAddTermFunction(cfg));
+        functionBlocks.push(buildRemoveTermFunction(cfg));
+        functionBlocks.push(buildAttachTermFunction(cfg));
+        functionBlocks.push(buildDetachTermFunction(cfg));
+        functionBlocks.push(buildGetModelTermsFunction(cfg));
+        functionBlocks.push(buildGetTableTermsFunction(cfg));
+      }
 
       for (const model of [cfg.taxonomyModel, cfg.termModel]) {
         if (!model || definedTables.has(model)) continue;
@@ -164,6 +166,8 @@ interface NormalizedTaxonomy {
   hierarchical: boolean;
   cardinality: 'one' | 'many';
   storeOnModel: boolean;
+  createOnAttach: boolean;
+  generateNamedFunctions: boolean;
   payloadField: string;
   payloadAliases: string[];
   required: boolean;
@@ -202,6 +206,16 @@ function normalizeTaxonomyConfig(
   const cardinalityRaw = String(taxonomy.cardinality ?? 'many').toLowerCase();
   const cardinality = cardinalityRaw === 'one' || cardinalityRaw === 'single' ? 'one' : 'many';
   const storeOnModel = typeof taxonomy.storeOnModel === 'boolean' ? taxonomy.storeOnModel : true;
+  const createOnAttach =
+    typeof taxonomy.createOnAttach === 'boolean' ? taxonomy.createOnAttach : true;
+  const functionOverrides =
+    taxonomy.functions && typeof taxonomy.functions === 'object' ? taxonomy.functions : undefined;
+  const generateNamedFunctions =
+    typeof taxonomy.generateNamedFunctions === 'boolean'
+      ? taxonomy.generateNamedFunctions
+      : typeof taxonomy.functions === 'boolean'
+        ? taxonomy.functions
+        : Boolean(functionOverrides);
   const required = typeof taxonomy.required === 'boolean' ? taxonomy.required : false;
   const processorRaw = String(taxonomy.processor ?? 'functions').toLowerCase();
   const processor =
@@ -249,13 +263,13 @@ function normalizeTaxonomyConfig(
   );
   const functions = {
     createTaxonomy:
-      taxonomy.functions?.createTaxonomy ?? `create${prefix}Taxonomy`,
-    addTerm: taxonomy.functions?.addTerm ?? `add${prefix}Term`,
-    removeTerm: taxonomy.functions?.removeTerm ?? `remove${prefix}Term`,
-    attachTerm: taxonomy.functions?.attachTerm ?? `attach${prefix}Term`,
-    detachTerm: taxonomy.functions?.detachTerm ?? `detach${prefix}Term`,
-    getModelTerms: taxonomy.functions?.getModelTerms ?? `get${prefix}Terms`,
-    getTableTerms: taxonomy.functions?.getTableTerms ?? `get${prefix}s`,
+      functionOverrides?.createTaxonomy ?? `create${prefix}Taxonomy`,
+    addTerm: functionOverrides?.addTerm ?? `add${prefix}Term`,
+    removeTerm: functionOverrides?.removeTerm ?? `remove${prefix}Term`,
+    attachTerm: functionOverrides?.attachTerm ?? `attach${prefix}Term`,
+    detachTerm: functionOverrides?.detachTerm ?? `detach${prefix}Term`,
+    getModelTerms: functionOverrides?.getModelTerms ?? `get${prefix}Terms`,
+    getTableTerms: functionOverrides?.getTableTerms ?? `get${prefix}s`,
   };
 
   const edges = {
@@ -280,6 +294,8 @@ function normalizeTaxonomyConfig(
     hierarchical,
     cardinality,
     storeOnModel,
+    createOnAttach,
+    generateNamedFunctions,
     payloadField,
     payloadAliases,
     required,
@@ -375,6 +391,8 @@ function buildTaxonomyRegistryLines(cfg: NormalizedTaxonomy): string[] {
     `\t\tedgeTaxonomyToTerm: "${cfg.edges.taxonomyToTerms}",`,
     `\t\tcardinality: "${cfg.cardinality}",`,
     `\t\tstoreOnModel: ${cfg.storeOnModel ? 'true' : 'false'},`,
+    `\t\tcreateOnAttach: ${cfg.createOnAttach ? 'true' : 'false'},`,
+    `\t\tgenerateNamedFunctions: ${cfg.generateNamedFunctions ? 'true' : 'false'},`,
     `\t\tpayloadField: "${cfg.payloadField}",`,
     `\t\tpayloadAliases: ${aliasList},`,
     `\t\trequired: ${cfg.required ? 'true' : 'false'},`,

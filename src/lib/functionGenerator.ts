@@ -895,6 +895,7 @@ interface NormalizedTaxonomy {
   tableModel: string;
   termModel: string;
   termId: string;
+  generateNamedFunctions: boolean;
   payloadField: string;
   payloadAliases: string[];
   storeOnModel: boolean;
@@ -939,6 +940,14 @@ function groupTaxonomyHooks(
       const cardinality = cardinalityRaw === 'one' || cardinalityRaw === 'single' ? 'one' : 'many';
       const storeOnModel =
         typeof taxonomy.storeOnModel === 'boolean' ? taxonomy.storeOnModel : true;
+      const functionOverrides =
+        taxonomy.functions && typeof taxonomy.functions === 'object' ? taxonomy.functions : undefined;
+      const generateNamedFunctions =
+        typeof taxonomy.generateNamedFunctions === 'boolean'
+          ? taxonomy.generateNamedFunctions
+          : typeof taxonomy.functions === 'boolean'
+            ? taxonomy.functions
+            : Boolean(functionOverrides);
       const required = typeof taxonomy.required === 'boolean' ? taxonomy.required : false;
       const processorRaw = String(taxonomy.processor ?? 'functions').toLowerCase();
       const processor =
@@ -957,10 +966,10 @@ function groupTaxonomyHooks(
 
       const prefix = `${tableLabel}${keyLabel}`;
       const functions = {
-        attach: taxonomy.functions?.attachTerm ?? `attach${prefix}Term`,
-        detach: taxonomy.functions?.detachTerm ?? `detach${prefix}Term`,
-        getModelTerms: taxonomy.functions?.getModelTerms ?? `get${prefix}Terms`,
-        getTableTerms: taxonomy.functions?.getTableTerms ?? `get${prefix}s`,
+        attach: functionOverrides?.attachTerm ?? `attach${prefix}Term`,
+        detach: functionOverrides?.detachTerm ?? `detach${prefix}Term`,
+        getModelTerms: functionOverrides?.getModelTerms ?? `get${prefix}Terms`,
+        getTableTerms: functionOverrides?.getTableTerms ?? `get${prefix}s`,
       };
 
       const edges = {
@@ -973,6 +982,7 @@ function groupTaxonomyHooks(
         tableModel,
         termModel,
         termId,
+        generateNamedFunctions,
         payloadField,
         payloadAliases,
         storeOnModel,
@@ -1547,6 +1557,18 @@ function buildRelationAttachStatement(
   return `fn::createEdge(${leftRelationExpr}, "${relation.edge}", ${recordIdExpr}, { boundId: true, overwrite: false, skipExists: true });`;
 }
 
+function buildTaxonomyAttachStatement(
+  taxonomy: NormalizedTaxonomy,
+  recordIdExpr: string,
+  relationExpr: string,
+  optionsExpr: string
+): string {
+  if (taxonomy.generateNamedFunctions) {
+    return `fn::${taxonomy.functions.attach}(${recordIdExpr}, ${relationExpr}, ${optionsExpr});`;
+  }
+  return `fn::attachTerm("${taxonomy.tableModel}", "${taxonomy.key}", ${recordIdExpr}, ${relationExpr}, ${optionsExpr});`;
+}
+
 function taxonomyVarName(field: string): string {
   const sanitized = field.replace(/[^a-zA-Z0-9_]/g, '_');
   return `$tax_${sanitized}`;
@@ -1683,10 +1705,11 @@ function buildTaxonomyNormalizationLines(
       `\t};`,
       `\tlet ${normVar} = array::map(${listVar}, |$term| {`,
       `\t\tif type::is_record($term) {`,
-      `\t\t\t$term`,
+      `\t\t\ttype::record("${taxonomy.termModel}", record::id($term))`,
+      `\t\t} else {`,
+      `\t\t\tlet $termPayload = { key: $term };`,
+      `\t\t\t${termExpr}`,
       `\t\t};`,
-      `\t\tlet $termPayload = { key: $term };`,
-      `\t\t${termExpr}`,
       `\t});`
     );
 
@@ -1767,7 +1790,7 @@ function buildTaxonomyPostProcessLines(
         `\t};`,
         `\tlet ${normVar} = array::map(${listVar}, |$term| {`,
         `\t\tif type::is_record($term) {`,
-        `\t\t\treturn $term;`,
+        `\t\t\treturn type::record("${taxonomy.termModel}", record::id($term));`,
         `\t\t};`,
         `\t\tlet $termPayload = { key: $term };`,
         `\t\treturn ${termExpr};`,
@@ -1781,12 +1804,12 @@ function buildTaxonomyPostProcessLines(
           `\tif type::is_array(${varName}) {`,
           `\t\tdelete from ${taxonomy.edges.recordToTerm} where in = ${recordVar};`,
           `\t\tif array::len(${normVar}) > 0 {`,
-          `\t\t\tfn::${taxonomy.functions.attach}(${recordVar}, array::first(${normVar}), {});`,
+          `\t\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, `array::first(${normVar})`, '{}')}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tdelete from ${taxonomy.edges.recordToTerm} where in = ${recordVar};`,
           `\t\tif array::len(${normVar}) > 0 {`,
-            `\t\t\tfn::${taxonomy.functions.attach}(${recordVar}, array::first(${normVar}), {});`,
+            `\t\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, `array::first(${normVar})`, '{}')}`,
           `\t\t};`,
           `\t};`
         );
@@ -1795,12 +1818,12 @@ function buildTaxonomyPostProcessLines(
           `\tif type::is_array(${varName}) {`,
           `\t\tdelete from ${taxonomy.edges.recordToTerm} where in = ${recordVar};`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${taxonomy.functions.attach}(${recordVar}, $rel, {});`,
+          `\t\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, '$rel', '{}')}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tdelete from ${taxonomy.edges.recordToTerm} where in = ${recordVar};`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${taxonomy.functions.attach}(${recordVar}, $rel, {});`,
+          `\t\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, '$rel', '{}')}`,
           `\t\t};`,
           `\t};`
         );
@@ -1813,7 +1836,7 @@ function buildTaxonomyPostProcessLines(
       if (taxonomy.cardinality === 'one') {
         lines.push(
           `\tif array::len(${normVar}) > 0 {`,
-          `\t\tfn::${taxonomy.functions.attach}(${recordVar}, array::first(${normVar}), { skipExists: true });`,
+          `\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, `array::first(${normVar})`, '{ skipExists: true }')}`,
           `\t};`,
           ''
         );
@@ -1821,11 +1844,11 @@ function buildTaxonomyPostProcessLines(
         lines.push(
           `\tif type::is_array(${normVar}) {`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${taxonomy.functions.attach}(${recordVar}, $rel, { skipExists: true });`,
+          `\t\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, '$rel', '{ skipExists: true }')}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\tfn::${taxonomy.functions.attach}(${recordVar}, $rel, { skipExists: true });`,
+          `\t\t\t${buildTaxonomyAttachStatement(taxonomy, recordVar, '$rel', '{ skipExists: true }')}`,
           `\t\t};`,
           `\t};`,
           ''

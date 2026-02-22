@@ -1941,13 +1941,42 @@ function buildTaxonomyRouters(
     const emptySchema = `${prefix}EmptyInput`;
     const routerIdentifier = `${prefix}Router`;
 
-    const fnCreate = taxonomy.functions?.createTaxonomy ?? `create${prefix}Taxonomy`;
-    const fnAdd = taxonomy.functions?.addTerm ?? `add${prefix}Term`;
-    const fnRemove = taxonomy.functions?.removeTerm ?? `remove${prefix}Term`;
-    const fnAttach = taxonomy.functions?.attachTerm ?? `attach${prefix}Term`;
-    const fnDetach = taxonomy.functions?.detachTerm ?? `detach${prefix}Term`;
-    const fnGetModel = taxonomy.functions?.getModelTerms ?? `get${prefix}Terms`;
-    const fnGetTable = taxonomy.functions?.getTableTerms ?? `get${prefix}s`;
+    const functionOverrides =
+      taxonomy.functions && typeof taxonomy.functions === 'object' ? taxonomy.functions : undefined;
+    const generateNamedFunctions =
+      typeof taxonomy.generateNamedFunctions === 'boolean'
+        ? taxonomy.generateNamedFunctions
+        : typeof taxonomy.functions === 'boolean'
+          ? taxonomy.functions
+          : Boolean(functionOverrides);
+
+    const fnCreate = functionOverrides?.createTaxonomy ?? `create${prefix}Taxonomy`;
+    const fnAdd = functionOverrides?.addTerm ?? `add${prefix}Term`;
+    const fnRemove = functionOverrides?.removeTerm ?? `remove${prefix}Term`;
+    const fnAttach = functionOverrides?.attachTerm ?? `attach${prefix}Term`;
+    const fnDetach = functionOverrides?.detachTerm ?? `detach${prefix}Term`;
+    const fnGetModel = functionOverrides?.getModelTerms ?? `get${prefix}Terms`;
+    const fnGetTable = functionOverrides?.getTableTerms ?? `get${prefix}s`;
+
+    const createTaxonomyCall = `RETURN fn::${fnCreate}($payload);`;
+    const addTermCall = generateNamedFunctions
+      ? `RETURN fn::${fnAdd}($payload);`
+      : `RETURN fn::createTerm("${tableModel}", "${key}", $payload);`;
+    const removeTermCall = generateNamedFunctions
+      ? `RETURN fn::${fnRemove}($term);`
+      : `RETURN fn::removeTerm("${tableModel}", "${key}", $term);`;
+    const attachCall = generateNamedFunctions
+      ? `RETURN fn::${fnAttach}($rid, $term);`
+      : `RETURN fn::attachTerm("${tableModel}", "${key}", $rid, $term, {});`;
+    const detachCall = generateNamedFunctions
+      ? `RETURN fn::${fnDetach}($rid, $term);`
+      : `RETURN fn::detachTerm("${tableModel}", "${key}", $rid, $term, {});`;
+    const getTermsCall = generateNamedFunctions
+      ? `RETURN fn::${fnGetModel}();`
+      : `RETURN fn::getTerms("${tableModel}", "${key}");`;
+    const getRecordTermsCall = generateNamedFunctions
+      ? `RETURN fn::${fnGetTable}($rid);`
+      : `RETURN fn::getRecordTerms("${tableModel}", "${key}", $rid);`;
 
     lines.push(
       `const ${taxonomyPayloadSchema} = z.record(z.string(), z.any());`,
@@ -1970,7 +1999,7 @@ function buildTaxonomyRouters(
       `        throw new Error('${prefix} taxonomy payload is required');`,
       `      }`,
       `      const query = /* surql */ \``,
-      `        RETURN fn::${fnCreate}($payload);`,
+      `        ${createTaxonomyCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query, { payload }));`,
       `      return result;`,
@@ -1987,7 +2016,7 @@ function buildTaxonomyRouters(
       `        throw new Error('${prefix} term payload is required');`,
       `      }`,
       `      const query = /* surql */ \``,
-      `        RETURN fn::${fnAdd}($payload);`,
+      `        ${addTermCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query, { payload }));`,
       `      return result;`,
@@ -2004,7 +2033,7 @@ function buildTaxonomyRouters(
       `        throw new Error('${prefix} term is required');`,
       `      }`,
       `      const query = /* surql */ \``,
-      `        RETURN fn::${fnRemove}($term);`,
+      `        ${removeTermCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query, { term }));`,
       `      return result;`,
@@ -2031,7 +2060,7 @@ function buildTaxonomyRouters(
       `      }`,
       `      const query = /* surql */ \``,
       `        LET $rid = type::record('${tableModel}', $id);`,
-      `        RETURN fn::${fnAttach}($rid, $term);`,
+      `        ${attachCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query, { id: resolvedId, term }));`,
       `      return result;`,
@@ -2058,7 +2087,7 @@ function buildTaxonomyRouters(
       `      }`,
       `      const query = /* surql */ \``,
       `        LET $rid = type::record('${tableModel}', $id);`,
-      `        RETURN fn::${fnDetach}($rid, $term);`,
+      `        ${detachCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query, { id: resolvedId, term }));`,
       `      return result;`,
@@ -2071,7 +2100,7 @@ function buildTaxonomyRouters(
       `        ? await (ctx as any).$api.DB(input.instance as any)`,
       `        : db;`,
       `      const query = /* surql */ \``,
-      `        RETURN fn::${fnGetModel}();`,
+      `        ${getTermsCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query));`,
       `      return result;`,
@@ -2098,7 +2127,7 @@ function buildTaxonomyRouters(
       `      }`,
       `      const query = /* surql */ \``,
       `        LET $rid = type::record('${tableModel}', $id);`,
-      `        RETURN fn::${fnGetTable}($rid);`,
+      `        ${getRecordTermsCall}`,
       `      \`;`,
       `      const result = await LRS(await dbInstance.query(query, { id: resolvedId }));`,
       `      return result;`,

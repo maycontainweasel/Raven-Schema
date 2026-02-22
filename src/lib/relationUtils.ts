@@ -38,7 +38,7 @@ const DEFAULTS: RelationDefaults = {
   storeOnModel: true,
   linkOnCreate: true,
   processor: 'functions',
-  functionsEnabled: true,
+  functionsEnabled: false,
 };
 
 export function collectRelations(tables: TableMigrationConfig[]): NormalizedRelation[] {
@@ -104,8 +104,14 @@ function normalizeRelation(
   const linkOnCreate =
     typeof relation.linkOnCreate === 'boolean' ? relation.linkOnCreate : DEFAULTS.linkOnCreate;
   const processor = relation.processor ?? DEFAULTS.processor;
+  const functionsOverride =
+    relation.functions && typeof relation.functions === 'object' ? relation.functions : undefined;
   const functionsEnabled =
-    typeof relation.functions === 'boolean' ? relation.functions : DEFAULTS.functionsEnabled;
+    typeof relation.generateNamedFunctions === 'boolean'
+      ? relation.generateNamedFunctions
+      : typeof relation.functions === 'boolean'
+        ? relation.functions
+        : Boolean(functionsOverride) || DEFAULTS.functionsEnabled;
 
   const hookModel = resolveHookModel(relation.hook, leftModel, rightModel, sourceModel);
   const payloadField =
@@ -116,10 +122,10 @@ function normalizeRelation(
   const prefixLeftRight = `${leftLabel}${rightLabel}`;
 
   const functions = {
-    attach: relation.functions?.attach ?? `attach${prefixRightLeft}`,
-    detach: relation.functions?.detach ?? `detach${prefixRightLeft}`,
-    getLeft: relation.functions?.getLeft ?? `get${pluralize(prefixRightLeft)}`,
-    getRight: relation.functions?.getRight ?? `get${pluralize(prefixLeftRight)}`,
+    attach: functionsOverride?.attach ?? `attach${prefixRightLeft}`,
+    detach: functionsOverride?.detach ?? `detach${prefixRightLeft}`,
+    getLeft: functionsOverride?.getLeft ?? `get${pluralize(prefixRightLeft)}`,
+    getRight: functionsOverride?.getRight ?? `get${pluralize(prefixLeftRight)}`,
   };
 
   return {

@@ -584,11 +584,21 @@ export interface TableTaxonomyConfig {
   hierarchical?: boolean;
   cardinality?: 'one' | 'many';
   storeOnModel?: boolean;
+  /**
+   * When true (default), attach operations auto-create missing terms.
+   * Set false to require terms to exist before attach.
+   */
+  createOnAttach?: boolean;
   payloadField?: string;
   payloadAlias?: string;
   payloadAliases?: string[];
   required?: boolean;
   processor?: 'functions' | 'events' | 'none';
+  /**
+   * Generate taxonomy-specific wrapper functions (attachXTerm, getXTerms, etc).
+   * Defaults to false (generic taxonomy utility functions are used instead).
+   */
+  generateNamedFunctions?: boolean;
   hooks?: {
     postAttach?: string[];
     postDetach?: string[];
@@ -617,15 +627,22 @@ export interface TableTaxonomyConfig {
     taxonomyToTerms?: string;
     recordToTerm?: string;
   };
-  functions?: {
-    createTaxonomy?: string;
-    addTerm?: string;
-    removeTerm?: string;
-    attachTerm?: string;
-    detachTerm?: string;
-    getModelTerms?: string;
-    getTableTerms?: string;
-  };
+  /**
+   * Legacy compatibility:
+   * - `false` disables taxonomy-specific wrappers (same as generateNamedFunctions=false)
+   * - object customizes generated function names when wrappers are enabled
+   */
+  functions?:
+    | boolean
+    | {
+        createTaxonomy?: string;
+        addTerm?: string;
+        removeTerm?: string;
+        attachTerm?: string;
+        detachTerm?: string;
+        getModelTerms?: string;
+        getTableTerms?: string;
+      };
 }
 
 export interface TableRelationConfig {
@@ -640,6 +657,16 @@ export interface TableRelationConfig {
   requiredOnHook?: boolean;
   processor?: 'functions' | 'events' | 'none';
   hook?: 'left' | 'right' | string;
+  /**
+   * Generate relation-specific wrapper functions (attachX, detachX, getX).
+   * Defaults to false (generic edge utilities are used instead).
+   */
+  generateNamedFunctions?: boolean;
+  /**
+   * Legacy compatibility:
+   * - boolean toggles wrapper generation
+   * - object customizes generated names when wrappers are enabled
+   */
   functions?:
     | boolean
     | {

@@ -185,8 +185,57 @@ DEFINE FUNCTION fn::attachTerm($model: string, $taxonomy: string, $record: any, 
 	};
 
 	let $TERM_ID = fn::ridParam($meta.termModel ?? "term", $term);
+	let $createOnAttach = if $meta.createOnAttach == false {
+		false
+	} else {
+		true
+	};
 	if !record::exists($TERM_ID) {
-		throw "attachTerm | term not found";
+		if !$createOnAttach {
+			throw "attachTerm | term not found";
+		};
+
+		let $termPayload = if type::is_record($term) {
+			{ key: record::id($term) }
+		} else if type::is_object($term) && $term.key {
+			$term
+		} else if type::is_object($term) && $term.id {
+			fn::objectAssign($term, {
+				key: if type::is_record($term.id) {
+					record::id($term.id)
+				} else {
+					$term.id
+				}
+			})
+		} else if type::is_object($term) {
+			$term
+		} else {
+			{ key: record::id($TERM_ID) }
+		};
+		let $created = fn::createTerm($model, $taxonomy, $termPayload);
+		let $createdId = if type::is_array($created) && array::len($created) > 0 {
+			let $first = array::first($created);
+			if type::is_object($first) && $first.id {
+				$first.id
+			} else {
+				$first
+			}
+		} else if type::is_object($created) && $created.id {
+			$created.id
+		} else if type::is_record($created) {
+			$created
+		} else if type::is_object($termPayload) && $termPayload.key {
+			$termPayload.key
+		} else {
+			$term
+		};
+		let $TERM_ID = fn::ridParam($meta.termModel ?? "term", $createdId);
+		// `record::exists` can report false negatives in some nested function execution paths.
+		// Probe via SELECT to confirm whether the term can be resolved before failing.
+		let $TERM_ROW = (select * from only $TERM_ID);
+		if !$TERM_ROW {
+			throw "attachTerm | failed to auto-create term";
+		};
 	};
 
 	if $meta.cardinality == "one" && $meta.edgeRecordToTerm {

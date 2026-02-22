@@ -2952,7 +2952,7 @@ function buildSpec(t: TableAst): any {
     const termDefaults = defaults.terms?.fields ?? [];
     out.taxonomies = buildTaxonomies(t, t.caps.rawTaxonomies, taxonomyDefaults, termDefaults);
     if (Array.isArray(out.fields)) {
-      injectTaxonomyFields(out.fields, out.taxonomies ?? []);
+      injectTaxonomyFields(out.fields, out.taxonomies ?? [], t.model);
     }
   }
 
@@ -3076,10 +3076,11 @@ function buildRelations(table: TableAst, raw: string): any[] {
       required: entry.required,
       processor: entry.processor,
       hook: entry.hook,
+      ...(typeof entry.generateNamedFunctions === 'boolean'
+        ? { generateNamedFunctions: entry.generateNamedFunctions }
+        : {}),
     };
-    if (typeof entry.functions === 'boolean') {
-      out.functions = entry.functions;
-    } else if (entry.functions && Object.keys(entry.functions).length > 0) {
+    if (entry.functions && Object.keys(entry.functions).length > 0) {
       out.functions = entry.functions;
     }
     return out;
@@ -3100,7 +3101,8 @@ function parseRelationEntries(
   required: boolean;
   processor: 'functions' | 'events' | 'none';
   hook: string;
-  functions?: boolean | Record<string, string>;
+  generateNamedFunctions?: boolean;
+  functions?: Record<string, string>;
 }> {
   const lines = mergeTaxonomyEntryLines(splitTopLevelLines(raw));
   const entries: Array<{
@@ -3114,7 +3116,8 @@ function parseRelationEntries(
     required: boolean;
     processor: 'functions' | 'events' | 'none';
     hook: string;
-    functions?: boolean | Record<string, string>;
+    generateNamedFunctions?: boolean;
+    functions?: Record<string, string>;
   }> = [];
 
   for (const rawLine of lines) {
@@ -3151,12 +3154,18 @@ function parseRelationEntries(
     const linkOnCreate =
       typeof settings?.linkOnCreate === 'boolean' ? settings.linkOnCreate : true;
 
-    const functions =
-      typeof settings?.functions === 'boolean'
+    const functionOverrides =
+      settings?.functions && typeof settings.functions === 'object'
         ? settings.functions
-        : settings?.functions && typeof settings.functions === 'object'
+        : undefined;
+    const generateNamedFunctions =
+      typeof settings?.generateNamedFunctions === 'boolean'
+        ? settings.generateNamedFunctions
+        : typeof settings?.functions === 'boolean'
           ? settings.functions
-          : undefined;
+          : functionOverrides
+            ? true
+            : undefined;
 
     entries.push({
       edge,
@@ -3169,7 +3178,10 @@ function parseRelationEntries(
       required,
       processor,
       hook,
-      functions,
+      ...(typeof generateNamedFunctions === 'boolean'
+        ? { generateNamedFunctions }
+        : {}),
+      ...(functionOverrides ? { functions: functionOverrides } : {}),
     });
   }
 
@@ -3274,7 +3286,8 @@ function injectTaxonomyFields(
     cardinality?: 'one' | 'many';
     required?: boolean;
     storeOnModel?: boolean;
-  }>
+  }>,
+  tableModel: string
 ): void {
   if (!taxonomies || taxonomies.length === 0) return;
   const existing = new Set<string>();
@@ -3292,7 +3305,7 @@ function injectTaxonomyFields(
       (cardinality === 'one' ? key : `${key}s`);
     if (!payloadField || existing.has(payloadField)) continue;
     if (taxonomy.storeOnModel === false) continue;
-    const termModel = taxonomy.term?.model ?? 'term';
+    const termModel = taxonomy.term?.model ?? buildDefaultTermModel(tableModel, key);
     const type =
       cardinality === 'one'
         ? `record<${termModel}>`
@@ -3302,6 +3315,21 @@ function injectTaxonomyFields(
     fields.push({ [payloadField]: meta });
     existing.add(payloadField);
   }
+}
+
+function buildDefaultTermModel(tableModel: string, taxonomyKey: string): string {
+  const safeTable = sanitizeModelToken(tableModel);
+  const safeKey = sanitizeModelToken(taxonomyKey);
+  const parts = ['t', safeTable, safeKey].filter(Boolean);
+  return parts.length > 0 ? parts.join('_') : 'term';
+}
+
+function sanitizeModelToken(value: string): string {
+  const sanitized = String(value ?? '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+  return sanitized;
 }
 
 function parseTaxonomyEntries(
@@ -3387,6 +3415,9 @@ function parseTaxonomyEntries(
       'payloadAlias',
       'payloadAliases',
       'storeOnModel',
+      'createOnAttach',
+      'generateNamedFunctions',
+      'functions',
       'processor',
       'required',
       'hierarchical',
@@ -3462,7 +3493,7 @@ function extractTrailingTaxonomySettingsLoose(raw: string): Record<string, any> 
   if (!info) return undefined;
   const block = raw.slice(info.start, info.end + 1);
   if (
-    !/(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|processor|required|hierarchical)\s*:/i.test(block)
+    !/(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|createOnAttach|generateNamedFunctions|functions|processor|required|hierarchical)\s*:/i.test(block)
   ) {
     return undefined;
   }
@@ -3482,7 +3513,7 @@ function extractAnyTaxonomySettings(raw: string): Record<string, any> | undefine
   if (!info) return undefined;
   const block = raw.slice(info.start, info.end + 1);
   if (
-    !/(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|processor|required|hierarchical)\s*:/i.test(block)
+    !/(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|createOnAttach|generateNamedFunctions|functions|processor|required|hierarchical)\s*:/i.test(block)
   ) {
     return undefined;
   }
@@ -3502,7 +3533,7 @@ function extractInlineTaxonomySettings(raw: string): Record<string, any> | undef
     const cleaned = stripInlineComment(line).trim();
     if (!cleaned) continue;
     const match = cleaned.match(
-      /^(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|required|processor|hierarchical)\s*:\s*(.+)$/i
+      /^(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|createOnAttach|generateNamedFunctions|functions|required|processor|hierarchical)\s*:\s*(.+)$/i
     );
     if (!match || !match[1] || !match[2]) continue;
     const key = match[1].trim();
