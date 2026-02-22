@@ -84,6 +84,8 @@ config/nginx.yaml
 config/sync.yaml
 
 config/bootstrap/functions/utility/initTaxonomies.surql
+config/schema-tenants.paths
+config/schema-tenants.paths.local
 
 # Graph + generated artifacts (per-project or generated)
 config/graph.ts
@@ -126,6 +128,7 @@ config/admin/types/*
 #***************
 config/bootstrap/functions/*
 config/bootstrap/modules/*
+config/bootstrap/modules/post/migrations/post/Z_PostBundle.surql
 config/bootstrap/seed/*
 config/generated/*
 config/migrations/*

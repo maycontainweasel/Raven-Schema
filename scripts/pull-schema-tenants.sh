@@ -4,11 +4,12 @@ set -u
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_CONFIG_PATH="$SCRIPT_DIR/../config/schema-tenants.paths"
+DEFAULT_CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/mpd-schema/schema-tenants.paths"
+LEGACY_CONFIG_PATH="$SCRIPT_DIR/../config/schema-tenants.paths"
 CONFIG_PATH="${SCHEMA_TENANTS_FILE:-$DEFAULT_CONFIG_PATH}"
 
 DRY_RUN=0
-ALLOW_DIRTY=0
+SKIP_DIRTY=0
 PULL_MODE="--ff-only"
 
 print_usage() {
@@ -20,7 +21,8 @@ Pull the latest changes for each schema repo listed in a config file.
 Options:
   -c, --config <path>   Use a custom config file path.
   -n, --dry-run         Show what would run without executing git pull.
-      --allow-dirty     Try pulling even when the repo has local changes.
+      --skip-dirty      Skip dirty repos instead of attempting pull.
+      --allow-dirty     Backward-compatible no-op (pull is already attempted on dirty repos).
       --rebase          Use git pull --rebase instead of --ff-only.
   -h, --help            Show this help.
 
@@ -29,7 +31,7 @@ Config format:
   - Blank lines and lines starting with # are ignored.
 
 Default config path:
-  apps/schema/config/schema-tenants.paths
+  ${XDG_CONFIG_HOME:-$HOME/.config}/mpd-schema/schema-tenants.paths
 EOF
 }
 
@@ -46,8 +48,12 @@ while [[ $# -gt 0 ]]; do
     -n|--dry-run)
       DRY_RUN=1
       ;;
+    --skip-dirty)
+      SKIP_DIRTY=1
+      ;;
     --allow-dirty)
-      ALLOW_DIRTY=1
+      # Pull is already attempted on dirty repos by default.
+      :
       ;;
     --rebase)
       PULL_MODE="--rebase"
@@ -66,8 +72,21 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
+  if [[ "$CONFIG_PATH" == "$DEFAULT_CONFIG_PATH" && -f "$LEGACY_CONFIG_PATH" ]]; then
+    echo "⚠️  Using legacy in-repo config: $LEGACY_CONFIG_PATH"
+    echo "    Move it to: $DEFAULT_CONFIG_PATH"
+    CONFIG_PATH="$LEGACY_CONFIG_PATH"
+  fi
+fi
+
+if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "Config file not found: $CONFIG_PATH"
-  echo "Create it with one repo path per line."
+  echo "Create it with one repo path per line, for example:"
+  echo "  mkdir -p \"$(dirname "$DEFAULT_CONFIG_PATH")\""
+  echo "  cat > \"$DEFAULT_CONFIG_PATH\" <<'EOF'"
+  echo "  /Users/michaelpeters/Dev/mpd/projects/mpd-helios-v2/apps/schema"
+  echo "  /Users/michaelpeters/Dev/lucky/apps/schema"
+  echo "  EOF"
   exit 1
 fi
 
@@ -97,6 +116,7 @@ PULLED=()
 UP_TO_DATE=()
 DRY_RUN_ONLY=()
 SKIPPED_DIRTY=()
+DIRTY_REPOS=()
 FAILED=()
 MISSING=()
 NOT_GIT=()
@@ -130,25 +150,23 @@ for RAW_PATH in "${RAW_PATHS[@]}"; do
     continue
   fi
 
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    DIRTY_OUTPUT="$(git -C "$PATH_TO_REPO" status --porcelain 2>/dev/null || true)"
-    if [[ -n "$DIRTY_OUTPUT" && "$ALLOW_DIRTY" -eq 0 ]]; then
-      echo "  -> dry-run: would skip (dirty working tree)"
-      DRY_RUN_ONLY+=("$PATH_TO_REPO | would skip dirty")
-    else
-      echo "  -> dry-run: would run git -C \"$PATH_TO_REPO\" pull $PULL_MODE"
-      DRY_RUN_ONLY+=("$PATH_TO_REPO | would pull")
-    fi
-    continue
-  fi
-
-  if [[ "$ALLOW_DIRTY" -eq 0 ]]; then
-    DIRTY_OUTPUT="$(git -C "$PATH_TO_REPO" status --porcelain 2>/dev/null || true)"
-    if [[ -n "$DIRTY_OUTPUT" ]]; then
+  DIRTY_OUTPUT="$(git -C "$PATH_TO_REPO" status --porcelain 2>/dev/null || true)"
+  if [[ -n "$DIRTY_OUTPUT" ]]; then
+    DIRTY_REPOS+=("$PATH_TO_REPO")
+    DIRTY_COUNT="$(printf '%s\n' "$DIRTY_OUTPUT" | sed '/^$/d' | wc -l | tr -d ' ')"
+    echo "  -> dirty working tree (${DIRTY_COUNT} change(s))"
+    printf '%s\n' "$DIRTY_OUTPUT" | sed 's/^/     /'
+    if [[ "$SKIP_DIRTY" -eq 1 ]]; then
       echo "  -> skipped (dirty working tree)"
       SKIPPED_DIRTY+=("$PATH_TO_REPO")
       continue
     fi
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "  -> dry-run: would run git -C \"$PATH_TO_REPO\" pull $PULL_MODE"
+    DRY_RUN_ONLY+=("$PATH_TO_REPO | would pull")
+    continue
   fi
 
   PULL_OUTPUT="$(git -C "$PATH_TO_REPO" pull "$PULL_MODE" 2>&1)"
@@ -185,6 +203,7 @@ echo "  total: ${TOTAL}"
 echo "  pulled: ${#PULLED[@]}"
 echo "  already up to date: ${#UP_TO_DATE[@]}"
 echo "  dry run only: ${#DRY_RUN_ONLY[@]}"
+echo "  dirty repos: ${#DIRTY_REPOS[@]}"
 echo "  skipped dirty: ${#SKIPPED_DIRTY[@]}"
 echo "  missing paths: ${#MISSING[@]}"
 echo "  not git repos: ${#NOT_GIT[@]}"
@@ -194,6 +213,14 @@ if [[ ${#SKIPPED_DIRTY[@]} -gt 0 ]]; then
   echo
   echo "Skipped (dirty working tree):"
   for ITEM in "${SKIPPED_DIRTY[@]}"; do
+    echo "  - $ITEM"
+  done
+fi
+
+if [[ ${#DIRTY_REPOS[@]} -gt 0 ]]; then
+  echo
+  echo "Repos with local changes detected:"
+  for ITEM in "${DIRTY_REPOS[@]}"; do
     echo "  - $ITEM"
   done
 fi
@@ -230,7 +257,7 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
   done
 fi
 
-if [[ ${#FAILED[@]} -gt 0 || ${#MISSING[@]} -gt 0 || ${#NOT_GIT[@]} -gt 0 || ${#SKIPPED_DIRTY[@]} -gt 0 ]]; then
+if [[ ${#FAILED[@]} -gt 0 || ${#MISSING[@]} -gt 0 || ${#NOT_GIT[@]} -gt 0 ]]; then
   exit 1
 fi
 
