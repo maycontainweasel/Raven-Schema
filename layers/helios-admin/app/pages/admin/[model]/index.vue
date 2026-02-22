@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
+import AInput from '#layers/helios-ui/app/components/fields/AInput.vue'
+import ACombobox from '#layers/helios-ui/app/components/fields/ACombobox.vue'
+import AComboboxAsync from '#layers/helios-ui/app/components/fields/AComboboxAsync.vue'
+import AColorPicker from '#layers/helios-ui/app/components/fields/AColorPicker.vue'
 import type {
   DirectoryFilterSpec,
   ModelLayoutSpec,
@@ -301,10 +305,10 @@ const searchCreateFieldOptions = async (field: ModelUIFieldSpec, query: string):
 }
 
 const resolveFieldComponent = (name: string) => {
-  if (name === 'ACombobox') return 'ACombobox'
-  if (name === 'AComboboxAsync') return 'AComboboxAsync'
-  if (name === 'AColorPicker') return 'AColorPicker'
-  return 'AInput'
+  if (name === 'ACombobox') return ACombobox
+  if (name === 'AComboboxAsync') return AComboboxAsync
+  if (name === 'AColorPicker') return AColorPicker
+  return AInput
 }
 
 const resolveCreateDialogOverride = (modelKey: string) => {

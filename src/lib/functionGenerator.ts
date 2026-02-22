@@ -457,6 +457,11 @@ function buildCreateFunctionContent(
     );
   }
 
+  const recordFieldNormalize = buildRecordFieldNormalizationLines(fields, '$payload');
+  if (recordFieldNormalize.length > 0) {
+    lines.push(...recordFieldNormalize, '');
+  }
+
   const relationCapture = buildRelationCaptureLines(relationHooks, '$payload');
   if (relationCapture.length > 0) {
     lines.push(...relationCapture, '');
@@ -655,6 +660,11 @@ function buildUpdateFunctionContent(
   const payloadStrip = buildFieldPayloadStripLines(fields, payloadParam);
   if (payloadStrip.length > 0) {
     lines.push(...payloadStrip, '');
+  }
+
+  const recordFieldNormalize = buildRecordFieldNormalizationLines(fields, payloadParam);
+  if (recordFieldNormalize.length > 0) {
+    lines.push(...recordFieldNormalize, '');
   }
 
   if (enumValidations.length > 0) {
@@ -2027,6 +2037,11 @@ function buildSubtableCreateFunctionContent(
     );
   }
 
+  const recordFieldNormalize = buildRecordFieldNormalizationLines(fields, '$payload');
+  if (recordFieldNormalize.length > 0) {
+    lines.push(...recordFieldNormalize, '');
+  }
+
   const taxonomyCapture = buildTaxonomyCaptureLines(taxonomyHooks, '$payload');
   if (taxonomyCapture.length > 0) {
     lines.push(...taxonomyCapture, '');
@@ -2734,6 +2749,41 @@ function buildUuidAssignments(fields: NormalizedField[], assigned: Set<string>):
   return assignments;
 }
 
+function buildRecordFieldNormalizationLines(
+  fields: NormalizedField[],
+  payloadVar: string
+): string[] {
+  const assignments: string[] = [];
+  for (const field of fields) {
+    const recordModel = extractRecordModel(field.meta.type);
+    if (!recordModel) {
+      continue;
+    }
+    const key = formatObjectKey(field.name);
+    const accessor = `${payloadVar}.${field.name}`;
+    assignments.push(
+      `\t\t${key}: ${buildRecordValueNormalizationExpression(recordModel, accessor)},`
+    );
+  }
+  if (assignments.length === 0) {
+    return [];
+  }
+  return [
+    `\tlet ${payloadVar} = fn::objectAssign(${payloadVar}, {`,
+    ...assignments,
+    `\t});`,
+  ];
+}
+
+function buildRecordValueMissingExpression(valueExpr: string): string {
+  return `${valueExpr} = NONE || ${valueExpr} = null || (type::is_string(${valueExpr}) && string::len(string::trim(${valueExpr})) = 0)`;
+}
+
+function buildRecordValueNormalizationExpression(recordModel: string, valueExpr: string): string {
+  const missingExpr = buildRecordValueMissingExpression(valueExpr);
+  return `if type::is_array(${valueExpr}) { ${valueExpr} } else if ${missingExpr} { ${valueExpr} } else { fn::ridParam("${recordModel}", ${valueExpr}) }`;
+}
+
 function buildExplicitAssignOverrides(
   fields: NormalizedField[],
   payloadVar: string,
@@ -2762,8 +2812,9 @@ function buildExplicitAssignOverrides(
       const fallback =
         isEmptyDefaultLiteral(inner)
           ? 'null'
-          : `if type::is_record(${inner}) { ${inner} } else { type::record("${recordModel}", ${inner}) }`;
-      const expression = `if type::is_record(${accessor}) { ${accessor} } else if ${accessor} { type::record("${recordModel}", ${accessor}) } else { ${fallback} }`;
+          : buildRecordValueNormalizationExpression(recordModel, inner);
+      const missingAccessor = buildRecordValueMissingExpression(accessor);
+      const expression = `if ${missingAccessor} { ${fallback} } else { fn::ridParam("${recordModel}", ${accessor}) }`;
       assignments.push(`\t\t${field.name}: ${expression},`);
       assigned.add(field.name);
       continue;
@@ -2783,7 +2834,7 @@ function buildExplicitAssignOverrides(
 
 function extractRecordModel(typeValue?: string): string | null {
   if (!typeValue) return null;
-  const match = typeValue.trim().match(/^record<\s*([^>]+)\s*>$/i);
+  const match = typeValue.trim().match(/record<\s*([^>]+)\s*>/i);
   if (!match || !match[1]) return null;
   return match[1].trim();
 }
