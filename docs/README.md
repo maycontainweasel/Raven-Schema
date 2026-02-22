@@ -5,7 +5,7 @@ This document tracks the evolving architecture and behaviour of the schema tooli
 ## Current Focus
 
 - Declarative table configs (`config/migrations/**`) drive Surreal table creation, Zod type generation, and TRPC router scaffolding.
-- YAML-driven bootstrap imports seed utility functions into Surreal as part of the main pipeline.
+- Bootstrap and seed are now separate execution phases: bootstrap loads core assets/modules, then seed runs explicitly.
 - Generated assets flow automatically into the Nuxt playground (`schema-testing-nuxt`) for validation.
 
 ## Pipeline Overview
@@ -183,9 +183,12 @@ Notes:
 |---------|-------------|
 | `pnpm run dev` | Execute the full schema pipeline (tables → types → routers → bootstrap). |
 | `pnpm run build && pnpm run start` | Run compiled build of the pipeline (same steps as `dev`). |
+| `pnpm run schema:full` | Run the full DB cycle: `schema:generate` → `schema:generate:modules` → `schema:bootstrap` → `schema:import` → `schema:seed`. |
 | `pnpm run scaffold table:create <name> --branches a,b,c` | Generate/extend migration stubs for a primary table and optional branch tables. Use `--force` to overwrite existing files. | if the primary table exists it will only create the branch tables
 | `pnpm run dev` (or build/start) | Regenerates TRPC routers, schema types, creates relation edges, imports bootstrap utilities first, writes & imports generated CRUD functions, and reapplies table events. |
 | `pnpm run scaffold functions:generate [name]` | Generate SURQL CRUD scaffolds (create/update/delete) for all tables or a single table. |
+| `pnpm run schema:bootstrap` | Import bootstrap functions/modules (no seed import). |
+| `pnpm run schema:seed` | Import only seed files matching each target database key. |
 | `pnpm run scaffold trpc:scaffold <name>` | Insert a default TRPC block into a migration (use names like `user` or `user.settings`; add `--force` to overwrite). |
 | `pnpm run schema:assets:diff --database <name>` | Compare local `schema-assets.json` to the target DB `app:schemaAssets` and list assets that differ or are missing. Uses disk rehashing by default; pass `--no-rehash-local` to skip. |
 | `pnpm run schema:assets:sync --database <name>` | Replace the target DB `app:schemaAssets` with the local manifest (top-level keys). |
@@ -203,8 +206,10 @@ Notes:
 
 Examples:
 ```bash
+pnpm run schema:full --database ph --force
 pnpm run schema:import --only-changed --database ph
 pnpm run schema:bootstrap --force --database ph
+pnpm run schema:seed --database ph --force
 ```
 
 ## Next Up
@@ -220,6 +225,7 @@ pnpm run schema:bootstrap --force --database ph
 - Generated SURQL assets (tables, views, indexes, events, CRUD functions) now default to `DEFINE ... OVERWRITE` unless you explicitly set `mode: IF NOT EXISTS`, so database applies stay idempotent.
 - Asset imports support `--only-changed` (compare against `app:schemaAssets`) and `--force` to override; set `importFilters.onlyChanged: true` to default to only-changed imports.
 - `schema:import` and `schema:bootstrap` now rebuild indexes by default; pass `--no-rebuild-indexes` to skip.
+- `schema:bootstrap` no longer imports seeds; run `schema:seed` explicitly after bootstrap/import.
 - For targeted function refreshes during relation/debug work, prefer explicit imports:
   - `pnpm -C apps/schema run schema:import frame -- --database helios --layers functions --force`
 - You can also rebuild indexes manually with `pnpm run schema:indexes:rebuild` (add `--table` or a specific index name to scope).

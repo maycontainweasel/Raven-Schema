@@ -3183,11 +3183,11 @@ export type AppRouter = typeof appRouter
         .option('seed', {
           type: 'boolean',
           default: true,
-          describe: 'Import seed file matching the database key (default: true)',
+          describe: 'Import seed file matching the database key after bootstrap/import (default: true)',
         })
         .option('with-schema-functions', {
           type: 'boolean',
-          describe: 'Import generated schema functions before seeds (default: false; opt-in)',
+          describe: 'Import generated schema functions during bootstrap (default: false; opt-in)',
         })
         .option('module-sync', {
           type: 'string',
@@ -3295,9 +3295,6 @@ export type AppRouter = typeof appRouter
         if (args.modules) {
           bootstrapArgs.push('--modules', String(args.modules));
         }
-        if (args.seed === false) {
-          bootstrapArgs.push('--seed', 'false');
-        }
         await runChildProcess('pnpm', bootstrapArgs, projectRoot);
       }
 
@@ -3317,7 +3314,164 @@ export type AppRouter = typeof appRouter
         await runChildProcess('pnpm', importArgs, projectRoot);
       }
 
+      if (args.seed !== false) {
+        const seedArgs = [
+          'exec',
+          'tsx',
+          'src/cli.ts',
+          'seed',
+          '--force',
+          '--on-existing',
+          onExistingCli,
+        ];
+        if (args.database) {
+          seedArgs.push('--database', String(args.database));
+        }
+        await runChildProcess('pnpm', seedArgs, projectRoot);
+      }
+
       console.log('✅ Refresh complete.');
+    }
+  )
+  .command(
+    'full',
+    'Run the full database cycle: generate -> generate:modules -> bootstrap -> import -> seed',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .option('database', {
+          alias: ['d', 'db'],
+          type: 'string',
+          describe: 'Database name from app.config.yaml (comma-separated for multiple)',
+        })
+        .option('project', {
+          alias: 'p',
+          type: 'string',
+          describe: 'Comma-separated list of project names to target during generate',
+        })
+        .option('modules', {
+          alias: 'm',
+          type: 'string',
+          describe: 'Comma-separated module names to generate/import',
+        })
+        .option('with-schema-functions', {
+          type: 'boolean',
+          describe: 'Import generated schema functions during bootstrap (default: false; opt-in)',
+        })
+        .option('on-existing', {
+          type: 'string',
+          choices: ['overwrite', 'if-not-exists', 'none'],
+          describe: 'How to handle existing DEFINE targets when importing',
+        })
+        .option('force', {
+          type: 'boolean',
+          default: false,
+          describe: 'Pass --force to bootstrap/import/seed',
+        })
+        .option('dry-run', {
+          type: 'boolean',
+          default: false,
+          describe: 'Pass --dry-run to bootstrap/import/seed',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const appConfig = await loadAppConfig(projectRoot);
+      const onExisting = resolveOnExistingFlag(args['on-existing'], appConfig.onExisting);
+      const onExistingCli =
+        onExisting === 'IF NOT EXISTS'
+          ? 'if-not-exists'
+          : onExisting === 'NONE'
+            ? 'none'
+            : 'overwrite';
+
+      console.log('🚀 Running full schema cycle...');
+
+      const generateArgs = [
+        'exec',
+        'tsx',
+        'src/cli.ts',
+        'generate',
+        '--no-sync-graph',
+      ];
+      if (args.project) {
+        generateArgs.push('--project', String(args.project));
+      }
+      await runChildProcess('pnpm', generateArgs, projectRoot);
+
+      const moduleArgs = [
+        'exec',
+        'tsx',
+        'src/cli.ts',
+        'generate:modules',
+      ];
+      if (args.modules) {
+        moduleArgs.push('--modules', String(args.modules));
+      }
+      await runChildProcess('pnpm', moduleArgs, projectRoot);
+
+      const bootstrapArgs = [
+        'exec',
+        'tsx',
+        'src/cli.ts',
+        'bootstrap',
+        '--on-existing',
+        onExistingCli,
+      ];
+      if (args.database) {
+        bootstrapArgs.push('--database', String(args.database));
+      }
+      if (args.modules) {
+        bootstrapArgs.push('--modules', String(args.modules));
+      }
+      if (args['with-schema-functions'] === true) {
+        bootstrapArgs.push('--with-schema-functions');
+      }
+      if (args.force === true) {
+        bootstrapArgs.push('--force');
+      }
+      if (args['dry-run'] === true) {
+        bootstrapArgs.push('--dry-run');
+      }
+      await runChildProcess('pnpm', bootstrapArgs, projectRoot);
+
+      const importArgs = [
+        'exec',
+        'tsx',
+        'src/cli.ts',
+        'import',
+        '--on-existing',
+        onExistingCli,
+      ];
+      if (args.database) {
+        importArgs.push('--database', String(args.database));
+      }
+      if (args.force === true) {
+        importArgs.push('--force');
+      }
+      if (args['dry-run'] === true) {
+        importArgs.push('--dry-run');
+      }
+      await runChildProcess('pnpm', importArgs, projectRoot);
+
+      const seedArgs = [
+        'exec',
+        'tsx',
+        'src/cli.ts',
+        'seed',
+        '--on-existing',
+        onExistingCli,
+      ];
+      if (args.database) {
+        seedArgs.push('--database', String(args.database));
+      }
+      if (args.force === true) {
+        seedArgs.push('--force');
+      }
+      if (args['dry-run'] === true) {
+        seedArgs.push('--dry-run');
+      }
+      await runChildProcess('pnpm', seedArgs, projectRoot);
+
+      console.log('✅ Full cycle complete.');
     }
   )
   .command(
@@ -4319,14 +4473,9 @@ export type AppRouter = typeof appRouter
           type: 'string',
           describe: 'Comma-separated module names to import (overrides config.modules)',
         })
-        .option('seed', {
-          type: 'boolean',
-          default: true,
-          describe: 'Import seed file matching the database key (default: true)',
-        })
         .option('with-schema-functions', {
           type: 'boolean',
-          describe: 'Import generated schema functions before seeds (default: false; opt-in)',
+          describe: 'Import generated schema functions during bootstrap (default: false; opt-in)',
         })
         .option('dry-run', {
           type: 'boolean',
@@ -4434,26 +4583,6 @@ export type AppRouter = typeof appRouter
             console.log('ℹ️  Skipping schema migration functions (enable with --with-schema-functions).');
           }
 
-          if (args.seed !== false) {
-            const seedsRoot = path.resolve(projectRoot, 'config', 'bootstrap', 'seed');
-            const seedFilter = bundle.app.importFilters?.bootstrap?.seeds;
-            const seedExclude = bundle.app.importFilters?.bootstrap?.seedsExclude;
-            if (seedExclude && seedExclude.includes(target.name)) {
-              console.log(`ℹ️  Seed import skipped for "${target.name}" (excluded).`);
-            } else if (seedFilter && seedFilter.length > 0 && !seedFilter.includes(target.name)) {
-              console.log(`ℹ️  Seed import skipped for "${target.name}" (filtered).`);
-            } else {
-              await importSeeds(target.config, {
-                seedsRoot,
-                databaseKey: target.name,
-                dryRun: Boolean(args['dry-run']),
-                onExisting,
-                assetTracking: { projectRoot, trackSeeds: false },
-                onlyChanged,
-              });
-            }
-          }
-
           if (args['rebuild-indexes'] !== false) {
             const rebuilt = await rebuildIndexes(target.config, {
               dryRun: Boolean(args['dry-run']),
@@ -4478,8 +4607,8 @@ export type AppRouter = typeof appRouter
     }
   )
   .command(
-    'bootstrap:seed',
-    'Import only the seed file matching the database key (no other bootstrap steps)',
+    ['seed', 'bootstrap:seed'],
+    'Import only seed files for the target database key(s) (bootstrap:seed is an alias)',
     (yargsBuilder: any) =>
       yargsBuilder
         .option('database', {

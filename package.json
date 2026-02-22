@@ -16,6 +16,7 @@
     "type-check": "tsc --noEmit",
     "schema:generate": "tsx src/cli.ts generate",
     "schema:refresh": "tsx src/cli.ts refresh",
+    "schema:full": "tsx src/cli.ts full",
     "schema:module:sync": "tsx src/cli.ts schema-kit:sync",
     "schema:layers:sync": "tsx src/cli.ts layers:sync",
     "schema:module:clear": "tsx src/cli.ts schema-kit:clear",
@@ -27,7 +28,8 @@
     "schema:indexes:rebuild": "tsx src/cli.ts indexes:rebuild",
     "schema:sync": "node scripts/sync.mjs",
     "schema:bootstrap": "tsx src/cli.ts bootstrap",
-    "schema:bootstrap:seed": "tsx src/cli.ts bootstrap:seed",
+    "schema:seed": "tsx src/cli.ts seed",
+    "schema:bootstrap:seed": "tsx src/cli.ts seed",
     "schema:request-schema": "tsx src/cli.ts request-schema:generate",
     "site:create": "tsx src/cli.ts site:create",
     "site:delete": "tsx src/cli.ts site:delete",
@@ -77,7 +79,9 @@
     "graph:mermaid": "tsx scripts/gen-graph-mpdg.ts",
     "graph:ids": "tsx scripts/gen-ids-mpdg.ts",
     "spec": "pnpm run graph:spec && pnpm run graph:mermaid",
-    "spec:copy": "tsx scripts/spec-copy.ts"
+    "spec:copy": "tsx scripts/spec-copy.ts",
+    "schema:tenants:pull": "bash scripts/pull-schema-tenants.sh",
+    "schema:tenants:pull:dry": "bash scripts/pull-schema-tenants.sh --dry-run"
   },
   "keywords": [
     "typescript",

@@ -59,10 +59,12 @@ This template provides a complete TypeScript environment with all the essentials
 | `npm run type-check` | Type check without building |
 | `npm run schema:generate` | Generate functions, views, indexes, types, routers, bundles (no DB writes) |
 | `npm run schema:generate:modules` | Generate module assets from module specs (functions, views, indexes, bundles) |
+| `npm run schema:full` | Run the full DB cycle: generate -> generate:modules -> bootstrap -> import -> seed |
 | `npm run schema:import` | Import generated SURQL assets (functions, events, views, indexes) |
 | `npm run schema:import:functions` | Import generated/override SURQL functions into target DBs |
-| `npm run schema:bootstrap` | Import bootstrap assets and enabled modules into target DBs |
-| `npm run schema:bootstrap:seed` | Import only seed data for target DBs |
+| `npm run schema:bootstrap` | Import bootstrap assets and enabled modules into target DBs (no seeds) |
+| `npm run schema:seed` | Import only seed data for target DBs |
+| `npm run schema:bootstrap:seed` | Alias of `schema:seed` |
 | `npm run schema:request-schema` | Generate the shared RequestSchema helper (instance-aware request input) |
 
 ## Common Tasks (with examples)
@@ -71,6 +73,9 @@ This template provides a complete TypeScript environment with all the essentials
 
 - Generate everything (no DB writes):  
   `pnpm run schema:generate`
+
+- Run the full DB cycle (generate -> modules -> bootstrap -> import -> seed):  
+  `pnpm run schema:full --database uk --force`
 
 - Generate just one table (e.g., `exam`):  
   `pnpm run schema:generate --name exam`
@@ -106,7 +111,7 @@ This template provides a complete TypeScript environment with all the essentials
   `pnpm run schema:bootstrap --modules post,instances --database uk`
 
 - Import only seeds for DB(s):  
-  `pnpm run schema:bootstrap:seed --database uk,test`
+  `pnpm run schema:seed --database uk,test`
 
 - Copy a spec folder from staging to live (by label, model, or folder name):  
   `pnpm run spec:copy User`  
@@ -401,7 +406,7 @@ What happens:
 - Bootstrap imports everything under `config/bootstrap/functions` plus modules listed in `modules:` (or passed via `--modules`). Module layout: `config/modules/<module>/<module>.surql` (base) and optional `functions/*.surql`.
 - Module specs: place table specs under `config/bootstrap/modules/<module>/specs/*.table.yaml`; generated SURQL assets land in `<module>/migrations/` via `schema:generate:modules`. These assets are imported during `schema:bootstrap` alongside the module base/function files.
 - Module overrides: put any SURQL file with the same name under `config/bootstrap/modules/<module>/overrides/**`. During bootstrap import, overrides win over base/functions/migrations; bundles are never imported.
-- Seeds: place `config/bootstrap/seed/<dbkey>.surql`. During `schema:bootstrap` (unless `--seed=false`) or `schema:bootstrap:seed`, only the file matching the current database key is imported.
+- Seeds: place `config/bootstrap/seed/<dbkey>.surql`. Seeds are imported only by `schema:seed` (or alias `schema:bootstrap:seed`) and only the file matching the current database key is imported.
 
 ## Project Structure
 

@@ -1,0 +1,188 @@
+// DMO core schema
+// This file replaces the demo graph and will evolve as we map the full domain.
+
+User, u | DMO application user {
+  id: $email,
+  legacyId?: 0, <unique>
+  email!: "", <email> <unique>
+  firstName!: "",
+  surname!: "",
+  password!: "", <password {hash: argon2}> <assign>
+  uniqueId: "", <md5<$email>> <assign>
+  // recentSession?: "", <record<session>> <assign>
+} [
+  crud,
+  router,
+  views:
+    Admin[*](),
+    Public::fn[firstName, surname, email, uniqueId, role<fetch>](),
+  
+  taxonomies:
+    Role/Roles, role | User roles {} {
+      hierarchical: false
+      cardinality: one
+      storeOnModel: true
+      payloadField: role
+      payloadAliases: [roles]
+      required: true
+      processor: functions
+    },
+
+  typesense:
+    user::fn[id, email, firstName, surname, uniqueId](
+      instances: $instances, <facet>
+    ) {
+      // defaultSortingField: email,
+      queryBy: [email, firstName, surname, uniqueId, instances],
+      queryByWeights: [1, 1, 1, 1, 1],
+      sortableFields: [surname],
+      filters: [instances]
+    },
+  
+  post,
+  instance,
+  
+] (
+  *UserValue, uValue | User values (ordered list) {
+    id: S($parent, $key),
+    u: $parent, <record<u>> <assign>
+    label!: "",
+    key: string::slug($label), <assign>
+    order: 0
+  }
+
+  UserState, uState | User state flags {
+    id: $parent,
+    stateKey: "",
+    stateValue: ""
+  }
+
+  UserRecord, uRecord | Aggregated user record {
+    id: $parent,
+    sessionsTotal?: 0,
+    sessionsComplete?: 0,
+    sessionsIncomplete?: 0,
+    traitsTotal?: 0,
+    traitsComplete?: 0,
+    traitsIncomplete?: 0,
+    entriesA?: 0,
+    entriesB?: 0,
+    entriesTotal?: 0,
+    entriesPerSession?: 0,
+    timeTotal?: 0,
+    timeATotal?: 0,
+    timeBTotal?: 0,
+    timePerSession?: 0,
+    percentageComplete?: 0,
+    percentageCompleteA?: 0,
+    percentageCompleteB?: 0
+  } [router<U>]
+) {
+  // extras
+}
+
+Session, session | DMO user session {
+  id: default,
+  u!: "", <record<u>> <assign>
+  uuid: "", <uuid<v4>> <assign>
+  type!: "infatuation", <"infatuation" | "resentment">
+  focus!: "self", <"self" | "other">
+  mode: "",
+  individualName: "",
+  individualRelation: "",
+  complete: false,
+  userSessionIndex: 0,
+  lastWorked?: "", <datetime>
+  createdAt: time::now(), <datetime>
+  updatedAt: time::now(), <datetime>
+} [
+  crud,
+  router,
+  views:
+    Admin[*]
+] (
+  SessionState, sessionState | Session state {
+    id: $parent,
+    state!: "session-entering-tais", <"session-entering-tais" | "session-preparing" | "session-ready-to-start" | "session-in-progress" | "session-complete-consideration" | "session-complete-consideration-reactivate" | "session-complete-consideration-create" | "session-complete-reactivate" | "session-complete-create" | "session-complete">
+    completedTs?: 0,
+    mostRecentLoginTs?: 0,
+    mostRecentWorkingTs?: 0,
+    activeColumn!: 0,
+    activeTrait!: 0
+  }
+
+  SessionRecord, sessionRecord | Session completion record {
+    id: $parent,
+    sessionComplete!: false,
+    sessionStagingComplete!: false,
+    taisTotal!: 0,
+    taisCompleted!: 0,
+    taisRemaining!: 0,
+    percComplete!: 0,
+    columns!: {
+      total: 0,
+      colsComplete: 0,
+      colsRemaining: 0,
+      percComplete: 0
+    },
+    infatuation!: {
+      complete: false,
+      taisTotal: 0,
+      taisCompleted: 0,
+      taisRemaining: 0,
+      percComplete: 0,
+      columns: {
+        total: 0,
+        colsComplete: 0,
+        colsRemaining: 0,
+        percComplete: 0
+      }
+    },
+    resentment!: {
+      complete: false,
+      taisTotal: 0,
+      taisCompleted: 0,
+      taisRemaining: 0,
+      percComplete: 0,
+      columns: {
+        total: 0,
+        colsComplete: 0,
+        colsRemaining: 0,
+        percComplete: 0
+      }
+    },
+    entriesA!: 0,
+    entriesB!: 0,
+    entriesTotal!: 0,
+    timeA!: 0,
+    timeB!: 0,
+    timeTotal!: 0
+  }
+
+  *SessionValue, sessionValue | Session values {
+    id: S($parent, $index),
+    label!: "",
+    index: 0
+  }
+
+  *SessionTrait, sessionTrait | Session traits {
+    id: S($parent, $taiId),
+    taiId!: 0,
+    taiIndex!: 0,
+    label!: "",
+    side!: "infatuation", <"infatuation" | "resentment">,
+    complete!: false
+  } (
+    *TraitColumnState, traitColumnState | Trait column state {
+      id: S($parent, $column),
+      column!: 0,
+      entryTotal!: 0,
+      entries: [],
+      timeTotal!: 0,
+      state!: "open", <"open" | "hold" | "complete">,
+      side!: "infatuation", <"infatuation" | "resentment">
+    }
+  )
+) {
+  // extras
+}
