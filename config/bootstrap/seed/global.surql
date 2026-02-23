@@ -13,6 +13,17 @@
 // *****************************************************
 
 // User roles taxonomy (ensure default roles exist)
-fn::addUserRoleTerm({ key: "super", label: "Super" });
-fn::addUserRoleTerm({ key: "admin", label: "Admin" });
-fn::addUserRoleTerm({ key: "student", label: "Student" });
+
+fn::createTerm("u", 'role', {
+  "label": "Super",
+  "key": "super"
+})
+fn::createTerm("u", 'role', {
+  "label": "Admin",
+  "key": "admin"
+})
+fn::createTerm("u", 'role', {
+  "label": "Student",
+  "key": "student"
+})
+
