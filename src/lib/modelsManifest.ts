@@ -12,7 +12,8 @@ import type {
   TableRelationConfig,
 } from '../types';
 
-type ModelDataMode = 'local' | 'remote';
+type ModelAuthority = 'source' | 'tenant';
+type LegacyDataMode = 'local' | 'remote';
 type ModelSchemaType = 'schemaless' | 'schemafull';
 
 type GeneratedTaxonomyActions = {
@@ -77,7 +78,8 @@ type GeneratedModelEntry = {
   table: string;
   label: string;
   description: string;
-  data: ModelDataMode;
+  authority: ModelAuthority;
+  data: LegacyDataMode;
   schemaType: ModelSchemaType;
   slugPolicy?: string;
   capabilities: string[];
@@ -110,7 +112,8 @@ type GeneratedCanonicalManifestDocument = {
     table: string;
     label: string;
     description: string;
-    data: ModelDataMode;
+    authority: ModelAuthority;
+    data: LegacyDataMode;
     schemaType: ModelSchemaType;
     slugPolicy?: string;
     capabilities: string[];
@@ -143,7 +146,8 @@ type GeneratedAdminManifestDocument = {
   models: Record<string, {
     key: string;
     table: string;
-    data: ModelDataMode;
+    authority: ModelAuthority;
+    data: LegacyDataMode;
     slugPolicy?: string;
     capabilities: string[];
     fields: string[];
@@ -170,7 +174,7 @@ type GeneratedAdminManifestDocument = {
 
 type NormalizedModelSettings = {
   schemaType?: ModelSchemaType;
-  dataLocation?: ModelDataMode;
+  authority?: ModelAuthority;
   bootstrap: {
     ensureTable: boolean;
     permissions?: Record<string, unknown>;
@@ -195,6 +199,7 @@ interface GenerateModelsManifestOptions {
 
 const KNOWN_MODEL_SETTINGS_KEYS = new Set([
   'schemaType',
+  'authority',
   'dataLocation',
   'bootstrap',
   'admin',
@@ -255,7 +260,11 @@ function buildEntries(tables: TableMigrationConfig[]): GeneratedModelEntry[] {
       const modelSettings = normalizeModelSettings((table as any).modelSettings);
 
       const schemaType = modelSettings.schemaType ?? resolveSchemaType(table);
-      const data = modelSettings.dataLocation ?? normalizeDataMode(admin.data);
+      const authority =
+        modelSettings.authority ??
+        normalizeAuthority((admin as any).authority ?? admin.data) ??
+        'source';
+      const data = toLegacyDataMode(authority);
       const slugPolicy = sanitizeOptionalString(admin.slugPolicy);
       const adminEnabled =
         typeof modelSettings.admin.enabled === 'boolean'
@@ -341,6 +350,7 @@ function buildEntries(tables: TableMigrationConfig[]): GeneratedModelEntry[] {
         table: tableModel,
         label,
         description,
+        authority,
         data,
         schemaType,
         ...(slugPolicy ? { slugPolicy } : {}),
@@ -374,6 +384,7 @@ function buildModelsFile(entries: GeneratedModelEntry[]): string {
     .map((entry) => {
       const props = [
         `table: ${JSON.stringify(entry.table)}`,
+        `authority: ${JSON.stringify(entry.authority)}`,
         `data: ${JSON.stringify(entry.data)}`,
         `schemaType: ${JSON.stringify(entry.schemaType)}`,
         ...(entry.slugPolicy ? [`slugPolicy: ${JSON.stringify(entry.slugPolicy)}`] : []),
@@ -386,6 +397,7 @@ function buildModelsFile(entries: GeneratedModelEntry[]): string {
     `// AUTO-GENERATED — models manifest for schema-kit runtime`,
     `export type ModelEntry = {`,
     `  table: string;`,
+    `  authority: 'source' | 'tenant';`,
     `  data: 'local' | 'remote';`,
     `  schemaType?: 'schemaless' | 'schemafull';`,
     `  slugPolicy?: string;`,
@@ -408,6 +420,7 @@ function buildCanonicalManifest(entries: GeneratedModelEntry[]): GeneratedCanoni
         table: entry.table,
         label: entry.label,
         description: entry.description,
+        authority: entry.authority,
         data: entry.data,
         schemaType: entry.schemaType,
         ...(entry.slugPolicy ? { slugPolicy: entry.slugPolicy } : {}),
@@ -467,6 +480,7 @@ function buildAdminManifest(entries: GeneratedModelEntry[]): GeneratedAdminManif
       return [entry.key, {
         key: entry.key,
         table: entry.table,
+        authority: entry.authority,
         data: entry.data,
         ...(entry.slugPolicy ? { slugPolicy: entry.slugPolicy } : {}),
         capabilities: entry.capabilities,
@@ -671,8 +685,12 @@ function normalizeModelSettings(raw: unknown): NormalizedModelSettings {
     warnings.push(`Invalid modelSettings.schemaType value "${String(source.schemaType)}".`);
   }
 
-  const dataLocation = normalizeDataModeValue(source.dataLocation);
-  if (source.dataLocation !== undefined && !dataLocation) {
+  const authority =
+    normalizeAuthority(source.authority) ??
+    normalizeAuthority(source.dataLocation);
+  if (source.authority !== undefined && !normalizeAuthority(source.authority)) {
+    warnings.push(`Invalid modelSettings.authority value "${String(source.authority)}".`);
+  } else if (source.dataLocation !== undefined && !normalizeAuthority(source.dataLocation)) {
     warnings.push(`Invalid modelSettings.dataLocation value "${String(source.dataLocation)}".`);
   }
 
@@ -705,7 +723,7 @@ function normalizeModelSettings(raw: unknown): NormalizedModelSettings {
 
   return {
     ...(schemaType ? { schemaType } : {}),
-    ...(dataLocation ? { dataLocation } : {}),
+    ...(authority ? { authority } : {}),
     bootstrap: {
       ensureTable: bootstrapEnsureTable,
       ...(bootstrapPermissions ? { permissions: bootstrapPermissions } : {}),
@@ -736,16 +754,16 @@ function normalizeSchemaTypeValue(value: unknown): ModelSchemaType | undefined {
   return undefined;
 }
 
-function normalizeDataMode(value: unknown): ModelDataMode {
-  return String(value ?? '').trim().toLowerCase() === 'remote' ? 'remote' : 'local';
-}
-
-function normalizeDataModeValue(value: unknown): ModelDataMode | undefined {
+function normalizeAuthority(value: unknown): ModelAuthority | undefined {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!normalized) return undefined;
-  if (normalized === 'remote') return 'remote';
-  if (normalized === 'local') return 'local';
+  if (['source', 'local', 'mothership', 'central', 'global', 'home'].includes(normalized)) return 'source';
+  if (['tenant', 'remote', 'instance'].includes(normalized)) return 'tenant';
   return undefined;
+}
+
+function toLegacyDataMode(authority: ModelAuthority): LegacyDataMode {
+  return authority === 'tenant' ? 'remote' : 'local';
 }
 
 function sanitizeOptionalString(value: unknown): string {

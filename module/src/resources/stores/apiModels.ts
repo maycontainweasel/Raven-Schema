@@ -15,8 +15,15 @@ export type ApiModelMeta = {
   description: string
   icon: string
   table: string
-  data: 'local' | 'remote' | 'unknown'
+  authority: 'source' | 'tenant' | 'unknown'
   processes: string[]
+}
+
+const normalizeAuthority = (value: unknown): 'source' | 'tenant' | 'unknown' => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized === 'source' || normalized === 'local') return 'source'
+  if (normalized === 'tenant' || normalized === 'remote') return 'tenant'
+  return 'unknown'
 }
 
 const toTitleCase = (value: string) => {
@@ -51,7 +58,7 @@ const baseUseApiModelsStore = defineStore('apiModels', () => {
       description,
       icon,
       table: schemaEntry?.table ?? key,
-      data: (override?.data ?? schemaEntry?.data ?? 'unknown') as 'local' | 'remote' | 'unknown',
+      authority: normalizeAuthority(override?.authority ?? override?.data ?? schemaEntry?.authority ?? schemaEntry?.data),
       processes,
     }
   }

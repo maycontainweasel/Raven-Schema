@@ -1,6 +1,6 @@
 import { useTypesense } from './useTypesense'
 import { models } from '@schema/models'
-import { dbInstances, defaultDbInstance } from '@schema/db'
+import * as dbBundle from '@schema/db'
 import type * as SchemaTypes from '@schema/types'
 import type * as TypesenseTypes from '@schema/typesense/collections'
 
@@ -9,7 +9,8 @@ type InstanceCode = string
 type Method = 'query' | 'mutate'
 type Strategy = 'fail-fast' | 'continue-on-error'
 type TypesenseOperation = 'upsert' | 'delete'
-type DataLocation = 'local' | 'remote'
+type DataAuthority = 'source' | 'tenant'
+type LegacyDataLocation = 'local' | 'remote'
 type ReturnKind = 'record' | 'typesense'
 
 type ToPascalCase<S extends string> =
@@ -53,7 +54,16 @@ export interface ProcessRequest<D = any> {
   data: D
   instances: InstanceCode[]
   options?: {
+    sourceInstance?: InstanceCode
+    /**
+     * @deprecated Legacy alias. Prefer sourceInstance.
+     */
     rootInstance?: InstanceCode
+    authority?: DataAuthority
+    /**
+     * @deprecated Legacy alias. Prefer authority.
+     */
+    dataLocation?: DataAuthority | LegacyDataLocation
     bypassMothership?: boolean
     retryAttempts?: number
     retryDelay?: number
@@ -144,8 +154,16 @@ export interface TypesenseRecordConfig<R = any> {
 export interface ApiOptions {
   instances?: InstanceCode[]
   instance?: InstanceCode
+  sourceInstance?: InstanceCode
+  /**
+   * @deprecated Legacy alias. Prefer sourceInstance.
+   */
   rootInstance?: InstanceCode
-  dataLocation?: DataLocation
+  authority?: DataAuthority
+  /**
+   * @deprecated Legacy alias. Prefer authority.
+   */
+  dataLocation?: DataAuthority | LegacyDataLocation
   bypassMothership?: boolean
   method?: Method
   returnType?: ReturnKind
@@ -172,6 +190,11 @@ export interface ApiConfig<D = any> extends ApiOptions {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+const dbInstances = ((dbBundle as any).dbInstances ?? {}) as Record<string, any>
+const defaultDbInstance = ((dbBundle as any).defaultDbInstance ?? null) as string | null
+const sourceDbInstance = ((dbBundle as any).sourceDbInstance ?? null) as string | null
+const tenantDbInstances = ((dbBundle as any).tenantDbInstances ?? null) as string[] | null
+
 export function useCRUD() {
   const runtimeConfig = useRuntimeConfig() as any
   const appName =
@@ -179,19 +202,20 @@ export function useCRUD() {
     runtimeConfig?.schemaKit?.appName ||
     'app'
 
-  const resolveRootInstance = (): InstanceCode => {
+  const resolveSourceInstance = (): InstanceCode => {
     const entries = Object.entries(dbInstances as Record<string, any>)
-    const activeRoot = entries.find(([, cfg]) => cfg?.root === true && cfg?.active === true)
-    if (activeRoot) return activeRoot[0]
-    const anyRoot = entries.find(([, cfg]) => cfg?.root === true)
-    if (anyRoot) return anyRoot[0]
-    if (defaultDbInstance) return defaultDbInstance as InstanceCode
+    if (sourceDbInstance && (dbInstances as any)[sourceDbInstance]) {
+      return sourceDbInstance as InstanceCode
+    }
+    if (defaultDbInstance && (dbInstances as any)[defaultDbInstance]) {
+      return defaultDbInstance as InstanceCode
+    }
     const activeFallback = entries.find(([, cfg]) => cfg?.active === true)
     if (activeFallback) return activeFallback[0]
-    return 'pm'
+    return entries[0]?.[0] ?? 'default'
   }
 
-  const defaultRootInstance: InstanceCode = resolveRootInstance()
+  const defaultSourceInstance: InstanceCode = resolveSourceInstance()
 
   const createRequestId = () => {
     const cryptoRef: any = (globalThis as any)?.crypto
@@ -319,6 +343,24 @@ export function useCRUD() {
     return []
   }
 
+  const normalizeAuthority = (value: unknown): DataAuthority | undefined => {
+    const normalized = String(value ?? '').trim().toLowerCase()
+    if (!normalized) return undefined
+    if (['source', 'local', 'mothership', 'central', 'global', 'home'].includes(normalized)) return 'source'
+    if (['tenant', 'remote', 'instance'].includes(normalized)) return 'tenant'
+    return undefined
+  }
+
+  const resolveDefaultTenantInstances = (sourceInstance: InstanceCode): InstanceCode[] => {
+    const explicit = normalizeInstances(tenantDbInstances ?? [])
+      .filter((instance) => instance !== sourceInstance)
+    if (explicit.length > 0) return explicit
+
+    return Object.entries(dbInstances as Record<string, any>)
+      .filter(([instance, cfg]) => instance !== sourceInstance && cfg?.active !== false)
+      .map(([instance]) => instance)
+  }
+
   const inferMethodFromEndpoint = (endpoint: string): Method => {
     const action = endpoint.split('.').pop() ?? ''
     const normalized = action.toLowerCase()
@@ -368,10 +410,10 @@ export function useCRUD() {
     return 'query'
   }
 
-  const inferDataLocationFromEndpoint = (endpoint: string): DataLocation | undefined => {
+  const inferAuthorityFromEndpoint = (endpoint: string): DataAuthority | undefined => {
     const modelKey = endpoint.split('.')[0]
     const entry = (models as Record<string, any>)[modelKey]
-    return entry?.data as DataLocation | undefined
+    return normalizeAuthority(entry?.authority ?? entry?.data)
   }
 
   const toTitleCase = (value: string) =>
@@ -406,12 +448,20 @@ export function useCRUD() {
     instances: InstanceCode[]
     bypassMothership: boolean
     startedAt: string
+    sourceInstance?: InstanceCode
+    /**
+     * @deprecated Legacy alias. Prefer sourceInstance.
+     */
     rootInstance?: InstanceCode
-    dataLocation?: DataLocation
+    authority?: DataAuthority
+    /**
+     * @deprecated Legacy alias. Prefer authority.
+     */
+    dataLocation?: DataAuthority | LegacyDataLocation
     options?: Record<string, any>
   }) => {
     try {
-      const instance = payload.rootInstance ?? defaultRootInstance
+      const instance = payload.sourceInstance ?? payload.rootInstance ?? defaultSourceInstance
       const record = await callTRPCEndpointWithFallback(
         'apiAttempt.create',
         'mutate',
@@ -434,11 +484,11 @@ export function useCRUD() {
   const updateApiAttempt = async (
     attemptId: string,
     patch: any,
-    rootInstance?: InstanceCode,
+    sourceInstance?: InstanceCode,
     fallbackInstances?: InstanceCode[]
   ) => {
     try {
-      const instance = rootInstance ?? defaultRootInstance
+      const instance = sourceInstance ?? defaultSourceInstance
       await callTRPCEndpointWithFallback(
         'apiAttempt.update',
         'mutate',
@@ -456,12 +506,12 @@ export function useCRUD() {
   const finalizeApiAttempt = async (
     attemptId: string,
     results: ProcessResult,
-    rootInstance?: InstanceCode,
+    sourceInstance?: InstanceCode,
     payload?: Record<string, any>,
     fallbackInstances?: InstanceCode[]
   ) => {
     try {
-      const instance = rootInstance ?? defaultRootInstance
+      const instance = sourceInstance ?? defaultSourceInstance
       await callTRPCEndpointWithFallback(
         'apiAttempt.finalize',
         'mutate',
@@ -555,7 +605,7 @@ export function useCRUD() {
     if (data === undefined || data === null) throw new Error('data is required')
 
     const options = {
-      rootInstance: defaultRootInstance,
+      sourceInstance: requestOptions.sourceInstance ?? requestOptions.rootInstance ?? defaultSourceInstance,
       bypassMothership: false,
       retryAttempts: 3,
       retryDelay: 1000,
@@ -566,8 +616,8 @@ export function useCRUD() {
       ...requestOptions
     }
 
-    const rootInstance = options.rootInstance ?? defaultRootInstance
-    const targetInstances = instances.filter(inst => inst !== rootInstance)
+    const sourceInstance = options.sourceInstance ?? defaultSourceInstance
+    const targetInstances = instances.filter(inst => inst !== sourceInstance)
     const results = { success: [] as InstanceCode[], failed: [] as { instance: InstanceCode; error: any }[] }
     let primaryRecord: R | null = null
 
@@ -583,14 +633,14 @@ export function useCRUD() {
     if (!options.bypassMothership) {
       try {
         primaryRecord = await withRetry(
-          () => callTRPCEndpoint(endpoint, method, buildPayload(rootInstance)),
+          () => callTRPCEndpoint(endpoint, method, buildPayload(sourceInstance)),
           options.retryAttempts,
           options.retryDelay
         )
-        results.success.push(rootInstance)
+        results.success.push(sourceInstance)
         log('✅ Mothership success')
       } catch (error: any) {
-        results.failed.push({ instance: rootInstance, error })
+        results.failed.push({ instance: sourceInstance, error })
         log('❌ Mothership failed', error)
         if (options.strategy === 'fail-fast') throw error
       }
@@ -700,8 +750,9 @@ export function useCRUD() {
 
     const isMutate = method === 'mutate'
     const options = {
-      rootInstance: requestOptions.rootInstance ?? defaultRootInstance,
+      sourceInstance: requestOptions.sourceInstance ?? requestOptions.rootInstance ?? defaultSourceInstance,
       bypassMothership: requestOptions.bypassMothership ?? false,
+      authority: normalizeAuthority(requestOptions.authority ?? requestOptions.dataLocation),
       retryAttempts: requestOptions.retryAttempts ?? 3,
       retryDelay: requestOptions.retryDelay ?? 1000,
       retryFailedAttempts: requestOptions.retryFailedAttempts ?? 1,
@@ -717,9 +768,9 @@ export function useCRUD() {
       throwOnFailure: requestOptions.throwOnFailure ?? isMutate,
     }
 
-    const rootInstance = options.rootInstance ?? defaultRootInstance
+    const sourceInstance = options.sourceInstance ?? defaultSourceInstance
     const requireMothership = options.bypassMothership ? false : true
-    const targetInstances = normalizeInstances(instances).filter((inst) => inst !== rootInstance)
+    const targetInstances = normalizeInstances(instances).filter((inst) => inst !== sourceInstance)
     const startedAtMs = Date.now()
     const instanceResults: Record<InstanceCode, InstanceExecution<R>> = {}
     let primaryRecord: R | null = null
@@ -775,13 +826,13 @@ export function useCRUD() {
       })
     }
 
-    const dataLocation =
+    const authority: DataAuthority =
       options.bypassMothership === true
-        ? 'remote'
-        : (inferDataLocationFromEndpoint(endpoint) ?? 'local')
+        ? 'tenant'
+        : (options.authority ?? inferAuthorityFromEndpoint(endpoint) ?? 'source')
     const attemptInstances = options.bypassMothership
       ? targetInstances
-      : Array.from(new Set([rootInstance, ...targetInstances]))
+      : Array.from(new Set([sourceInstance, ...targetInstances]))
 
     const requestId = createRequestId()
     const attempt = options.trackAttempts
@@ -797,8 +848,10 @@ export function useCRUD() {
           bypassMothership: options.bypassMothership ?? false,
           requireMothership,
           startedAt: new Date(startedAtMs).toISOString(),
-          rootInstance,
-          dataLocation,
+          sourceInstance,
+          rootInstance: sourceInstance,
+          authority,
+          dataLocation: authority,
           options: {
             retryAttempts: options.retryAttempts,
             retryDelay: options.retryDelay,
@@ -811,8 +864,8 @@ export function useCRUD() {
       : null
 
     if (!options.bypassMothership) {
-      const mothershipResult = await runInstance(rootInstance)
-      instanceResults[rootInstance] = mothershipResult
+      const mothershipResult = await runInstance(sourceInstance)
+      instanceResults[sourceInstance] = mothershipResult
       if (mothershipResult.status === 'success') {
         primaryRecord = mothershipResult.record ?? null
       } else if (requireMothership) {
@@ -831,25 +884,25 @@ export function useCRUD() {
       if (attempt?.id) {
         const partialResults =
           mothershipResult.status === 'success'
-            ? { success: [rootInstance], failed: [] }
+            ? { success: [sourceInstance], failed: [] }
             : {
                 success: [],
-                failed: [{ instance: rootInstance, error: extractErrorDetails(mothershipResult.error) }],
+                failed: [{ instance: sourceInstance, error: extractErrorDetails(mothershipResult.error) }],
               }
         await updateCrudAttempt(
           attempt.id,
           {
             results: partialResults,
-            instanceResults: { [rootInstance]: mothershipResult },
+            instanceResults: { [sourceInstance]: mothershipResult },
             updatedAt: new Date().toISOString(),
           },
-          rootInstance,
+          sourceInstance,
           targetInstances
         )
       }
     }
 
-    if (options.bypassMothership || !requireMothership || instanceResults[rootInstance]?.status === 'success') {
+    if (options.bypassMothership || !requireMothership || instanceResults[sourceInstance]?.status === 'success') {
       if (options.strategy === 'fail-fast') {
         for (let index = 0; index < targetInstances.length; index++) {
           const instance = targetInstances[index]
@@ -901,7 +954,7 @@ export function useCRUD() {
             summary: partialSummary,
             updatedAt: new Date().toISOString(),
           },
-          rootInstance,
+          sourceInstance,
           targetInstances
         )
       }
@@ -941,13 +994,13 @@ export function useCRUD() {
             summary: retrySummary,
             updatedAt: new Date().toISOString(),
           },
-          rootInstance,
+          sourceInstance,
           targetInstances
         )
       }
 
       if (!options.bypassMothership && requireMothership) {
-        const mothershipStatus = instanceResults[rootInstance]?.status
+        const mothershipStatus = instanceResults[sourceInstance]?.status
         if (mothershipStatus === 'failed') break
       }
     }
@@ -980,7 +1033,7 @@ export function useCRUD() {
           record: primaryRecord,
           results: { success: summary.success, failed: failures },
         },
-        rootInstance,
+        sourceInstance,
         {
           summary,
           instanceResults,
@@ -1013,7 +1066,10 @@ export function useCRUD() {
   }
 
   const buildProcessOptions = (options: ApiOptions, toast?: ToastOptions) => ({
-    rootInstance: options.rootInstance,
+    sourceInstance: options.sourceInstance ?? options.rootInstance,
+    rootInstance: options.sourceInstance ?? options.rootInstance,
+    authority: normalizeAuthority(options.authority ?? options.dataLocation),
+    dataLocation: options.authority ?? options.dataLocation,
     bypassMothership: options.bypassMothership,
     retryAttempts: options.retryAttempts,
     retryDelay: options.retryDelay,
@@ -1048,7 +1104,7 @@ export function useCRUD() {
     baseResult: ProcessResult<R>,
     options: ApiOptions
   ): Promise<ProcessResult<R>> => {
-    const rootInstance = baseRequest.options?.rootInstance ?? defaultRootInstance
+    const sourceInstance = baseRequest.options?.sourceInstance ?? baseRequest.options?.rootInstance ?? defaultSourceInstance
     const retryAttempts = options.retryFailedAttempts ?? 0
     const retryDelay = options.retryFailedDelay ?? 1500
     let current = baseResult
@@ -1059,8 +1115,8 @@ export function useCRUD() {
       await wait(retryDelay)
 
       const failedInstances = current.results.failed.map((item) => item.instance)
-      const failedMothership = failedInstances.includes(rootInstance)
-      const failedRemotes = failedInstances.filter((item) => item !== rootInstance)
+      const failedMothership = failedInstances.includes(sourceInstance)
+      const failedRemotes = failedInstances.filter((item) => item !== sourceInstance)
 
       if (failedMothership && !baseRequest.options?.bypassMothership) {
         const retryResult = await processRecordForInstancesV1<D, R>({
@@ -1128,29 +1184,37 @@ export function useCRUD() {
         : []
 
     const instances = normalizeInstances(mergedOptions)
-    const targetInstances = instances.length ? instances : instanceOverrides
+    let targetInstances = instances.length ? instances : instanceOverrides
 
-    const inferredLocation = inferDataLocationFromEndpoint(endpoint)
-    const explicitLocation = mergedOptions.dataLocation
+    const inferredAuthority = inferAuthorityFromEndpoint(endpoint)
+    const explicitAuthority = normalizeAuthority(mergedOptions.authority ?? mergedOptions.dataLocation)
     const derivedBypass =
       mergedOptions.bypassMothership !== undefined
         ? mergedOptions.bypassMothership
-        : explicitLocation
-          ? explicitLocation === 'remote'
-          : inferredLocation === 'remote'
+        : explicitAuthority
+          ? explicitAuthority === 'tenant'
+          : inferredAuthority === 'tenant'
 
     const method = mergedOptions.method ?? inferMethodFromEndpoint(endpoint)
     const bypassMothership = derivedBypass ?? false
 
-    if (!mergedOptions.rootInstance && targetInstances.length === 1 && bypassMothership) {
-      mergedOptions.rootInstance = targetInstances[0]
+    mergedOptions.sourceInstance = mergedOptions.sourceInstance ?? mergedOptions.rootInstance
+
+    if (!mergedOptions.sourceInstance && targetInstances.length === 1 && bypassMothership) {
+      mergedOptions.sourceInstance = targetInstances[0]
     }
 
-    const rootInstance = mergedOptions.rootInstance ?? defaultRootInstance
-    const sanitizedPayload = stripRootInstanceFromPayload(payload, rootInstance)
+    const sourceInstance = mergedOptions.sourceInstance ?? defaultSourceInstance
+    const resolvedAuthority: DataAuthority =
+      explicitAuthority ?? inferredAuthority ?? (bypassMothership ? 'tenant' : 'source')
+    if (resolvedAuthority === 'tenant' && targetInstances.length === 0) {
+      targetInstances = resolveDefaultTenantInstances(sourceInstance)
+    }
+
+    const sanitizedPayload = stripRootInstanceFromPayload(payload, sourceInstance)
 
     if (bypassMothership && targetInstances.length === 0) {
-      throw new Error(`Instances are required for remote data operations on ${endpoint}`)
+      throw new Error(`Instances are required for tenant authority operations on ${endpoint}`)
     }
 
     const autoToast =
@@ -1173,6 +1237,7 @@ export function useCRUD() {
     const processOptions = buildProcessOptions(
       {
         ...mergedOptions,
+        authority: resolvedAuthority,
         bypassMothership,
         method,
       },
@@ -1192,14 +1257,14 @@ export function useCRUD() {
 
   const runWithTracking = async <D = any, R = any>(request: ProcessRequest<D>, options: ApiOptions) => {
     const startedAt = new Date().toISOString()
-    const rootInstance = request.options?.rootInstance ?? defaultRootInstance
-    const dataLocation =
+    const sourceInstance = request.options?.sourceInstance ?? request.options?.rootInstance ?? defaultSourceInstance
+    const authority: DataAuthority =
       request.options?.bypassMothership === true
-        ? 'remote'
-        : (inferDataLocationFromEndpoint(request.endpoint) ?? 'local')
+        ? 'tenant'
+        : (normalizeAuthority(request.options?.authority ?? request.options?.dataLocation) ?? inferAuthorityFromEndpoint(request.endpoint) ?? 'source')
     const attemptInstances = request.options?.bypassMothership
       ? request.instances
-      : Array.from(new Set([rootInstance, ...request.instances]))
+      : Array.from(new Set([sourceInstance, ...request.instances]))
     const requestId = createRequestId()
     const attempt = options.trackAttempts
       ? await createCrudAttempt({
@@ -1214,8 +1279,10 @@ export function useCRUD() {
           bypassMothership: request.options?.bypassMothership ?? false,
           requireMothership: request.options?.requireMothership ?? true,
           startedAt,
-          rootInstance,
-          dataLocation,
+          sourceInstance,
+          rootInstance: sourceInstance,
+          authority,
+          dataLocation: authority,
           options: {
             retryAttempts: request.options?.retryAttempts,
             retryDelay: request.options?.retryDelay,
@@ -1232,7 +1299,7 @@ export function useCRUD() {
       await updateCrudAttempt(
         attempt.id,
         { results: result.results, updatedAt: new Date().toISOString() },
-        rootInstance,
+        sourceInstance,
         request.instances
       )
     }
@@ -1244,7 +1311,7 @@ export function useCRUD() {
       await finalizeCrudAttempt(
         attempt.id,
         result,
-        rootInstance,
+        sourceInstance,
         {
           results: result.results,
           endedAt: new Date().toISOString(),
@@ -1462,21 +1529,25 @@ export function useCRUD() {
     return process<D, R>(endpointOrConfig, data, instancesOrOptions, overrides)
   }
 
-  const $processLocal: ProcessCallFn = async <D = any, R = any>(
+  const $processSource: ProcessCallFn = async <D = any, R = any>(
     endpointOrConfig: string | ApiConfig<D>,
     data?: D,
     instancesOrOptions?: InstanceCode | InstanceCode[] | ApiOptions
   ): Promise<R | null> => {
-    return $process<D, R>(endpointOrConfig, data, instancesOrOptions, { dataLocation: 'local' })
+    return $process<D, R>(endpointOrConfig, data, instancesOrOptions, { authority: 'source' })
   }
 
-  const $processRemote: ProcessCallFn = async <D = any, R = any>(
+  const $processTenant: ProcessCallFn = async <D = any, R = any>(
     endpointOrConfig: string | ApiConfig<D>,
     data?: D,
     instancesOrOptions?: InstanceCode | InstanceCode[] | ApiOptions
   ): Promise<R | null> => {
-    return $process<D, R>(endpointOrConfig, data, instancesOrOptions, { dataLocation: 'remote' })
+    return $process<D, R>(endpointOrConfig, data, instancesOrOptions, { authority: 'tenant' })
   }
+
+  // Backward-compatible aliases.
+  const $processLocal = $processSource
+  const $processRemote = $processTenant
 
   const $processAs: ProcessAsFn = <R>() => {
     return async <D>(
@@ -1737,10 +1808,10 @@ export function useCRUD() {
 
     const inferredInstance = instance ??
       (bypassMothership === false
-        ? 'pm'
+        ? defaultSourceInstance
         : (instances && instances.length
             ? instances[0]
-            : (instanceFromRecord || 'pm')))
+            : (instanceFromRecord || defaultSourceInstance)))
 
     const normalizedCollectionId = normalizeCollectionId(collectionId)
     const fetchEndpoint = endpoint ?? guessEndpointFromCollection(normalizedCollectionId)
@@ -1806,6 +1877,8 @@ export function useCRUD() {
     $process,
     $processV2,
     $processResult,
+    $processSource,
+    $processTenant,
     $processLocal,
     $processRemote,
     $processAs,

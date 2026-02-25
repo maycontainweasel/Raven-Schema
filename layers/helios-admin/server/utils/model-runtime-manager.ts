@@ -23,6 +23,19 @@ type ResolvedModelCaller = {
   routerKey: string
 }
 
+type TypesenseFieldMeta = {
+  name: string
+  sortable: boolean
+  faceted: boolean
+}
+
+type ResolvedTypesenseCollection = {
+  key: string
+  schema: AnyRecord
+  fields: TypesenseFieldMeta[]
+  fieldLookup: Map<string, TypesenseFieldMeta>
+}
+
 export type RuntimeRecordIdentifiers = {
   rid: string | null
   subId: string | null
@@ -283,10 +296,58 @@ const resolveModelCaller = async (
   throw new Error(`No generated model router found for "${model.modelKey}". Tried: ${candidateKeys.join(', ')}`)
 }
 
+const collectTypesenseFieldMeta = (schema: AnyRecord | null): TypesenseFieldMeta[] => {
+  const fieldsRaw = Array.isArray(schema?.fields) ? schema.fields : []
+  const fields = fieldsRaw
+    .map((entry: any) => {
+      const name = String(entry?.name ?? '').trim()
+      if (!name) return null
+      return {
+        name,
+        sortable: Boolean(entry?.sort),
+        faceted: Boolean(entry?.facet),
+      } satisfies TypesenseFieldMeta
+    })
+    .filter(Boolean) as TypesenseFieldMeta[]
+
+  return fields
+}
+
+const createTypesenseFieldLookup = (fields: TypesenseFieldMeta[]) => {
+  const lookup = new Map<string, TypesenseFieldMeta>()
+  for (const field of fields) {
+    const token = normalizeLookupToken(field.name)
+    if (!token || lookup.has(token)) continue
+    lookup.set(token, field)
+  }
+  return lookup
+}
+
+const resolveCanonicalTypesenseField = (
+  value: unknown,
+  lookup: Map<string, TypesenseFieldMeta>,
+): string | null => {
+  const raw = String(value ?? '').trim()
+  if (!raw.length) return null
+  const resolved = lookup.get(normalizeLookupToken(raw))
+  return resolved?.name ?? null
+}
+
+const normalizeTypesenseFieldList = (
+  values: unknown[],
+  lookup: Map<string, TypesenseFieldMeta>,
+) => {
+  return unique(
+    values
+      .map((entry) => resolveCanonicalTypesenseField(entry, lookup))
+      .filter((entry): entry is string => Boolean(entry)),
+  )
+}
+
 const resolveTypesenseCollection = (
   model: ModelManagerModel,
   routerKey: string,
-) => {
+) : ResolvedTypesenseCollection | null => {
   const allCollections = collections as Record<string, any>
 
   const candidates = unique([
@@ -301,23 +362,72 @@ const resolveTypesenseCollection = (
 
   for (const key of candidates) {
     const collection = allCollections[key]
-    if (collection) return collection
+    if (!collection) continue
+    const fields = collectTypesenseFieldMeta(collection)
+    return {
+      key,
+      schema: collection,
+      fields,
+      fieldLookup: createTypesenseFieldLookup(fields),
+    }
   }
 
-  const normalizedToCollection = new Map<string, any>()
-  for (const [key, collection] of Object.entries(allCollections)) {
+  const normalizedToKey = new Map<string, string>()
+  for (const key of Object.keys(allCollections)) {
     const normalized = normalizeLookupToken(key)
-    if (normalized && !normalizedToCollection.has(normalized)) {
-      normalizedToCollection.set(normalized, collection)
+    if (normalized && !normalizedToKey.has(normalized)) {
+      normalizedToKey.set(normalized, key)
     }
   }
 
   for (const key of candidates) {
-    const collection = normalizedToCollection.get(normalizeLookupToken(key))
-    if (collection) return collection
+    const resolvedKey = normalizedToKey.get(normalizeLookupToken(key))
+    if (!resolvedKey) continue
+    const collection = allCollections[resolvedKey]
+    if (!collection) continue
+    const fields = collectTypesenseFieldMeta(collection)
+    return {
+      key: resolvedKey,
+      schema: collection,
+      fields,
+      fieldLookup: createTypesenseFieldLookup(fields),
+    }
   }
 
   return null
+}
+
+const resolveTypesenseCollectionForDirectory = (
+  model: ModelManagerModel,
+  routerKey: string,
+  preferredCollection?: string | null,
+): ResolvedTypesenseCollection | null => {
+  const allCollections = collections as Record<string, any>
+  const preferred = String(preferredCollection ?? '').trim()
+
+  const candidates = unique([
+    preferred,
+    model.table,
+    model.modelKey,
+    routerKey,
+    toCamelCase(routerKey),
+  ]
+    .map(value => String(value ?? '').trim())
+    .filter(value => value.length > 0))
+
+  for (const key of candidates) {
+    const collection = allCollections[key]
+    if (!collection) continue
+    const fields = collectTypesenseFieldMeta(collection)
+    return {
+      key,
+      schema: collection,
+      fields,
+      fieldLookup: createTypesenseFieldLookup(fields),
+    }
+  }
+
+  return resolveTypesenseCollection(model, routerKey)
 }
 
 const syncTypesenseRecord = async (
@@ -336,7 +446,7 @@ const syncTypesenseRecord = async (
   const document = extractFirstObject(resourceRaw)
   if (!document) return null
 
-  const result = await upsertTypesenseDocuments(collection, [document], 'upsert')
+  const result = await upsertTypesenseDocuments(collection.schema, [document], 'upsert')
   return {
     document,
     result,
@@ -414,7 +524,7 @@ export const readModelDirectoryRecords = async (
     sortBy?: string
   },
 ) => {
-  const collectionName = String(
+  const configuredCollectionName = String(
     spec?.directory?.typesense?.collection
       || model.typesenseCollection
       || model.table
@@ -423,14 +533,38 @@ export const readModelDirectoryRecords = async (
     .trim()
     .toLowerCase()
 
-  const queryBy = unique([
+  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const resolvedCollection = resolveTypesenseCollectionForDirectory(
+    model,
+    resolvedModelCaller.routerKey,
+    configuredCollectionName,
+  )
+  const collectionName = String(
+    resolvedCollection?.schema?.name
+      ?? configuredCollectionName
+      || model.table
+      || model.modelKey,
+  )
+    .trim()
+    .toLowerCase()
+
+  const rawQueryBy = unique([
     ...(spec?.directory?.typesense?.queryBy || []),
     ...(model.typesenseFields || []),
   ])
     .map((entry) => String(entry || '').trim())
     .filter((entry) => entry.length > 0)
 
-  const resolvedModelCaller = await resolveModelCaller(event, model)
+  const queryBy = resolvedCollection
+    ? normalizeTypesenseFieldList(rawQueryBy, resolvedCollection.fieldLookup)
+    : rawQueryBy
+
+  if (!queryBy.length) {
+    if (resolvedCollection?.fieldLookup.has('id')) queryBy.push('id')
+    else if (resolvedCollection?.fields[0]?.name) queryBy.push(resolvedCollection.fields[0].name)
+    else queryBy.push('id')
+  }
+
   const modelCaller = resolvedModelCaller.caller
   const readFallback = async () => {
     const typesense = modelCaller.typesense

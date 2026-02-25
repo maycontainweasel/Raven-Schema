@@ -24,7 +24,7 @@ type DocsManifestTable = {
   name: string;
   model: string;
   description?: string;
-  data: 'local' | 'remote';
+  data: 'source' | 'tenant';
   fields: DocsManifestField[];
   capabilities: {
     router: boolean;
@@ -113,6 +113,14 @@ const toCamel = (value: string): string => {
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join('');
   return pascal ? pascal.charAt(0).toLowerCase() + pascal.slice(1) : '';
+};
+
+const normalizeAuthority = (value: unknown): 'source' | 'tenant' | undefined => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'source' || normalized === 'local') return 'source';
+  if (normalized === 'tenant' || normalized === 'remote') return 'tenant';
+  return undefined;
 };
 
 const resolveSchemaDocsRoot = (app: AppConfig, projectRoot: string): string | null => {
@@ -329,14 +337,22 @@ export async function generateDocsManifest(options: GenerateDocsManifestOptions)
     .filter(([, config]) => config.active)
     .map(([key]) => key);
   const allInstances = dbEntries.map(([key]) => key);
-  const activeRoots = dbEntries.filter(([, config]) => config.root === true && config.active);
-  const rootKey = activeRoots.length > 0
-    ? activeRoots[0][0]
-    : dbEntries.find(([, config]) => config.root === true)?.[0] ?? null;
+  const configuredSourceRaw = String(app.instance?.source ?? '').trim();
+  const configuredSource = configuredSourceRaw.length > 0 ? configuredSourceRaw : null;
   const defaultKey = app.environment.defaultDatabase;
   const hasDefault = dbEntries.some(([key, config]) => key === defaultKey && config.active);
   const activeFallback = dbEntries.find(([, config]) => config.active)?.[0] ?? null;
-  const resolvedDefault = rootKey ?? (hasDefault ? defaultKey : activeFallback) ?? defaultKey;
+  const sourceExists = configuredSource
+    ? dbEntries.some(([key]) => key === configuredSource)
+    : false;
+  const sourceActive = configuredSource
+    ? dbEntries.some(([key, config]) => key === configuredSource && config.active)
+    : false;
+  const resolvedDefault = (
+    configuredSource && sourceExists
+      ? (sourceActive ? configuredSource : null)
+      : null
+  ) ?? (hasDefault ? defaultKey : activeFallback) ?? defaultKey;
 
   const manifest: DocsManifest = {
     generatedAt: new Date().toISOString(),
@@ -356,7 +372,7 @@ export async function generateDocsManifest(options: GenerateDocsManifestOptions)
   for (const table of mainTables) {
     const key = toCamel(String(table.name ?? table.table?.model ?? 'table'));
     const fields = mapFields(table.fields);
-    const dataSource = table.admin?.data ?? 'local';
+    const dataSource = normalizeAuthority((table.admin as any)?.authority ?? table.admin?.data) ?? 'source';
 
     const entry: DocsManifestTable = {
       key,

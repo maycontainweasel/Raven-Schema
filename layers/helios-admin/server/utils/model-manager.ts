@@ -42,7 +42,7 @@ export type ModelManagerModel = {
   hasGenerated: boolean
 }
 
-export type ModelDataMode = 'local' | 'remote'
+export type ModelDataMode = 'source' | 'tenant'
 
 export type ModelUIComponentSpec = {
   name: string
@@ -222,7 +222,7 @@ const TYPESENSE_FN_RE = /^\s*([A-Za-z_][\w-]*)::fn\[(.*?)\]/
 const CAPABILITY_TOKEN_RE = /^[a-z][a-z0-9_-]*$/
 const GENERATED_ROUTE_MARKER = '@helios-generated-model-route'
 const GENERATED_MODELS_BLOCK_RE = /export const models\s*=\s*\{([\s\S]*?)\}\s*as const;/
-const GENERATED_MODELS_ENTRY_RE = /"([^"]+)"\s*:\s*\{\s*table:\s*"([^"]+)"(?:\s*,\s*data:\s*"(local|remote)")?/g
+const GENERATED_MODELS_ENTRY_RE = /"([^"]+)"\s*:\s*\{([^}]*)\}/g
 const SUBTABLE_FIELD_RE = /<\s*(subsingle|submany|subtable\*?)\s*<\s*([^>]+)\s*>\s*>/i
 const GENERATED_ADMIN_MANIFEST_FILES = [
   'modules/schema-kit/runtime/generated/admin-models.json',
@@ -256,6 +256,12 @@ const safeMetaObject = (value: unknown): Record<string, any> | undefined => {
   catch {
     return undefined
   }
+}
+
+const normalizeAuthorityMode = (value: unknown): ModelDataMode => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (['tenant', 'remote', 'instance'].includes(normalized)) return 'tenant'
+  return 'source'
 }
 
 const startsWithSlash = (value: string) => {
@@ -1176,8 +1182,7 @@ const normalizeGeneratedManifestEntry = (
   const table = normalizeModelKey(String(modelValue.table ?? ''))
   if (!key || !table) return null
 
-  const dataModeRaw = String(modelValue.data ?? modelValue.dataMode ?? '').trim().toLowerCase()
-  const dataMode: ModelDataMode = dataModeRaw === 'remote' ? 'remote' : 'local'
+  const dataMode = normalizeAuthorityMode(modelValue.authority ?? modelValue.data ?? modelValue.dataMode)
 
   const fields = ensureUnique(safeArray(modelValue.fields).map(normalizeModelKey).filter(Boolean))
   const requiredFields = ensureUnique(safeArray(modelValue.requiredFields).map(normalizeModelKey).filter(Boolean))
@@ -1356,14 +1361,19 @@ const loadGeneratedModelManifest = async (
 
   while ((match = GENERATED_MODELS_ENTRY_RE.exec(block))) {
     const key = String(match[1] ?? '').trim()
-    const table = String(match[2] ?? '').trim()
-    const dataModeRaw = String(match[3] ?? '').trim().toLowerCase()
+    const objectBlock = String(match[2] ?? '')
+    const table = String(objectBlock.match(/table\s*:\s*"([^"]+)"/)?.[1] ?? '').trim()
+    const authorityRaw = String(
+      objectBlock.match(/authority\s*:\s*"(source|tenant)"/)?.[1] ??
+      objectBlock.match(/data\s*:\s*"(local|remote|source|tenant)"/)?.[1] ??
+      '',
+    ).trim()
     if (!key || !table) continue
 
     entries.push({
       key,
       table,
-      dataMode: dataModeRaw === 'remote' ? 'remote' : 'local',
+      dataMode: normalizeAuthorityMode(authorityRaw),
       normalizedKey: normalizeModelKey(key),
       normalizedTable: normalizeModelKey(table),
     })
@@ -1475,7 +1485,7 @@ const parseGraphModels = (source: string): InternalModel[] => {
         table,
         label,
         directoryRoute: `/admin/${table}`,
-        dataMode: 'local',
+        dataMode: 'source',
         capabilities: [],
         hasTypesense: false,
         typesenseCollection: null,
@@ -1497,6 +1507,11 @@ const parseGraphModels = (source: string): InternalModel[] => {
     }
 
     if (!current) continue
+
+    const authoritySettingMatch = line.match(/["']?(authority|dataLocation)["']?\s*:\s*["']?(source|tenant|local|remote)["']?/i)
+    if (authoritySettingMatch?.[2]) {
+      current.dataMode = normalizeAuthorityMode(authoritySettingMatch[2])
+    }
 
     if (inFields) {
       if (trimmed.includes('}')) {
@@ -1529,9 +1544,9 @@ const parseGraphModels = (source: string): InternalModel[] => {
 
     if (inCapabilities) {
       const fnMatch = line.match(TYPESENSE_FN_RE)
-      const modeMatch = line.match(/instance\s*<\s*(local|remote)\s*>/i)
+      const modeMatch = line.match(/instance\s*<\s*(source|tenant|local|remote)\s*>/i)
       if (modeMatch?.[1]) {
-        current.dataMode = String(modeMatch[1]).toLowerCase() === 'remote' ? 'remote' : 'local'
+        current.dataMode = normalizeAuthorityMode(modeMatch[1])
       }
 
       const taxonomyStart = /^\s*taxonomies\s*:?\s*$/i.test(trimmed)
@@ -1669,7 +1684,7 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
       return {
         ...model,
         routerKey,
-        dataMode: generatedEntry?.dataMode ?? model.dataMode ?? 'local',
+        dataMode: generatedEntry?.dataMode ?? model.dataMode ?? 'source',
         canManage: model.canManage,
         directoryRoute,
         hasFragment,

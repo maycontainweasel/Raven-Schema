@@ -37,17 +37,60 @@ function buildDatabasesFile(app: AppConfig): string {
     .map(([key, db]) => `  ${JSON.stringify(key)}: ${serializeDb(db)}`)
     .join(',\n');
 
-  const activeRoots = entries.filter(([, db]) => db.root === true && db.active);
-  if (activeRoots.length > 1) {
-    const names = activeRoots.map(([key]) => key).join(', ');
-    throw new Error(`Multiple root databases are active: ${names}. Only one root: true is allowed.`);
-  }
-  const rootKey = activeRoots.length === 1 ? activeRoots[0][0] : null;
-  const defaultKey = JSON.stringify(app.environment?.defaultDatabase ?? '');
   const hasDefault = entries.some(([key, db]) => key === app.environment?.defaultDatabase && db.active);
   const activeFallback = entries.find(([, db]) => db.active)?.[0] ?? null;
-  const resolvedDefault = rootKey ?? (hasDefault ? app.environment?.defaultDatabase : activeFallback);
-  const hasResolvedDefault = Boolean(resolvedDefault);
+  const configuredSourceRaw = String(app.instance?.source ?? '').trim();
+  const hasConfiguredSource = configuredSourceRaw.length > 0;
+  const configuredSourceExists = entries.some(([key]) => key === configuredSourceRaw);
+  const configuredSourceIsActive = entries.some(([key, db]) => key === configuredSourceRaw && db.active);
+
+  if (hasConfiguredSource && !configuredSourceExists) {
+    throw new Error(
+      `instance.source references undefined database "${configuredSourceRaw}".`,
+    );
+  }
+
+  const resolvedSource =
+    (hasConfiguredSource
+      ? (configuredSourceIsActive ? configuredSourceRaw : null)
+      : null) ??
+    (hasDefault ? app.environment?.defaultDatabase : activeFallback) ??
+    entries[0]?.[0] ??
+    null;
+
+  const allDatabaseKeys = entries.map(([key]) => key);
+  const tenantsSetting = app.instance?.tenants;
+  const tenantKeys =
+    tenantsSetting === 'auto' || typeof tenantsSetting === 'undefined'
+      ? allDatabaseKeys.filter((key) => key !== resolvedSource)
+      : Array.isArray(tenantsSetting)
+        ? Array.from(
+            new Set(
+              tenantsSetting
+                .map((key) => String(key ?? '').trim())
+                .filter((key) =>
+                  key.length > 0 &&
+                  key !== resolvedSource &&
+                  allDatabaseKeys.includes(key),
+                ),
+            ),
+          )
+        : [];
+
+  if (
+    Array.isArray(tenantsSetting) &&
+    tenantKeys.length !== tenantsSetting.filter((value) => String(value ?? '').trim().length > 0).length
+  ) {
+    const unknown = tenantsSetting
+      .map((value) => String(value ?? '').trim())
+      .filter((key) => key.length > 0 && !allDatabaseKeys.includes(key));
+    if (unknown.length > 0) {
+      throw new Error(`instance.tenants contains undefined database keys: ${unknown.join(', ')}`);
+    }
+  }
+
+  const hasResolvedSource = Boolean(resolvedSource);
+  const tenantLiteral = tenantKeys.map((key) => JSON.stringify(key)).join(', ');
 
   return [
     `// AUTO-GENERATED — database credentials`,
@@ -67,8 +110,17 @@ function buildDatabasesFile(app: AppConfig): string {
     ``,
     `export type DbInstanceKey = keyof typeof dbInstances;`,
     ``,
-    hasResolvedDefault
-      ? `export const defaultDbInstance: DbInstanceKey = ${JSON.stringify(resolvedDefault)} as DbInstanceKey;`
+    hasResolvedSource
+      ? `export const sourceDbInstance: DbInstanceKey = ${JSON.stringify(resolvedSource)} as DbInstanceKey;`
+      : `export const sourceDbInstance: DbInstanceKey | null = null;`,
+    `export const tenantDbInstances: DbInstanceKey[] = [${tenantLiteral}] as DbInstanceKey[];`,
+    `export const instanceTopology = {`,
+    `  source: sourceDbInstance,`,
+    `  tenants: tenantDbInstances,`,
+    `} as const;`,
+    ``,
+    hasResolvedSource
+      ? `export const defaultDbInstance: DbInstanceKey = sourceDbInstance as DbInstanceKey;`
       : `export const defaultDbInstance: DbInstanceKey | null = null;`,
     ``,
   ].join('\n');
@@ -82,7 +134,6 @@ function serializeDb(db: AppDatabaseConfig): string {
     username: db.username,
     password: db.password,
     active: db.active,
-    ...(db.root !== undefined ? { root: db.root } : {}),
     ...(db.allowScripting !== undefined ? { allowScripting: db.allowScripting } : {}),
   };
   return JSON.stringify(obj, null, 2)

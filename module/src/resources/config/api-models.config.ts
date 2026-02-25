@@ -9,7 +9,11 @@ export type ApiInstanceOption = {
   key: string
   label: string
   description?: string
-  data?: 'local' | 'remote' | 'unknown'
+  authority?: 'source' | 'tenant' | 'unknown'
+  /**
+   * @deprecated Legacy alias. Prefer authority.
+   */
+  data?: 'source' | 'tenant' | 'local' | 'remote' | 'unknown'
 }
 
 export type ApiModelOverride = {
@@ -17,7 +21,11 @@ export type ApiModelOverride = {
   description?: string
   icon?: string
   processes?: string[]
-  data?: 'local' | 'remote' | 'unknown'
+  authority?: 'source' | 'tenant' | 'unknown'
+  /**
+   * @deprecated Legacy alias. Prefer authority.
+   */
+  data?: 'source' | 'tenant' | 'local' | 'remote' | 'unknown'
 }
 
 export const apiProcessCatalog: ApiProcessDefinition[] = []

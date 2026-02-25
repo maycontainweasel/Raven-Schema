@@ -5,7 +5,7 @@ export type ModelUIComponentSpec = {
   modelKey?: string
 }
 
-export type ModelDataMode = 'local' | 'remote'
+export type ModelDataMode = 'source' | 'tenant'
 
 export type ModelUIFieldBindingModel = {
   kind: 'model'

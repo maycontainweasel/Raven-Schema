@@ -14,6 +14,11 @@ features:
   autoApplyMigrations: false
   emitDocumentation: true
 
+instance:
+  active: true
+  source: test
+  tenants: auto
+
 databases:
   test:
     active: true

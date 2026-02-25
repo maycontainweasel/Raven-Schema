@@ -127,6 +127,7 @@ const {
 const spec = computed<ModelLayoutSpec | null>(() => specData.value?.spec ?? null)
 const modelInfo = computed(() => specData.value?.model ?? null)
 const modelLabel = computed(() => modelInfo.value?.label || modelParam.value)
+const modelDataMode = computed<'source' | 'tenant'>(() => modelInfo.value?.dataMode === 'tenant' ? 'tenant' : 'source')
 const directoryErrorMessage = computed(() => {
   const apiError = directoryError.value as any
   return (
@@ -547,7 +548,7 @@ const buildCreatePayload = () => {
 const processCreatePayload = async (payload: Record<string, any>) => {
   const action = resolveCreateActionTarget()
   return await $process(action, payload, {
-    dataLocation: 'local',
+    authority: modelDataMode.value,
     autoToast: false,
     consoleLogging: true,
     trackAttempts: false,

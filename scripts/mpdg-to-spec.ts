@@ -30,7 +30,7 @@ type CapFlag = {
   rawRelations?: string;
   rawTypesense?: string;
   instance?: boolean;
-  instanceMode?: 'local' | 'remote';
+  instanceMode?: 'source' | 'tenant';
   post?: boolean;
   refreshViews?: boolean;
   moduleOptions?: Record<string, any>;
@@ -92,6 +92,7 @@ export type TableAst = {
 
 const KNOWN_MODEL_SETTINGS_KEYS = new Set([
   'schemaType',
+  'authority',
   'dataLocation',
   'bootstrap',
   'admin',
@@ -2039,9 +2040,9 @@ function parseCaps(body: string): CapFlag {
     if (line.startsWith('instance')) {
       const modeMatch = line.match(/instance\s*<([^>]+)>/i);
       if (modeMatch && modeMatch[1]) {
-        const mode = modeMatch[1].trim().toLowerCase();
-        if (mode === 'remote' || mode === 'local') {
-          caps.instanceMode = mode as 'local' | 'remote';
+        const mode = normalizeAuthoritySetting(modeMatch[1]);
+        if (mode) {
+          caps.instanceMode = mode;
           caps.moduleOptions = caps.moduleOptions ?? {};
           caps.moduleOptions.instance = { ...(caps.moduleOptions.instance ?? {}), mode };
         }
@@ -2167,9 +2168,9 @@ function applyModuleFlag(caps: CapFlag, name: string, options?: Record<string, a
     caps.moduleOptions = caps.moduleOptions ?? {};
     caps.moduleOptions[lower] = normalizedOptions;
     if (lower === 'instance') {
-      const mode = String((normalizedOptions as any).mode ?? '').toLowerCase();
-      if (mode === 'remote' || mode === 'local') {
-        caps.instanceMode = mode as 'local' | 'remote';
+      const mode = normalizeAuthoritySetting((normalizedOptions as any).mode);
+      if (mode) {
+        caps.instanceMode = mode;
       }
     }
   }
@@ -2686,8 +2687,10 @@ function normalizeModelSettingsObject(raw: unknown): Record<string, any> | null 
   const schemaType = normalizeSchemaTypeSetting(source.schemaType);
   if (schemaType) normalized.schemaType = schemaType;
 
-  const dataLocation = normalizeDataLocationSetting(source.dataLocation);
-  if (dataLocation) normalized.dataLocation = dataLocation;
+  const authority =
+    normalizeAuthoritySetting(source.authority) ??
+    normalizeAuthoritySetting(source.dataLocation);
+  if (authority) normalized.authority = authority;
 
   if (isPlainObject(source.bootstrap)) {
     const bootstrap: Record<string, any> = {};
@@ -2724,11 +2727,11 @@ function normalizeSchemaTypeSetting(value: unknown): 'schemaless' | 'schemafull'
   return undefined;
 }
 
-function normalizeDataLocationSetting(value: unknown): 'local' | 'remote' | undefined {
+function normalizeAuthoritySetting(value: unknown): 'source' | 'tenant' | undefined {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!normalized) return undefined;
-  if (normalized === 'remote') return 'remote';
-  if (normalized === 'local') return 'local';
+  if (['source', 'local', 'mothership', 'central', 'global', 'home'].includes(normalized)) return 'source';
+  if (['tenant', 'remote', 'instance'].includes(normalized)) return 'tenant';
   return undefined;
 }
 
@@ -2743,7 +2746,9 @@ function buildSpec(t: TableAst): any {
   const normalizedModelSettings = normalizeModelSettingsObject(t.modelSettings);
   const schemaTypeOverride = normalizeSchemaTypeSetting(normalizedModelSettings?.schemaType);
   const schemaModeOverride = schemaTypeOverride === 'schemafull' ? 'schemaful' : schemaTypeOverride;
-  const dataLocationOverride = normalizeDataLocationSetting(normalizedModelSettings?.dataLocation);
+  const authorityOverride =
+    normalizeAuthoritySetting(normalizedModelSettings?.authority) ??
+    normalizeAuthoritySetting(normalizedModelSettings?.dataLocation);
   const adminEnabledOverride = isPlainObject(normalizedModelSettings?.admin)
     ? normalizedModelSettings?.admin?.enabled
     : undefined;
@@ -2986,11 +2991,15 @@ function buildSpec(t: TableAst): any {
   if (t.caps.crudSlug) {
     adminMeta.slugPolicy = t.caps.crudSlug;
   }
-  if (dataLocationOverride) {
-    adminMeta.data = dataLocationOverride;
+  if (authorityOverride) {
+    adminMeta.authority = authorityOverride;
+    adminMeta.data = authorityOverride;
   } else if (t.caps.instance) {
-    adminMeta.data = t.caps.instanceMode ?? 'local';
+    const mode = t.caps.instanceMode ?? 'source';
+    adminMeta.authority = mode;
+    adminMeta.data = mode;
   } else if (t.caps.instanceMode) {
+    adminMeta.authority = t.caps.instanceMode;
     adminMeta.data = t.caps.instanceMode;
   }
   if (typeof adminEnabledOverride === 'boolean') {

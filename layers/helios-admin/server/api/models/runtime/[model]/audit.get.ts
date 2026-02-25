@@ -39,6 +39,19 @@ type FieldRef = {
   field: ModelUIFieldSpec
 }
 
+type TypesenseFieldMeta = {
+  name: string
+  sortable: boolean
+  faceted: boolean
+}
+
+type ResolvedTypesenseCollection = {
+  key: string
+  schema: Record<string, any>
+  fields: TypesenseFieldMeta[]
+  fieldLookup: Map<string, TypesenseFieldMeta>
+}
+
 type ModelCaller = Record<string, any>
 
 const unique = <T>(value: T[]) => Array.from(new Set(value))
@@ -48,6 +61,84 @@ const normalizeToken = (value: unknown) =>
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
+
+const collectTypesenseFieldMeta = (schema: Record<string, any> | null): TypesenseFieldMeta[] => {
+  const fieldsRaw = Array.isArray(schema?.fields) ? schema.fields : []
+  return fieldsRaw
+    .map((entry: any) => {
+      const name = String(entry?.name ?? '').trim()
+      if (!name) return null
+      return {
+        name,
+        sortable: Boolean(entry?.sort),
+        faceted: Boolean(entry?.facet),
+      } satisfies TypesenseFieldMeta
+    })
+    .filter(Boolean) as TypesenseFieldMeta[]
+}
+
+const createTypesenseFieldLookup = (fields: TypesenseFieldMeta[]) => {
+  const lookup = new Map<string, TypesenseFieldMeta>()
+  for (const field of fields) {
+    const token = normalizeToken(field.name)
+    if (!token || lookup.has(token)) continue
+    lookup.set(token, field)
+  }
+  return lookup
+}
+
+const resolveTypesenseCollection = (candidates: unknown[]): ResolvedTypesenseCollection | null => {
+  const bundle = collections as Record<string, any>
+  const candidateList = unique(
+    candidates
+      .map((entry) => String(entry ?? '').trim())
+      .filter((entry) => entry.length > 0),
+  )
+  if (!candidateList.length) return null
+
+  for (const key of candidateList) {
+    const schema = bundle[key]
+    if (!schema) continue
+    const fields = collectTypesenseFieldMeta(schema)
+    return {
+      key,
+      schema,
+      fields,
+      fieldLookup: createTypesenseFieldLookup(fields),
+    }
+  }
+
+  const normalizedToKey = new Map<string, string>()
+  for (const key of Object.keys(bundle || {})) {
+    const normalized = normalizeToken(key)
+    if (normalized && !normalizedToKey.has(normalized)) normalizedToKey.set(normalized, key)
+  }
+
+  for (const key of candidateList) {
+    const resolvedKey = normalizedToKey.get(normalizeToken(key))
+    if (!resolvedKey) continue
+    const schema = bundle[resolvedKey]
+    if (!schema) continue
+    const fields = collectTypesenseFieldMeta(schema)
+    return {
+      key: resolvedKey,
+      schema,
+      fields,
+      fieldLookup: createTypesenseFieldLookup(fields),
+    }
+  }
+
+  return null
+}
+
+const resolveCanonicalTypesenseField = (
+  value: unknown,
+  lookup: Map<string, TypesenseFieldMeta>,
+): TypesenseFieldMeta | null => {
+  const raw = String(value ?? '').trim()
+  if (!raw.length) return null
+  return lookup.get(normalizeToken(raw)) ?? null
+}
 
 const toCamelCase = (value: unknown) => {
   const source = String(value ?? '').trim()
@@ -613,11 +704,13 @@ export default defineEventHandler(async (event) => {
   gates.push(finalizeGate(specGate))
 
   let modelCaller: ModelCaller | null = null
+  let modelCallerKey = ''
   const callerGate = newGate('router-surface', 'Router Surface')
   try {
     const callerResult = await resolveModelCaller(event, model)
     if (callerResult.ok) {
       modelCaller = callerResult.caller
+      modelCallerKey = callerResult.key
       pushCheck(
         callerGate,
         'router.resolve',
@@ -662,6 +755,12 @@ export default defineEventHandler(async (event) => {
       : 'Create dialog has no fields.',
   )
   const createFieldKeys = new Set(createFields.map(field => resolveFieldKey(field).toLowerCase()).filter(Boolean))
+  const modelRequiredFields = (model.requiredFields || [])
+    .map(entry => String(entry || '').trim())
+    .filter(entry => entry.length > 0 && entry !== 'id' && entry !== 'rid')
+  const createRequiredKeys = (spec.directory.createDialog.required || [])
+    .map(entry => String(entry || '').trim())
+    .filter(Boolean)
   const missingRequired = (spec.directory.createDialog.required || [])
     .map(entry => String(entry || '').trim())
     .filter(Boolean)
@@ -675,15 +774,57 @@ export default defineEventHandler(async (event) => {
       : 'Some required create fields are missing from create dialog fields.',
     missingRequired.length ? missingRequired.join(', ') : undefined,
   )
+  const missingModelRequiredInRequired = modelRequiredFields.filter(
+    key => !createRequiredKeys.some(required => required.toLowerCase() === key.toLowerCase()),
+  )
+  pushCheck(
+    createDialogGate,
+    'createDialog.modelRequired',
+    missingModelRequiredInRequired.length === 0 ? 'pass' : 'fail',
+    missingModelRequiredInRequired.length === 0
+      ? 'Create dialog required keys include all required model fields.'
+      : 'Required model fields are missing from create dialog required keys.',
+    missingModelRequiredInRequired.length ? missingModelRequiredInRequired.join(', ') : undefined,
+  )
+  const missingModelRequiredInFields = modelRequiredFields.filter(
+    key => !createFieldKeys.has(key.toLowerCase()),
+  )
+  pushCheck(
+    createDialogGate,
+    'createDialog.modelRequiredFields',
+    missingModelRequiredInFields.length === 0 ? 'pass' : 'fail',
+    missingModelRequiredInFields.length === 0
+      ? 'Create dialog fields include all required model fields.'
+      : 'Required model fields are missing from create dialog fields.',
+    missingModelRequiredInFields.length ? missingModelRequiredInFields.join(', ') : undefined,
+  )
   gates.push(finalizeGate(createDialogGate))
 
   const bindingsGate = newGate('field-bindings', 'Field Binding Contracts')
   const refs = collectFieldRefs(spec)
+  const createRefs = refs.filter(ref => ref.scope === 'create')
+  const singleRefs = refs.filter(ref => ref.scope === 'single')
   pushCheck(
     bindingsGate,
     'fieldRefs.count',
     refs.length > 0 ? 'pass' : 'warn',
     refs.length > 0 ? `Collected ${refs.length} field binding reference(s).` : 'No fields found in create/single specs.',
+  )
+  pushCheck(
+    bindingsGate,
+    'fieldRefs.create',
+    createRefs.length > 0 ? 'pass' : 'warn',
+    createRefs.length > 0
+      ? `Create dialog contributes ${createRefs.length} bound field(s).`
+      : 'Create dialog has no bound fields.',
+  )
+  pushCheck(
+    bindingsGate,
+    'fieldRefs.single',
+    singleRefs.length > 0 ? 'pass' : 'fail',
+    singleRefs.length > 0
+      ? `Single manager contributes ${singleRefs.length} bound field(s).`
+      : 'Single manager has no bound fields.',
   )
 
   for (const ref of refs) {
@@ -749,28 +890,159 @@ export default defineEventHandler(async (event) => {
   }
 
   if (spec.directory.typesense.enabled) {
-    const collectionName = String(spec.directory.typesense.collection || '').trim().toLowerCase()
-    const bundle = collections as Record<string, any>
-    const hasCollection = Boolean(
-      bundle?.[collectionName]
-      || Object.keys(bundle || {}).some(key => normalizeToken(key) === normalizeToken(collectionName)),
+    pushCheck(
+      directoryGate,
+      'typesense.modelEnabled',
+      model.hasTypesense ? 'pass' : 'fail',
+      model.hasTypesense
+        ? 'Model metadata indicates TypeSense support.'
+        : 'Directory enables TypeSense but model metadata says TypeSense is disabled.',
     )
+
+    const collectionName = String(spec.directory.typesense.collection || '').trim()
+    const resolvedCollection = resolveTypesenseCollection([
+      collectionName,
+      model.typesenseCollection,
+      model.table,
+      model.modelKey,
+      modelCallerKey,
+    ])
     pushCheck(
       directoryGate,
       'typesense.collection',
-      collectionName.length > 0 && hasCollection ? 'pass' : 'fail',
-      collectionName.length > 0 && hasCollection
-        ? `Typesense collection "${collectionName}" is present in schema bundle.`
+      collectionName.length > 0 && Boolean(resolvedCollection) ? 'pass' : 'fail',
+      collectionName.length > 0 && Boolean(resolvedCollection)
+        ? `Typesense collection "${resolvedCollection?.schema?.name || resolvedCollection?.key}" is present in schema bundle.`
         : `Typesense collection "${collectionName || '(empty)'}" is missing from schema bundle.`,
     )
+
+    const generatedCollectionName = String(model.typesenseCollection || '').trim()
+    if (generatedCollectionName.length > 0 && collectionName.length > 0) {
+      const match = normalizeToken(generatedCollectionName) === normalizeToken(collectionName)
+      pushCheck(
+        directoryGate,
+        'typesense.collectionManifestMatch',
+        match ? 'pass' : 'warn',
+        match
+          ? 'Directory TypeSense collection matches generated model metadata.'
+          : 'Directory TypeSense collection differs from generated model metadata.',
+        match ? undefined : `Spec: "${collectionName}" | Manifest: "${generatedCollectionName}"`,
+      )
+    }
+
+    const queryByRaw = (spec.directory.typesense.queryBy || [])
+      .map(entry => String(entry || '').trim())
+      .filter(Boolean)
     pushCheck(
       directoryGate,
       'typesense.queryBy',
-      Array.isArray(spec.directory.typesense.queryBy) && spec.directory.typesense.queryBy.length > 0 ? 'pass' : 'warn',
-      Array.isArray(spec.directory.typesense.queryBy) && spec.directory.typesense.queryBy.length > 0
-        ? `Typesense queryBy has ${spec.directory.typesense.queryBy.length} field(s).`
+      queryByRaw.length > 0 ? 'pass' : 'fail',
+      queryByRaw.length > 0
+        ? `Typesense queryBy has ${queryByRaw.length} field(s).`
         : 'Typesense queryBy is empty.',
     )
+
+    if (resolvedCollection) {
+      for (const field of queryByRaw) {
+        const resolved = resolveCanonicalTypesenseField(field, resolvedCollection.fieldLookup)
+        pushCheck(
+          directoryGate,
+          `typesense.queryBy.${field || 'empty'}`,
+          resolved ? 'pass' : 'fail',
+          resolved
+            ? `queryBy "${field}" resolves to collection field "${resolved.name}".`
+            : `queryBy "${field}" does not exist on collection "${resolvedCollection.schema?.name || resolvedCollection.key}".`,
+        )
+      }
+
+      const sortableRaw = (spec.directory.typesense.sortableFields || [])
+        .map(entry => String(entry || '').trim())
+        .filter(Boolean)
+      if (!sortableRaw.length) {
+        pushCheck(
+          directoryGate,
+          'typesense.sortableFields',
+          'warn',
+          'Typesense sortableFields is empty.',
+        )
+      }
+      for (const field of sortableRaw) {
+        const resolved = resolveCanonicalTypesenseField(field, resolvedCollection.fieldLookup)
+        if (!resolved) {
+          pushCheck(
+            directoryGate,
+            `typesense.sortableFields.${field}`,
+            'fail',
+            `Sortable field "${field}" does not exist on collection "${resolvedCollection.schema?.name || resolvedCollection.key}".`,
+          )
+          continue
+        }
+        pushCheck(
+          directoryGate,
+          `typesense.sortableFields.${field}`,
+          resolved.sortable ? 'pass' : 'fail',
+          resolved.sortable
+            ? `Sortable field "${field}" is configured as sortable on collection.`
+            : `Sortable field "${field}" exists but is not marked sortable in the collection schema.`,
+        )
+      }
+
+      const filtersRaw = (spec.directory.typesense.filters || [])
+        .map(entry => String(entry || '').trim())
+        .filter(Boolean)
+      for (const field of filtersRaw) {
+        const resolved = resolveCanonicalTypesenseField(field, resolvedCollection.fieldLookup)
+        if (!resolved) {
+          pushCheck(
+            directoryGate,
+            `typesense.filters.${field}`,
+            'fail',
+            `Filter field "${field}" does not exist on collection "${resolvedCollection.schema?.name || resolvedCollection.key}".`,
+          )
+          continue
+        }
+        pushCheck(
+          directoryGate,
+          `typesense.filters.${field}`,
+          resolved.faceted ? 'pass' : 'fail',
+          resolved.faceted
+            ? `Filter field "${field}" is faceted in collection schema.`
+            : `Filter field "${field}" exists but is not marked faceted in collection schema.`,
+        )
+      }
+    }
+
+    if (modelCaller?.typesense) {
+      const hasList = typeof modelCaller.typesense.list === 'function'
+      const hasCount = typeof modelCaller.typesense.count === 'function'
+      const hasResource = typeof modelCaller.typesense.resource === 'function'
+      pushCheck(
+        directoryGate,
+        'typesense.router.list',
+        hasList ? 'pass' : 'fail',
+        hasList ? 'Router exposes typesense.list.' : 'Router is missing typesense.list.',
+      )
+      pushCheck(
+        directoryGate,
+        'typesense.router.count',
+        hasCount ? 'pass' : 'fail',
+        hasCount ? 'Router exposes typesense.count.' : 'Router is missing typesense.count.',
+      )
+      pushCheck(
+        directoryGate,
+        'typesense.router.resource',
+        hasResource ? 'pass' : 'fail',
+        hasResource ? 'Router exposes typesense.resource.' : 'Router is missing typesense.resource.',
+      )
+    }
+    else {
+      pushCheck(
+        directoryGate,
+        'typesense.router.surface',
+        'warn',
+        'Model router was not resolved; TypeSense router surface checks skipped.',
+      )
+    }
   }
   else {
     pushCheck(directoryGate, 'typesense.disabled', 'warn', 'Directory Typesense is disabled for this model.')

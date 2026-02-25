@@ -107,7 +107,7 @@ const {
 const spec = computed<ModelLayoutSpec | null>(() => specData.value?.spec ?? null)
 const modelInfo = computed(() => specData.value?.model ?? null)
 const modelLabel = computed(() => modelInfo.value?.label || modelParam.value)
-const modelDataMode = computed<'local' | 'remote'>(() => modelInfo.value?.dataMode === 'remote' ? 'remote' : 'local')
+const modelDataMode = computed<'source' | 'tenant'>(() => modelInfo.value?.dataMode === 'tenant' ? 'tenant' : 'source')
 const directoryRoute = computed(() => spec.value?.directory.route || `/admin/${modelParam.value}`)
 const sourceRecord = computed<Record<string, any> | null>(() => {
   const value = recordData.value?.record
@@ -166,17 +166,17 @@ const resolveProcessInstances = () => {
 
 const buildProcessOptions = (mode: 'query' | 'mutate' = 'mutate') => {
   const base: Record<string, any> = {
-    dataLocation: modelDataMode.value,
+    authority: modelDataMode.value,
     autoToast: false,
     consoleLogging: mode === 'mutate',
     trackAttempts: false,
     throwOnFailure: true,
   }
 
-  if (modelDataMode.value === 'remote') {
+  if (modelDataMode.value === 'tenant') {
     const instances = resolveProcessInstances()
     if (!instances.length) {
-      throw new Error('Remote data mode requires at least one instance on the record.')
+      throw new Error('Tenant authority requires at least one target instance on the record.')
     }
     base.instances = instances
   }

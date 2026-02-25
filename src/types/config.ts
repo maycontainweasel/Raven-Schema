@@ -1,4 +1,6 @@
 export type SchemaMode = 'schemaless' | 'schemaful';
+export type DataAuthority = 'source' | 'tenant';
+export type LegacyDataLocation = 'local' | 'remote';
 
 export interface AppConfig {
   version: number;
@@ -80,7 +82,6 @@ export interface ToolingConfig {
 
 export interface AppDatabaseConfig {
   active: boolean;
-  root?: boolean;
   url: string;
   namespace: string;
   database: string;
@@ -309,6 +310,17 @@ export interface AuthLayerGuardConfig {
 
 export interface InstanceDefaultsConfig {
   active?: boolean;
+  /**
+   * Source database key used as the authority anchor for source-owned models.
+   * Must match a key in app.databases.
+   */
+  source?: string;
+  /**
+   * Tenant database key list.
+   * - "auto": all databases except instance.source.
+   * - string[]: explicit tenant keys.
+   */
+  tenants?: 'auto' | string[];
   fields?: Record<string, TableFieldMeta>;
 }
 
@@ -508,9 +520,13 @@ export interface TableAdminConfig {
    */
   slugPolicy?: string;
   /**
-   * Where the data is sourced for admin operations.
+   * Authority mode used by admin/runtime processing.
    */
-  data?: 'local' | 'remote';
+  authority?: DataAuthority;
+  /**
+   * @deprecated Legacy alias. Prefer authority.
+   */
+  data?: DataAuthority | LegacyDataLocation;
   /**
    * Enable/disable model exposure in admin tooling.
    */
@@ -523,9 +539,13 @@ export interface TableModelSettingsConfig {
    */
   schemaType?: 'schemaless' | 'schemafull' | 'schemaful';
   /**
-   * Model data location mode for app consumers.
+   * Model authority mode for app consumers.
    */
-  dataLocation?: 'local' | 'remote';
+  authority?: DataAuthority;
+  /**
+   * @deprecated Legacy alias. Prefer authority.
+   */
+  dataLocation?: DataAuthority | LegacyDataLocation;
   /**
    * Bootstrap-specific table options.
    */

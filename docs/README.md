@@ -2,6 +2,10 @@
 
 This document tracks the evolving architecture and behaviour of the schema tooling workspace. Update it whenever we introduce or adjust features so the full journey stays visible in one place.
 
+## Runbooks
+
+- Layer sync workflow: `apps/schema/docs/LAYER-SYNC-WORKFLOW.md`
+
 ## Current Focus
 
 - Declarative table configs (`config/migrations/**`) drive Surreal table creation, Zod type generation, and TRPC router scaffolding.

@@ -28,7 +28,6 @@ databases:
     username: root
     password: root
     allowScripting: true
-    root: true
 
     
 paths:
@@ -306,6 +305,8 @@ importFilters:
 # Module Defaults
 instance:
   active: true
+  source: helios
+  tenants: auto
   fields:
     instances:
       type: array<string>
