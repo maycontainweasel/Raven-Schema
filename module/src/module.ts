@@ -546,6 +546,27 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
       addPlugin(overridePlugin ?? resolver.resolve('runtime/plugins/typesense.client'))
       const overrideServerPlugin = resolveOverrideFile('plugins/typesense.server')
       addPlugin(overrideServerPlugin ?? resolver.resolve('runtime/plugins/typesense.server'))
+      addTypeTemplate({
+        filename: 'schema-kit-typesense.d.ts',
+        getContents: () => `import type Typesense from 'typesense'
+
+type TypesenseClient = Typesense.Client
+
+declare module '#app' {
+  interface NuxtApp {
+    $typesense: TypesenseClient
+  }
+}
+
+declare module 'vue' {
+  interface ComponentCustomProperties {
+    $typesense: TypesenseClient
+  }
+}
+
+export {};
+`,
+      })
     }
     const require = createRequire(import.meta.url)
     const hasPackageUpTree = (packageName: string) => {
