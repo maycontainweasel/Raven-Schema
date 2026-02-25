@@ -122,12 +122,29 @@ export type FieldComponentOptionsMap = {
   AComboboxAsync: AComboboxAsyncOptions
 }
 
+export type FieldComponentOptionType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'array'
+  | 'object'
+
+export type FieldComponentOptionDefinition = {
+  key: string
+  type: FieldComponentOptionType
+  required?: boolean
+  description: string
+  values?: string[]
+  defaultValue?: unknown
+}
+
 export type FieldComponentContract = {
   id: FieldComponentId
   title: string
   description: string
   category: 'form'
   valueShape: string
+  options: FieldComponentOptionDefinition[]
   requiredOptions: string[]
   optionalOptions: string[]
   supports: {

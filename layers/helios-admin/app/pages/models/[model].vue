@@ -193,6 +193,19 @@ const createRecordOverridePath = computed(() => {
   return `app/components/admin/overrides/${modelParam.value || '<model>'}/createRecord.ts`
 })
 
+const selectedTabOverrideSlug = ref('')
+const selectedWidgetOverrideId = ref('')
+
+const tabOverridePath = computed(() => {
+  const tabSlug = selectedTabOverrideSlug.value || '<tab-slug>'
+  return `app/components/admin/overrides/${modelParam.value || '<model>'}/tabs/${tabSlug}.vue`
+})
+
+const widgetOverridePath = computed(() => {
+  const widgetId = selectedWidgetOverrideId.value || '<widget-id>'
+  return `app/components/admin/overrides/${modelParam.value || '<model>'}/widgets/${widgetId}.vue`
+})
+
 const typesenseEnabled = computed(() => Boolean(form.value?.directory.typesense.enabled))
 const typesenseCollectionName = computed(() => {
   return String(
@@ -583,6 +596,64 @@ const generateCreateRecordOverride = async (force = false) => {
   }
 }
 
+const generateTabOverride = async (force = false) => {
+  overrideBusy.value = true
+  overrideError.value = ''
+  overrideNotice.value = ''
+
+  try {
+    const tabSlug = String(selectedTabOverrideSlug.value || '').trim()
+    if (!tabSlug) throw new Error('Select a tab before generating a tab override.')
+
+    const response = await $fetch(`/api/models/overrides/${modelParam.value}/tab`, {
+      method: 'POST',
+      body: { tabSlug, force },
+    })
+
+    overrideResult.value = response as Record<string, any>
+    const status = String((response as any)?.override?.status || 'created')
+    const filePath = String((response as any)?.override?.filePath || '')
+    overrideNotice.value = status === 'exists'
+      ? `Tab override already exists at ${filePath}.`
+      : `Tab override ${status} at ${filePath}.`
+  }
+  catch (apiError: any) {
+    overrideError.value = apiError?.data?.statusMessage ?? apiError?.message ?? 'Failed to generate tab override.'
+  }
+  finally {
+    overrideBusy.value = false
+  }
+}
+
+const generateWidgetOverride = async (force = false) => {
+  overrideBusy.value = true
+  overrideError.value = ''
+  overrideNotice.value = ''
+
+  try {
+    const widgetId = String(selectedWidgetOverrideId.value || '').trim()
+    if (!widgetId) throw new Error('Select a widget before generating a widget override.')
+
+    const response = await $fetch(`/api/models/overrides/${modelParam.value}/widget`, {
+      method: 'POST',
+      body: { widgetId, force },
+    })
+
+    overrideResult.value = response as Record<string, any>
+    const status = String((response as any)?.override?.status || 'created')
+    const filePath = String((response as any)?.override?.filePath || '')
+    overrideNotice.value = status === 'exists'
+      ? `Widget override already exists at ${filePath}.`
+      : `Widget override ${status} at ${filePath}.`
+  }
+  catch (apiError: any) {
+    overrideError.value = apiError?.data?.statusMessage ?? apiError?.message ?? 'Failed to generate widget override.'
+  }
+  finally {
+    overrideBusy.value = false
+  }
+}
+
 watch(
   () => data.value?.spec,
   (nextSpec) => {
@@ -652,6 +723,37 @@ const activeTabSpec = computed<ModelUITabSpec | null>(() => {
   if (!availableTabs.length) return null
   return availableTabs.find(tab => tab.slug === activeTabSlug.value) ?? availableTabs[0] ?? null
 })
+
+const activeTabWidgetIds = computed(() => {
+  const tab = activeTabSpec.value
+  if (!tab) return [] as string[]
+  const ids: string[] = []
+  for (const row of tab.primary || []) {
+    for (const column of row.columns || []) {
+      for (const widget of column.primary || []) {
+        const id = String(widget.id || '').trim()
+        if (!id || ids.includes(id)) continue
+        ids.push(id)
+      }
+    }
+  }
+  return ids
+})
+
+watch(
+  [() => activeTabSpec.value?.slug, activeTabWidgetIds],
+  ([tabSlug, widgetIds]) => {
+    selectedTabOverrideSlug.value = String(tabSlug || '')
+    if (!widgetIds.length) {
+      selectedWidgetOverrideId.value = ''
+      return
+    }
+    if (!widgetIds.includes(selectedWidgetOverrideId.value)) {
+      selectedWidgetOverrideId.value = widgetIds[0]!
+    }
+  },
+  { immediate: true },
+)
 
 const queryByCsv = computed({
   get: () => form.value?.directory.typesense.queryBy.join(', ') ?? '',
@@ -2228,6 +2330,52 @@ const commitState = async () => {
                     {{ overrideBusy ? 'Generating…' : 'Generate' }}
                   </button>
                   <button class="a-btn a-btn--ghost" type="button" :disabled="overrideBusy" @click="generateCreateRecordOverride(true)">
+                    {{ overrideBusy ? 'Working…' : 'Regenerate' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="file-item">
+                <p class="a-eyebrow">Tab Override</p>
+                <div class="smt-025">
+                  <select v-model="selectedTabOverrideSlug" class="a-select">
+                    <option v-if="tabs.length === 0" value="" disabled>
+                      No tabs available
+                    </option>
+                    <option v-for="tab in tabs" :key="`tab-override-${tab.id}`" :value="tab.slug">
+                      {{ tab.label }} ({{ tab.slug }})
+                    </option>
+                  </select>
+                </div>
+                <code>{{ tabOverridePath }}</code>
+                <div class="api-actions smt-025">
+                  <button class="a-btn a-btn--subtle" type="button" :disabled="overrideBusy || !selectedTabOverrideSlug" @click="generateTabOverride(false)">
+                    {{ overrideBusy ? 'Generating…' : 'Generate' }}
+                  </button>
+                  <button class="a-btn a-btn--ghost" type="button" :disabled="overrideBusy || !selectedTabOverrideSlug" @click="generateTabOverride(true)">
+                    {{ overrideBusy ? 'Working…' : 'Regenerate' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="file-item">
+                <p class="a-eyebrow">Widget Override</p>
+                <div class="smt-025">
+                  <select v-model="selectedWidgetOverrideId" class="a-select">
+                    <option v-if="activeTabWidgetIds.length === 0" value="" disabled>
+                      No widgets in active tab
+                    </option>
+                    <option v-for="widgetId in activeTabWidgetIds" :key="`widget-override-${widgetId}`" :value="widgetId">
+                      {{ widgetId }}
+                    </option>
+                  </select>
+                </div>
+                <code>{{ widgetOverridePath }}</code>
+                <div class="api-actions smt-025">
+                  <button class="a-btn a-btn--subtle" type="button" :disabled="overrideBusy || !selectedWidgetOverrideId" @click="generateWidgetOverride(false)">
+                    {{ overrideBusy ? 'Generating…' : 'Generate' }}
+                  </button>
+                  <button class="a-btn a-btn--ghost" type="button" :disabled="overrideBusy || !selectedWidgetOverrideId" @click="generateWidgetOverride(true)">
                     {{ overrideBusy ? 'Working…' : 'Regenerate' }}
                   </button>
                 </div>

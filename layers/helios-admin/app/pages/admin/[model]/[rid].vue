@@ -12,6 +12,7 @@ import type {
   ModelUIWidgetSpec,
 } from '../../../types/model-spec'
 import FieldSectionCard from '#layers/helios-ui/app/components/fields/FieldSectionCard.vue'
+import { resolveFieldComponentOptions } from '../../../utils/field-component-options'
 // Components are auto-imported from the active layer.
 
 type RuntimeRecordResponse = {
@@ -750,15 +751,19 @@ const searchOptions = async (field: ModelUIFieldSpec, query: string): Promise<AC
 }
 
 const resolveFieldComponent = (name: string) => {
-  if (name === 'ACombobox') return ACombobox
-  if (name === 'AComboboxAsync') return AComboboxAsync
-  if (name === 'AColorPicker') return AColorPicker
-  return AInput
+  if (name === 'ACombobox') return 'ACombobox'
+  if (name === 'AComboboxAsync') return 'AComboboxAsync'
+  if (name === 'AColorPicker') return 'AColorPicker'
+  return 'AInput'
 }
 
 const resolveFieldProps = (field: ModelUIFieldSpec) => {
   const key = resolveFieldKey(field)
-  const options = field.component?.options || {}
+  const options = resolveFieldComponentOptions(
+    String(field.component?.name || ''),
+    field.component?.options,
+    { applyDefaults: true, allowUnknown: true },
+  ).resolvedOptions as Record<string, any>
   const base = {
     label: field.label || toLabel(key),
     helperText: options.helperText || `modelKey=${key}`,

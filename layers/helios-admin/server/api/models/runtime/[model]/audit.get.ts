@@ -5,6 +5,7 @@ import { collections } from '@schema/typesense/collections'
 import { createContext } from '@schema/server/trpc/context'
 import { appRouter } from '~~/server/trpc/routers/_app'
 import { fieldComponentRegistry } from '../../../../../app/config/field-component-registry'
+import { resolveFieldComponentOptions } from '../../../../../app/utils/field-component-options'
 import {
   findModelManagerModel,
   listModelManagerModels,
@@ -431,37 +432,47 @@ const validateFieldComponentContract = (
     `${ref.location}: component "${componentName}" is registered.`,
   )
 
-  const requiredOptions = Array.isArray(component.contract?.requiredOptions)
-    ? component.contract.requiredOptions as string[]
-    : []
-
-  if (!requiredOptions.length) {
-    pushCheck(
-      gate,
-      `${ref.location}.component.requiredOptions`,
-      'pass',
-      `${ref.location}: no required options for "${componentName}".`,
-    )
-    return
-  }
-
-  const missing = requiredOptions.filter((optionKey) => {
-    if (!Object.prototype.hasOwnProperty.call(options, optionKey)) return true
-    const value = (options as any)[optionKey]
-    if (typeof value === 'undefined' || value === null) return true
-    if (typeof value === 'string' && value.trim().length === 0) return true
-    if (Array.isArray(value) && value.length === 0) return true
-    return false
-  })
+  const resolution = resolveFieldComponentOptions(
+    componentName,
+    options,
+    {
+      applyDefaults: false,
+      requireExplicitRequired: true,
+      allowUnknown: false,
+    },
+  )
 
   pushCheck(
     gate,
     `${ref.location}.component.requiredOptions`,
-    missing.length ? 'fail' : 'pass',
-    missing.length
+    resolution.requiredMissing.length ? 'fail' : 'pass',
+    resolution.requiredMissing.length
       ? `${ref.location}: missing required component options for "${componentName}".`
       : `${ref.location}: required component options present for "${componentName}".`,
-    missing.length ? missing.join(', ') : undefined,
+    resolution.requiredMissing.length ? resolution.requiredMissing.join(', ') : undefined,
+  )
+
+  const invalidTypeIssues = resolution.issues.filter(issue => issue.kind === 'invalid-type' || issue.kind === 'invalid-enum')
+  pushCheck(
+    gate,
+    `${ref.location}.component.optionTypes`,
+    invalidTypeIssues.length ? 'fail' : 'pass',
+    invalidTypeIssues.length
+      ? `${ref.location}: component option value types are invalid.`
+      : `${ref.location}: component option value types are valid.`,
+    invalidTypeIssues.length
+      ? invalidTypeIssues.map(issue => issue.message).join(' | ')
+      : undefined,
+  )
+
+  pushCheck(
+    gate,
+    `${ref.location}.component.unknownOptions`,
+    resolution.unknownKeys.length ? 'warn' : 'pass',
+    resolution.unknownKeys.length
+      ? `${ref.location}: component has options outside the contract.`
+      : `${ref.location}: component options all match contract keys.`,
+    resolution.unknownKeys.length ? resolution.unknownKeys.join(', ') : undefined,
   )
 }
 

@@ -3,6 +3,7 @@ import ACombobox, { type AComboboxOption } from '#layers/helios-ui/app/component
 import AComboboxAsync from '#layers/helios-ui/app/components/fields/AComboboxAsync.vue'
 import AInput from '#layers/helios-ui/app/components/fields/AInput.vue'
 import { getFieldComponentContract } from '#layers/helios-admin/app/config/field-component-registry'
+import { resolveFieldComponentOptions } from '#layers/helios-admin/app/utils/field-component-options'
 
 const route = useRoute()
 const componentId = computed(() => String(route.params.component ?? '').trim())
@@ -40,10 +41,22 @@ const mergedOptions = computed<Record<string, any>>(() => {
   const entry = registryEntry.value
   if (!entry) return {}
   const exampleOptions = selectedExample.value?.options ?? {}
-  return {
-    ...entry.defaults,
-    ...exampleOptions,
-  }
+  return resolveFieldComponentOptions(
+    entry.contract.id,
+    exampleOptions,
+    { applyDefaults: true, allowUnknown: false },
+  ).resolvedOptions
+})
+
+const optionIssues = computed(() => {
+  const entry = registryEntry.value
+  if (!entry) return []
+  const exampleOptions = selectedExample.value?.options ?? {}
+  return resolveFieldComponentOptions(
+    entry.contract.id,
+    exampleOptions,
+    { applyDefaults: true, allowUnknown: false },
+  ).issues
 })
 
 const pick = (source: Record<string, any>, keys: string[]) =>
@@ -145,6 +158,35 @@ const searchOptions = async (query: string): Promise<AComboboxOption[]> => {
         <span class="a-chip">Required: {{ registryEntry.contract.requiredOptions.join(', ') || 'none' }}</span>
         <span class="a-chip">Optional: {{ registryEntry.contract.optionalOptions.length }}</span>
       </div>
+
+      <div class="smt-050 table-wrap">
+        <table class="contract-table">
+          <thead>
+            <tr>
+              <th>Option</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="option in registryEntry.contract.options" :key="option.key">
+              <td><code>{{ option.key }}</code></td>
+              <td>
+                <span>{{ option.type }}</span>
+                <span v-if="option.values?.length"> ({{ option.values.join(' | ') }})</span>
+              </td>
+              <td>{{ option.required ? 'Yes' : 'No' }}</td>
+              <td>
+                <code v-if="typeof option.defaultValue !== 'undefined'">{{ JSON.stringify(option.defaultValue) }}</code>
+                <span v-else>—</span>
+              </td>
+              <td>{{ option.description }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="a-card">
@@ -188,6 +230,16 @@ const searchOptions = async (query: string): Promise<AComboboxOption[]> => {
         <article class="demo-card">
           <h3 class="demo-title">Resolved Options</h3>
           <pre class="code-block">{{ JSON.stringify(mergedOptions, null, 2) }}</pre>
+          <div v-if="optionIssues.length" class="contract-issues">
+            <p class="a-eyebrow">Validation</p>
+            <p
+              v-for="(issue, index) in optionIssues"
+              :key="`${issue.key}-${index}`"
+              class="a-copy"
+            >
+              {{ issue.message }}
+            </p>
+          </div>
         </article>
       </div>
     </section>
@@ -250,6 +302,34 @@ const searchOptions = async (query: string): Promise<AComboboxOption[]> => {
   padding: 0.78rem;
   display: grid;
   gap: 0.45rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.contract-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.contract-table th,
+.contract-table td {
+  text-align: left;
+  border-bottom: 1px solid var(--admin-border);
+  padding: 0.45rem;
+  vertical-align: top;
+}
+
+.contract-table th {
+  color: var(--admin-text-soft);
+  font-weight: 600;
+}
+
+.contract-issues {
+  display: grid;
+  gap: 0.25rem;
 }
 
 .demo-title {

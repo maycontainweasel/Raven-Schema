@@ -19,11 +19,38 @@ export type CreateRecordOverrideResult = {
   status: 'created' | 'overwritten' | 'exists'
 }
 
+type TabOverrideOptions = {
+  force?: boolean
+}
+
+export type TabOverrideResult = {
+  filePath: string
+  status: 'created' | 'overwritten' | 'exists'
+}
+
+type WidgetOverrideOptions = {
+  force?: boolean
+}
+
+export type WidgetOverrideResult = {
+  filePath: string
+  status: 'created' | 'overwritten' | 'exists'
+}
+
 const normalizeModelKey = (value: string) =>
   value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
+
+const normalizeOverrideToken = (value: string, fallback: string) => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return normalized || fallback
+}
 
 const fileExists = async (filePath: string) => {
   try {
@@ -153,6 +180,78 @@ const createRecord: ModelCreateRecordOverride = async (context) => {
 export default createRecord
 `
 
+const tabTemplate = (modelKey: string, tabSlug: string) => `<!-- @helios-generated-model-override kind=tab model=${modelKey} tab=${tabSlug} -->
+<script setup lang="ts">
+const props = defineProps<{
+  context: {
+    model: string
+    rid: string
+    tab: { id: string, slug: string, label: string }
+    fields: Record<string, any>
+    refreshRecord?: () => Promise<unknown>
+  }
+}>()
+</script>
+
+<template>
+  <section class="a-card">
+    <p class="a-eyebrow">Tab Override</p>
+    <h2 class="a-title">{{ props.context.tab.label || props.context.tab.slug }}</h2>
+    <p class="a-copy">
+      Replace this scaffold with your custom tab UI. Use <code>context.fields</code> and
+      runtime helpers to integrate with the save engine.
+    </p>
+
+    <div class="smt-050">
+      <button class="a-btn a-btn--subtle" type="button" @click="props.context.refreshRecord?.()">
+        Refresh Record
+      </button>
+    </div>
+  </section>
+</template>
+`
+
+const widgetTemplate = (modelKey: string, widgetId: string) => `<!-- @helios-generated-model-override kind=widget model=${modelKey} widget=${widgetId} -->
+<script setup lang="ts">
+const props = defineProps<{
+  context: {
+    model: string
+    rid: string
+    widget: { id: string, name: string, label?: string } | null
+    saveWidget?: () => Promise<unknown>
+    buildActionGroups?: () => Array<{
+      id: string
+      kind: string
+      action: string
+      payload: Record<string, any>
+      fields: string[]
+    }>
+  }
+}>()
+
+const groups = computed(() => props.context.buildActionGroups?.() ?? [])
+</script>
+
+<template>
+  <section class="a-card">
+    <p class="a-eyebrow">Widget Override</p>
+    <h3 class="a-title">{{ props.context.widget?.label || props.context.widget?.name || '${widgetId}' }}</h3>
+    <p class="a-copy">
+      Replace this scaffold with your custom widget UI and call <code>context.saveWidget()</code>
+      to use grouped save execution.
+    </p>
+
+    <pre class="smt-050">{{ JSON.stringify(groups, null, 2) }}</pre>
+
+    <div class="smt-050">
+      <button class="a-btn a-btn--subtle" type="button" @click="props.context.saveWidget?.()">
+        Save Widget
+      </button>
+    </div>
+  </section>
+</template>
+`
+
 const scaffoldOverrideFile = async (
   filePath: string,
   content: string,
@@ -201,4 +300,48 @@ export const scaffoldCreateRecordOverride = async (
 
   const filePath = resolve(cwd, 'app/components/admin/overrides', modelKey, 'createRecord.ts')
   return await scaffoldOverrideFile(filePath, createRecordTemplate(modelKey), options.force)
+}
+
+export const scaffoldTabOverride = async (
+  model: string,
+  tabSlug: string,
+  options: TabOverrideOptions = {},
+  cwd = process.cwd(),
+): Promise<TabOverrideResult> => {
+  const modelKey = normalizeModelKey(model)
+  const normalizedTab = normalizeOverrideToken(tabSlug, 'general')
+  if (!modelKey) {
+    throw new Error('Model key is required to scaffold a tab override.')
+  }
+
+  const filePath = resolve(
+    cwd,
+    'app/components/admin/overrides',
+    modelKey,
+    'tabs',
+    `${normalizedTab}.vue`,
+  )
+  return await scaffoldOverrideFile(filePath, tabTemplate(modelKey, normalizedTab), options.force)
+}
+
+export const scaffoldWidgetOverride = async (
+  model: string,
+  widgetId: string,
+  options: WidgetOverrideOptions = {},
+  cwd = process.cwd(),
+): Promise<WidgetOverrideResult> => {
+  const modelKey = normalizeModelKey(model)
+  const normalizedWidget = normalizeOverrideToken(widgetId, 'widget')
+  if (!modelKey) {
+    throw new Error('Model key is required to scaffold a widget override.')
+  }
+
+  const filePath = resolve(
+    cwd,
+    'app/components/admin/overrides',
+    modelKey,
+    'widgets',
+    `${normalizedWidget}.vue`,
+  )
+  return await scaffoldOverrideFile(filePath, widgetTemplate(modelKey, normalizedWidget), options.force)
 }

@@ -96,7 +96,7 @@ const cards = computed(() => {
 
         <div class="catalog-card__meta">
           <span class="a-chip">Value: {{ entry.contract.valueShape }}</span>
-          <span class="a-chip">{{ entry.contract.examples.length }} examples</span>
+          <span class="a-chip">{{ entry.examples.length }} examples</span>
         </div>
 
         <div class="catalog-card__actions">

@@ -18,6 +18,8 @@ export type {
   FieldCommonProps,
   FieldComponentContract,
   FieldComponentId,
+  FieldComponentOptionDefinition,
+  FieldComponentOptionType,
   FieldComponentOptionsMap,
   ModelDataMode,
 } from './field-contract'

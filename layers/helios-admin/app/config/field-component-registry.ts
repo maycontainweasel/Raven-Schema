@@ -4,12 +4,12 @@ import type {
   AInputOptions,
   FieldComponentContract,
   FieldComponentId,
+  FieldComponentOptionDefinition,
 } from '../types/field-contract'
 
 type FieldComponentRegistryEntry = {
   contract: FieldComponentContract
   specSnippet: string
-  defaults: Record<string, any>
   examples: Array<{
     id: string
     label: string
@@ -18,20 +18,78 @@ type FieldComponentRegistryEntry = {
   }>
 }
 
+const createContract = (
+  value: Omit<FieldComponentContract, 'requiredOptions' | 'optionalOptions'>,
+): FieldComponentContract => {
+  const requiredOptions = value.options
+    .filter(option => option.required)
+    .map(option => option.key)
+  const optionalOptions = value.options
+    .filter(option => !option.required)
+    .map(option => option.key)
+
+  return {
+    ...value,
+    requiredOptions,
+    optionalOptions,
+  }
+}
+
+const baseTextOptions: FieldComponentOptionDefinition[] = [
+  {
+    key: 'placeholder',
+    type: 'string',
+    description: 'Placeholder text shown when value is empty.',
+    defaultValue: '',
+  },
+  {
+    key: 'helperText',
+    type: 'string',
+    description: 'Secondary hint text rendered under the field.',
+    defaultValue: '',
+  },
+  {
+    key: 'errorText',
+    type: 'string',
+    description: 'Validation message text shown in error states.',
+    defaultValue: '',
+  },
+  {
+    key: 'disabled',
+    type: 'boolean',
+    description: 'Disables input interactions when true.',
+    defaultValue: false,
+  },
+]
+
 const contracts: Record<FieldComponentId, FieldComponentRegistryEntry> = {
   AInput: {
-    contract: {
+    contract: createContract({
       id: 'AInput',
       title: 'Text Input',
       description: 'Single-line Ark input wrapper with Helios field chrome.',
       category: 'form',
       valueShape: 'string | number',
-      requiredOptions: [],
-      optionalOptions: ['type', 'placeholder', 'helperText', 'errorText', 'required', 'disabled'],
+      options: [
+        {
+          key: 'type',
+          type: 'string',
+          description: 'Native input type.',
+          values: ['text', 'email', 'password', 'number'],
+          defaultValue: 'text',
+        },
+        ...baseTextOptions,
+        {
+          key: 'required',
+          type: 'boolean',
+          description: 'Marks field as required in UI state.',
+          defaultValue: false,
+        },
+      ],
       supports: {
         multiple: false,
       },
-    },
+    }),
     specSnippet: `component:
   name: AInput
   options:
@@ -42,14 +100,6 @@ binding:
   kind: model
   action: user.update
   payloadKey: firstName`,
-    defaults: {
-      type: 'text',
-      placeholder: '',
-      helperText: '',
-      errorText: '',
-      required: false,
-      disabled: false,
-    } satisfies AInputOptions,
     examples: [
       {
         id: 'default',
@@ -72,30 +122,63 @@ binding:
     ],
   },
   ACombobox: {
-    contract: {
+    contract: createContract({
       id: 'ACombobox',
       title: 'Combobox',
       description: 'Searchable select with optional grouping/multi-select.',
       category: 'form',
       valueShape: 'string | string[] | null',
-      requiredOptions: ['options'],
-      optionalOptions: [
-        'placeholder',
-        'helperText',
-        'errorText',
-        'multiple',
-        'grouped',
-        'highlightMatch',
-        'clearable',
-        'showIndicator',
-        'emptyText',
-        'disabled',
+      options: [
+        {
+          key: 'options',
+          type: 'array',
+          required: true,
+          description: 'List of options. Shape: [{ label, value, group?, disabled? }].',
+          defaultValue: [],
+        },
+        ...baseTextOptions,
+        {
+          key: 'multiple',
+          type: 'boolean',
+          description: 'Enable multi-select mode.',
+          defaultValue: false,
+        },
+        {
+          key: 'grouped',
+          type: 'boolean',
+          description: 'Treat options as grouped by `group` key.',
+          defaultValue: false,
+        },
+        {
+          key: 'highlightMatch',
+          type: 'boolean',
+          description: 'Highlights query matches in option labels.',
+          defaultValue: false,
+        },
+        {
+          key: 'clearable',
+          type: 'boolean',
+          description: 'Shows clear/reset action.',
+          defaultValue: true,
+        },
+        {
+          key: 'showIndicator',
+          type: 'boolean',
+          description: 'Shows dropdown indicator icon.',
+          defaultValue: true,
+        },
+        {
+          key: 'emptyText',
+          type: 'string',
+          description: 'Text shown when no options match the query.',
+          defaultValue: 'No options found.',
+        },
       ],
       supports: {
         staticOptions: true,
         multiple: true,
       },
-    },
+    }),
     specSnippet: `component:
   name: ACombobox
   options:
@@ -110,19 +193,6 @@ binding:
   kind: model
   action: user.profile.update
   payloadKey: country`,
-    defaults: {
-      options: [],
-      placeholder: '',
-      helperText: '',
-      errorText: '',
-      multiple: false,
-      grouped: false,
-      highlightMatch: false,
-      clearable: true,
-      showIndicator: true,
-      emptyText: 'No options found.',
-      disabled: false,
-    } satisfies AComboboxOptions,
     examples: [
       {
         id: 'single',
@@ -147,33 +217,87 @@ binding:
     ],
   },
   AComboboxAsync: {
-    contract: {
+    contract: createContract({
       id: 'AComboboxAsync',
       title: 'Async Combobox',
       description: 'Combobox with deferred search loader and minimum character threshold.',
       category: 'form',
       valueShape: 'string | string[] | null',
-      requiredOptions: ['minChars'],
-      optionalOptions: [
-        'loader',
-        'searchMode',
-        'placeholder',
-        'helperText',
-        'errorText',
-        'multiple',
-        'grouped',
-        'highlightMatch',
-        'clearable',
-        'showIndicator',
-        'emptyText',
-        'disabled',
+      options: [
+        {
+          key: 'minChars',
+          type: 'number',
+          required: true,
+          description: 'Minimum typed characters before search runs.',
+          defaultValue: 2,
+        },
+        {
+          key: 'searchMode',
+          type: 'string',
+          description: 'Controls async source strategy.',
+          values: ['local', 'remote'],
+          defaultValue: 'local',
+        },
+        {
+          key: 'loader',
+          type: 'object',
+          description: 'Optional loader config: { mode, endpoint, queryParam, debounceMs }.',
+          defaultValue: {
+            mode: 'local',
+            queryParam: 'q',
+            debounceMs: 150,
+          },
+        },
+        {
+          key: 'options',
+          type: 'array',
+          description: 'Optional local fallback options.',
+          defaultValue: [],
+        },
+        ...baseTextOptions,
+        {
+          key: 'multiple',
+          type: 'boolean',
+          description: 'Enable multi-select mode.',
+          defaultValue: false,
+        },
+        {
+          key: 'grouped',
+          type: 'boolean',
+          description: 'Treat options as grouped by `group` key.',
+          defaultValue: false,
+        },
+        {
+          key: 'highlightMatch',
+          type: 'boolean',
+          description: 'Highlights query matches in option labels.',
+          defaultValue: false,
+        },
+        {
+          key: 'clearable',
+          type: 'boolean',
+          description: 'Shows clear/reset action.',
+          defaultValue: true,
+        },
+        {
+          key: 'showIndicator',
+          type: 'boolean',
+          description: 'Shows dropdown indicator icon.',
+          defaultValue: true,
+        },
+        {
+          key: 'emptyText',
+          type: 'string',
+          description: 'Text shown when no options match the query.',
+          defaultValue: 'No options found.',
+        },
       ],
       supports: {
         staticOptions: true,
         asyncSearch: true,
         multiple: true,
       },
-    },
+    }),
     specSnippet: `component:
   name: AComboboxAsync
   options:
@@ -188,22 +312,6 @@ binding:
   kind: model
   action: user.profile.update
   payloadKey: country`,
-    defaults: {
-      minChars: 2,
-      searchMode: 'local',
-      loader: {
-        mode: 'local',
-        queryParam: 'q',
-        debounceMs: 150,
-      },
-      multiple: false,
-      grouped: false,
-      highlightMatch: false,
-      clearable: true,
-      showIndicator: true,
-      emptyText: 'No options found.',
-      disabled: false,
-    } satisfies AComboboxAsyncOptions,
     examples: [
       {
         id: 'local',
