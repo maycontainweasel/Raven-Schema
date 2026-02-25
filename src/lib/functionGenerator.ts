@@ -660,6 +660,8 @@ function buildUpdateFunctionContent(
     `\t\tthrow "${functionName} | payload is required";`,
     `\t};`,
     '',
+    `\tlet $current = (select * from $rid)[0];`,
+    '',
   );
 
   if (hooks.preValidate.length > 0) {
@@ -671,7 +673,9 @@ function buildUpdateFunctionContent(
     lines.push(...payloadStrip, '');
   }
 
-  const recordFieldNormalize = buildRecordFieldNormalizationLines(fields, payloadParam);
+  const recordFieldNormalize = buildRecordFieldNormalizationLines(fields, payloadParam, {
+    preserveMissingFromRecordVar: '$current',
+  });
   if (recordFieldNormalize.length > 0) {
     lines.push(...recordFieldNormalize, '');
   }
@@ -2798,9 +2802,14 @@ function buildUuidAssignments(fields: NormalizedField[], assigned: Set<string>):
   return assignments;
 }
 
+interface RecordFieldNormalizationOptions {
+  preserveMissingFromRecordVar?: string;
+}
+
 function buildRecordFieldNormalizationLines(
   fields: NormalizedField[],
-  payloadVar: string
+  payloadVar: string,
+  options?: RecordFieldNormalizationOptions
 ): string[] {
   const assignments: string[] = [];
   for (const field of fields) {
@@ -2810,8 +2819,11 @@ function buildRecordFieldNormalizationLines(
     }
     const key = formatObjectKey(field.name);
     const accessor = `${payloadVar}.${field.name}`;
+    const preserveMissingExpr = options?.preserveMissingFromRecordVar
+      ? `${options.preserveMissingFromRecordVar}.${field.name}`
+      : undefined;
     assignments.push(
-      `\t\t${key}: ${buildRecordValueNormalizationExpression(recordModel, accessor)},`
+      `\t\t${key}: ${buildRecordValueNormalizationExpression(recordModel, accessor, preserveMissingExpr)},`
     );
   }
   if (assignments.length === 0) {
@@ -2828,8 +2840,16 @@ function buildRecordValueMissingExpression(valueExpr: string): string {
   return `${valueExpr} = NONE || ${valueExpr} = null || (type::is_string(${valueExpr}) && string::len(string::trim(${valueExpr})) = 0)`;
 }
 
-function buildRecordValueNormalizationExpression(recordModel: string, valueExpr: string): string {
+function buildRecordValueNormalizationExpression(
+  recordModel: string,
+  valueExpr: string,
+  preserveMissingExpr?: string
+): string {
   const missingExpr = buildRecordValueMissingExpression(valueExpr);
+  if (preserveMissingExpr) {
+    const nullOrEmptyExpr = `${valueExpr} = null || (type::is_string(${valueExpr}) && string::len(string::trim(${valueExpr})) = 0)`;
+    return `if ${valueExpr} = NONE { ${preserveMissingExpr} } else if type::is_array(${valueExpr}) { ${valueExpr} } else if ${nullOrEmptyExpr} { ${valueExpr} } else { fn::ridParam("${recordModel}", ${valueExpr}) }`;
+  }
   return `if type::is_array(${valueExpr}) { ${valueExpr} } else if ${missingExpr} { ${valueExpr} } else { fn::ridParam("${recordModel}", ${valueExpr}) }`;
 }
 

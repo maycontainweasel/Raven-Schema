@@ -10,6 +10,7 @@ import type {
   ModelUIWidgetSpec,
 } from '#helios-admin/app/types/model-spec'
 import FieldSectionCard from '#layers/helios-ui/app/components/fields/FieldSectionCard.vue'
+import PageFrameCanvas from '#layers/helios-admin/app/components/admin/builder/PageFrameCanvas.client.vue'
 
 type BuilderRootTab = 'settings' | 'page-builder' | 'page-builder-2'
 type SettingsPanel =

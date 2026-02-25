@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { defineAsyncComponent, type Component } from 'vue'
 import type {
   ModelLayoutSpec,
   ModelUIFieldBinding,
@@ -71,6 +72,23 @@ type TaxonomyCreatePayload = {
   parentId?: string | null
 }
 
+type ActionGroupKind = 'model' | 'subtable' | 'taxonomy-attach' | 'taxonomy-detach'
+
+type ActionGroup = {
+  id: string
+  kind: ActionGroupKind
+  action: string
+  payload: Record<string, any>
+  fields: string[]
+}
+
+type ActionGroupResult = {
+  group: ActionGroup
+  status: 'success' | 'failed'
+  result?: any
+  error?: any
+}
+
 const route = useRoute()
 const { $process } = useCRUD()
 
@@ -88,6 +106,10 @@ const noticeTone = ref<'success' | 'error'>('success')
 const saving = ref(false)
 const publishing = ref(false)
 const widgetSaving = ref<Record<string, boolean>>({})
+const tabOverrideModules = import.meta.glob('@/components/admin/overrides/**/tabs/*.vue')
+const widgetOverrideModules = import.meta.glob('@/components/admin/overrides/**/widgets/*.vue')
+const tabOverrideCache = new Map<string, Component | null>()
+const widgetOverrideCache = new Map<string, Component | null>()
 
 const { data: specData, pending: specPending, error: specError } = await useFetch<ModelSpecResponse>(
   () => `/api/models/layout/${modelParam.value}`,
@@ -131,6 +153,53 @@ const resolveFieldKey = (field: ModelUIFieldSpec) => {
 }
 
 const unique = <T>(value: T[]) => Array.from(new Set(value))
+
+const toFileToken = (value: string, fallback = 'default') => {
+  const token = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return token || fallback
+}
+
+const findOverrideLoader = (
+  modules: Record<string, () => Promise<unknown>>,
+  suffixes: string[],
+) => {
+  const match = Object.keys(modules).find((key) => suffixes.some((suffix) => key.endsWith(suffix)))
+  return match ? modules[match] : null
+}
+
+const resolveTabOverrideComponent = (modelKey: string, tabSlug: string): Component | null => {
+  const cacheKey = `${modelKey}::${tabSlug}`
+  if (tabOverrideCache.has(cacheKey)) return tabOverrideCache.get(cacheKey) ?? null
+
+  const normalizedModel = toFileToken(modelKey, 'model')
+  const normalizedSlug = toFileToken(tabSlug, 'tab')
+  const loader = findOverrideLoader(tabOverrideModules, [
+    `components/admin/overrides/${normalizedModel}/tabs/${tabSlug}.vue`,
+    `components/admin/overrides/${normalizedModel}/tabs/${normalizedSlug}.vue`,
+  ])
+  const resolved = loader ? defineAsyncComponent(loader as any) : null
+  tabOverrideCache.set(cacheKey, resolved)
+  return resolved
+}
+
+const resolveWidgetOverrideComponent = (modelKey: string, widgetId: string): Component | null => {
+  const cacheKey = `${modelKey}::${widgetId}`
+  if (widgetOverrideCache.has(cacheKey)) return widgetOverrideCache.get(cacheKey) ?? null
+
+  const normalizedModel = toFileToken(modelKey, 'model')
+  const normalizedWidget = toFileToken(widgetId, 'widget')
+  const loader = findOverrideLoader(widgetOverrideModules, [
+    `components/admin/overrides/${normalizedModel}/widgets/${widgetId}.vue`,
+    `components/admin/overrides/${normalizedModel}/widgets/${normalizedWidget}.vue`,
+  ])
+  const resolved = loader ? defineAsyncComponent(loader as any) : null
+  widgetOverrideCache.set(cacheKey, resolved)
+  return resolved
+}
 
 const normalizeModeKey = (value: unknown) =>
   String(value ?? '')
@@ -605,6 +674,25 @@ const activeTab = computed<ModelUITabSpec | null>(() => {
   return list.find(tab => tab.slug === activeTabSlug.value) ?? list[0] ?? null
 })
 
+const activeTabOverrideComponent = computed<Component | null>(() => {
+  const tab = activeTab.value
+  if (!tab) return null
+  return resolveTabOverrideComponent(modelParam.value, tab.slug)
+})
+
+const widgetOverrideFor = (widget: ModelUIWidgetSpec): Component | null => {
+  return resolveWidgetOverrideComponent(modelParam.value, widget.id)
+}
+
+watch(
+  modelParam,
+  () => {
+    tabOverrideCache.clear()
+    widgetOverrideCache.clear()
+  },
+  { immediate: true },
+)
+
 const asComboboxOptions = (raw: unknown): AComboboxOption[] => {
   if (!Array.isArray(raw)) return []
 
@@ -853,32 +941,81 @@ const widgetLayoutRows = (widget: ModelUIWidgetSpec): WidgetLayoutRowState[] => 
   })
 }
 
-const executeWidgetSave = async (widget: ModelUIWidgetSpec) => {
-  const modelPayloadByAction = new Map<string, Record<string, any>>()
-  const subtablePayloadByAction = new Map<string, Record<string, any>>()
-  const taxonomyFields: Array<{ field: ModelUIFieldSpec, binding: ModelUIFieldBindingTaxonomy }> = []
+const runAction = async (action: string, payload: Record<string, any>) => {
+  return await $process(action, payload, buildProcessOptions('mutate'))
+}
 
-  for (const field of widget.fields) {
+const buildActionGroupsForFields = (fields: ModelUIFieldSpec[]): ActionGroup[] => {
+  const recordId = resolveMutationRecordId()
+  if (!recordId) {
+    throw new Error('Could not resolve record id for save.')
+  }
+
+  const modelPayloadByAction = new Map<string, { payload: Record<string, any>, fields: Set<string> }>()
+  const subtablePayloadByAction = new Map<string, { payload: Record<string, any>, fields: Set<string> }>()
+  const taxonomyAttachByAction = new Map<string, { terms: Set<string>, fields: Set<string> }>()
+  const taxonomyDetachByAction = new Map<string, { terms: Set<string>, fields: Set<string> }>()
+
+  for (const field of fields) {
     const fieldKey = resolveFieldKey(field)
+    if (!fieldKey) continue
+
     const binding = resolveFieldBinding(field)
     const value = normalizePayloadValue(field, fieldState.value[fieldKey])
 
     if (binding.kind === 'model') {
-      const payload = modelPayloadByAction.get(binding.action) ?? {}
-      payload[binding.payloadKey] = value
-      modelPayloadByAction.set(binding.action, payload)
+      const entry = modelPayloadByAction.get(binding.action) ?? { payload: {}, fields: new Set<string>() }
+      entry.payload[binding.payloadKey] = value
+      entry.fields.add(fieldKey)
+      modelPayloadByAction.set(binding.action, entry)
       continue
     }
 
     if (binding.kind === 'subtable') {
-      const payload = subtablePayloadByAction.get(binding.action) ?? {}
-      payload[binding.payloadKey] = value
-      subtablePayloadByAction.set(binding.action, payload)
+      const entry = subtablePayloadByAction.get(binding.action) ?? { payload: {}, fields: new Set<string>() }
+      entry.payload[binding.payloadKey] = value
+      entry.fields.add(fieldKey)
+      subtablePayloadByAction.set(binding.action, entry)
       continue
     }
 
     if (binding.kind === 'taxonomy') {
-      taxonomyFields.push({ field, binding })
+      const state = taxonomyStateFor(field)
+      const current = unique(
+        (Array.isArray(fieldState.value[fieldKey]) ? fieldState.value[fieldKey] : [])
+          .map((item: unknown) => String(item ?? '').trim())
+          .filter(Boolean),
+      )
+      const previous = unique(
+        (state.initialSelected ?? [])
+          .map(item => String(item ?? '').trim())
+          .filter(Boolean),
+      )
+
+      const currentSet = new Set(current)
+      const previousSet = new Set(previous)
+      const added = current.filter(id => !previousSet.has(id))
+      const removed = previous.filter(id => !currentSet.has(id))
+
+      if (added.length) {
+        const entry = taxonomyAttachByAction.get(binding.actions.attach) ?? {
+          terms: new Set<string>(),
+          fields: new Set<string>(),
+        }
+        added.forEach(term => entry.terms.add(term))
+        entry.fields.add(fieldKey)
+        taxonomyAttachByAction.set(binding.actions.attach, entry)
+      }
+
+      if (removed.length) {
+        const entry = taxonomyDetachByAction.get(binding.actions.detach) ?? {
+          terms: new Set<string>(),
+          fields: new Set<string>(),
+        }
+        removed.forEach(term => entry.terms.add(term))
+        entry.fields.add(fieldKey)
+        taxonomyDetachByAction.set(binding.actions.detach, entry)
+      }
       continue
     }
 
@@ -887,77 +1024,152 @@ const executeWidgetSave = async (widget: ModelUIWidgetSpec) => {
     }
   }
 
-  const recordId = resolveMutationRecordId()
-  if (!recordId) {
-    throw new Error('Could not resolve record id for save.')
-  }
+  const groups: ActionGroup[] = []
 
-  for (const [action, payload] of modelPayloadByAction.entries()) {
-    await $process(
+  for (const [action, entry] of modelPayloadByAction.entries()) {
+    groups.push({
+      id: `model:${action}`,
+      kind: 'model',
       action,
-      {
+      payload: {
         id: recordId,
-        payload,
+        payload: entry.payload,
       },
-      buildProcessOptions('mutate'),
-    )
+      fields: Array.from(entry.fields),
+    })
   }
 
-  for (const [action, payload] of subtablePayloadByAction.entries()) {
-    await $process(
+  for (const [action, entry] of subtablePayloadByAction.entries()) {
+    groups.push({
+      id: `subtable:${action}`,
+      kind: 'subtable',
       action,
-      {
+      payload: {
         id: recordId,
-        payload,
+        payload: entry.payload,
       },
-      buildProcessOptions('mutate'),
-    )
+      fields: Array.from(entry.fields),
+    })
   }
 
-  for (const entry of taxonomyFields) {
-    const field = entry.field
-    const binding = entry.binding
-    const key = resolveFieldKey(field)
-    const state = taxonomyStateFor(field)
-
-    const current = unique(
-      (Array.isArray(fieldState.value[key]) ? fieldState.value[key] : [])
-        .map((item: unknown) => String(item ?? '').trim())
-        .filter(Boolean),
-    )
-    const previous = unique(
-      (state.initialSelected ?? [])
-        .map((item) => String(item ?? '').trim())
-        .filter(Boolean),
-    )
-    const currentSet = new Set(current)
-    const previousSet = new Set(previous)
-
-    const added = current.filter(id => !previousSet.has(id))
-    const removed = previous.filter(id => !currentSet.has(id))
-
-    for (const term of removed) {
-      await $process(
-        binding.actions.detach,
-        { id: recordId, term },
-        buildProcessOptions('mutate'),
-      )
-    }
-    for (const term of added) {
-      await $process(
-        binding.actions.attach,
-        { id: recordId, term },
-        buildProcessOptions('mutate'),
-      )
-    }
-
-    taxonomyState.value = {
-      ...taxonomyState.value,
-      [key]: {
-        ...state,
-        initialSelected: current,
+  for (const [action, entry] of taxonomyDetachByAction.entries()) {
+    groups.push({
+      id: `taxonomy-detach:${action}`,
+      kind: 'taxonomy-detach',
+      action,
+      payload: {
+        id: recordId,
+        terms: Array.from(entry.terms),
       },
+      fields: Array.from(entry.fields),
+    })
+  }
+
+  for (const [action, entry] of taxonomyAttachByAction.entries()) {
+    groups.push({
+      id: `taxonomy-attach:${action}`,
+      kind: 'taxonomy-attach',
+      action,
+      payload: {
+        id: recordId,
+        terms: Array.from(entry.terms),
+      },
+      fields: Array.from(entry.fields),
+    })
+  }
+
+  return groups
+}
+
+const executeActionGroups = async (groups: ActionGroup[]): Promise<ActionGroupResult[]> => {
+  const tasks = groups.map(async (group): Promise<ActionGroupResult> => {
+    try {
+      if (group.kind === 'taxonomy-attach' || group.kind === 'taxonomy-detach') {
+        const id = group.payload.id
+        const terms = Array.isArray(group.payload.terms) ? group.payload.terms : []
+        const termCalls = await Promise.allSettled(
+          terms.map((term) => runAction(group.action, { id, term })),
+        )
+        const failedTerm = termCalls.find((entry) => entry.status === 'rejected')
+        if (failedTerm && failedTerm.status === 'rejected') {
+          return {
+            group,
+            status: 'failed',
+            error: failedTerm.reason,
+          }
+        }
+
+        return {
+          group,
+          status: 'success',
+          result: termCalls,
+        }
+      }
+
+      const result = await runAction(group.action, group.payload)
+      return {
+        group,
+        status: 'success',
+        result,
+      }
     }
+    catch (error) {
+      return {
+        group,
+        status: 'failed',
+        error,
+      }
+    }
+  })
+
+  return await Promise.all(tasks)
+}
+
+const executeWidgetSave = async (widget: ModelUIWidgetSpec) => {
+  const groups = buildActionGroupsForFields(widget.fields)
+  if (!groups.length) return
+
+  const results = await executeActionGroups(groups)
+  const failed = results.filter(result => result.status === 'failed')
+  if (failed.length) {
+    const failedActions = failed.map(result => result.group.action).join(', ')
+    throw new Error(`Failed grouped save actions: ${failedActions}`)
+  }
+}
+
+const buildActionGroups = (fields: ModelUIFieldSpec[]) => {
+  return buildActionGroupsForFields(fields)
+}
+
+const saveGroups = async (groups: ActionGroup[]) => {
+  return await executeActionGroups(groups)
+}
+
+const buildOverrideContext = (tab: ModelUITabSpec, widget?: ModelUIWidgetSpec) => {
+  return {
+    model: modelParam.value,
+    rid: ridParam.value,
+    spec: spec.value,
+    record: sourceRecord.value,
+    identifiers: recordIdentifiers.value,
+    tab,
+    widget: widget ?? null,
+    fields: fieldState.value,
+    getField: (key: string) => fieldState.value[key],
+    setField: (key: string, value: unknown) => {
+      fieldState.value = {
+        ...fieldState.value,
+        [key]: value,
+      }
+    },
+    runAction,
+    buildActionGroups: (fields?: ModelUIFieldSpec[]) => {
+      const target = fields ?? widget?.fields ?? []
+      return buildActionGroups(target)
+    },
+    saveGroups,
+    saveWidget: widget ? () => saveWidget(widget) : undefined,
+    refreshRecord,
   }
 }
 
@@ -1045,83 +1257,99 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
 
       <main class="record-main">
         <template v-if="activeTab">
-          <section
-            v-for="row in activeTab.primary"
-            :key="row.id"
-            class="layout-row"
-            :class="row.class"
-          >
-            <div
-              v-for="column in row.columns"
-              :key="column.id"
-              class="layout-col"
-              :class="column.class"
+          <component
+            :is="activeTabOverrideComponent"
+            v-if="activeTabOverrideComponent"
+            class="a-card widget-override"
+            :context="buildOverrideContext(activeTab)"
+          />
+
+          <template v-else>
+            <section
+              v-for="row in activeTab.primary"
+              :key="row.id"
+              class="layout-row"
+              :class="row.class"
             >
-              <template v-for="widget in column.primary" :key="widget.id">
-                <FieldSectionCard
-                  v-if="widget.type === 'fields-card'"
-                  :title="widget.label"
-                  :description="widget.subtitle"
-                >
-                  <div class="widget-fields">
-                    <div
-                      v-for="layoutRow in widgetLayoutRows(widget)"
-                      :key="`${widget.id}-${layoutRow.id}`"
-                      class="widget-fields__row"
-                      :class="layoutRow.class"
-                    >
+              <div
+                v-for="column in row.columns"
+                :key="column.id"
+                class="layout-col"
+                :class="column.class"
+              >
+                <template v-for="widget in column.primary" :key="widget.id">
+                  <component
+                    :is="widgetOverrideFor(widget)"
+                    v-if="widgetOverrideFor(widget)"
+                    class="a-card widget-override"
+                    :context="buildOverrideContext(activeTab, widget)"
+                  />
+
+                  <FieldSectionCard
+                    v-else-if="widget.type === 'fields-card'"
+                    :title="widget.label"
+                    :description="widget.subtitle"
+                  >
+                    <div class="widget-fields">
                       <div
-                        v-for="layoutColumn in layoutRow.columns"
-                        :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
-                        class="widget-fields__col"
-                        :class="layoutColumn.class"
+                        v-for="layoutRow in widgetLayoutRows(widget)"
+                        :key="`${widget.id}-${layoutRow.id}`"
+                        class="widget-fields__row"
+                        :class="layoutRow.class"
                       >
-                        <template
-                          v-for="field in layoutColumn.fields"
-                          :key="field.id"
+                        <div
+                          v-for="layoutColumn in layoutRow.columns"
+                          :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
+                          class="widget-fields__col"
+                          :class="layoutColumn.class"
                         >
-                          <ATaxonomyManager
-                            v-if="isTaxonomyField(field)"
-                            :model-value="taxonomyTreeForField(field)"
-                            :checked-ids="taxonomySelectedIdsForField(field)"
-                            :taxonomy-label="field.label || toLabel(resolveFieldKey(field))"
-                            :title="field.label || toLabel(resolveFieldKey(field))"
-                            :description="taxonomyState[resolveFieldKey(field)]?.error || 'Manage taxonomy terms for this record.'"
-                            :create-term-action="(payload) => createTaxonomyTerm(field, payload)"
-                            @update:model-value="setTaxonomyTreeForField(field, $event)"
-                            @update:checked-ids="setFieldValue(field, $event)"
-                          />
-                          <component
-                            :is="resolveFieldComponent(field.component.name)"
-                            v-else
-                            :model-value="fieldState[resolveFieldKey(field)]"
-                            v-bind="resolveFieldProps(field)"
-                            @update:model-value="setFieldValue(field, $event)"
-                          />
-                        </template>
+                          <template
+                            v-for="field in layoutColumn.fields"
+                            :key="field.id"
+                          >
+                            <ATaxonomyManager
+                              v-if="isTaxonomyField(field)"
+                              :model-value="taxonomyTreeForField(field)"
+                              :checked-ids="taxonomySelectedIdsForField(field)"
+                              :taxonomy-label="field.label || toLabel(resolveFieldKey(field))"
+                              :title="field.label || toLabel(resolveFieldKey(field))"
+                              :description="taxonomyState[resolveFieldKey(field)]?.error || 'Manage taxonomy terms for this record.'"
+                              :create-term-action="(payload) => createTaxonomyTerm(field, payload)"
+                              @update:model-value="setTaxonomyTreeForField(field, $event)"
+                              @update:checked-ids="setFieldValue(field, $event)"
+                            />
+                            <component
+                              :is="resolveFieldComponent(field.component.name)"
+                              v-else
+                              :model-value="fieldState[resolveFieldKey(field)]"
+                              v-bind="resolveFieldProps(field)"
+                              @update:model-value="setFieldValue(field, $event)"
+                            />
+                          </template>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div v-if="widget.saveLabel || widget.action" class="widget-actions smt-050">
-                    <button
-                      class="a-btn a-btn--subtle"
-                      type="button"
-                      :disabled="Boolean(widgetSaving[widget.id])"
-                      @click="saveWidget(widget)"
-                    >
-                      {{ widgetSaving[widget.id] ? 'Saving…' : (widget.saveLabel || 'Save') }}
-                    </button>
-                  </div>
-                </FieldSectionCard>
+                    <div v-if="widget.saveLabel || widget.action" class="widget-actions smt-050">
+                      <button
+                        class="a-btn a-btn--subtle"
+                        type="button"
+                        :disabled="Boolean(widgetSaving[widget.id])"
+                        @click="saveWidget(widget)"
+                      >
+                        {{ widgetSaving[widget.id] ? 'Saving…' : (widget.saveLabel || 'Save') }}
+                      </button>
+                    </div>
+                  </FieldSectionCard>
 
-                <article v-else class="a-card widget-generic">
-                  <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
-                  <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
-                </article>
-              </template>
-            </div>
-          </section>
+                  <article v-else class="a-card widget-generic">
+                    <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
+                    <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
+                  </article>
+                </template>
+              </div>
+            </section>
+          </template>
         </template>
 
         <article v-else class="a-card">
@@ -1224,6 +1452,11 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
 .layout-col {
   display: grid;
   gap: 0.55rem;
+  min-width: 0;
+}
+
+.widget-override {
+  width: 100%;
   min-width: 0;
 }
 

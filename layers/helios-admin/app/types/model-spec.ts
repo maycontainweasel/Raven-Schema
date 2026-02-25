@@ -1,61 +1,26 @@
-export type ModelUIComponentSpec = {
-  name: string
-  options: Record<string, any>
-  action?: string
-  modelKey?: string
-}
+import type {
+  FieldBinding as ModelUIFieldBinding,
+  FieldBindingCustom as ModelUIFieldBindingCustom,
+  FieldBindingModel as ModelUIFieldBindingModel,
+  FieldBindingSubtable as ModelUIFieldBindingSubtable,
+  FieldBindingTaxonomy as ModelUIFieldBindingTaxonomy,
+  FieldCommonProps as ModelUIFieldSpec,
+  FieldComponentSpec as ModelUIComponentSpec,
+  ModelDataMode,
+} from './field-contract'
 
-export type ModelDataMode = 'source' | 'tenant'
-
-export type ModelUIFieldBindingModel = {
-  kind: 'model'
-  action: string
-  payloadKey: string
-}
-
-export type ModelUIFieldBindingSubtable = {
-  kind: 'subtable'
-  subtableKey: string
-  action: string
-  payloadKey: string
-}
-
-export type ModelUIFieldBindingTaxonomy = {
-  kind: 'taxonomy'
-  taxonomyKey: string
-  valueMode: 'termIds'
-  actions: {
-    getTerms: string
-    getRecordTerms: string
-    attach: string
-    detach: string
-    addTerm?: string
-  }
-}
-
-export type ModelUIFieldBindingCustom = {
-  kind: 'custom'
-  handler: string
-}
-
-export type ModelUIFieldBinding =
-  | ModelUIFieldBindingModel
-  | ModelUIFieldBindingSubtable
-  | ModelUIFieldBindingTaxonomy
-  | ModelUIFieldBindingCustom
-
-export type ModelUIFieldSpec = {
-  id: string
-  field: string
-  label: string
-  component: ModelUIComponentSpec
-  binding?: ModelUIFieldBinding
-  action?: string
-  modelKey?: string
-  validation?: Record<string, any>
-  class?: string
-  meta?: Record<string, any>
-}
+export type {
+  AComboboxAsyncOptions,
+  AComboboxOption,
+  AComboboxOptions,
+  AInputOptions,
+  FieldBinding,
+  FieldCommonProps,
+  FieldComponentContract,
+  FieldComponentId,
+  FieldComponentOptionsMap,
+  ModelDataMode,
+} from './field-contract'
 
 export type ModelUIFieldLayoutColumnSpec = {
   id: string

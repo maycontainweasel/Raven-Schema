@@ -4,6 +4,7 @@ import { createError, defineEventHandler } from 'h3'
 import { collections } from '@schema/typesense/collections'
 import { createContext } from '@schema/server/trpc/context'
 import { appRouter } from '~~/server/trpc/routers/_app'
+import { fieldComponentRegistry } from '../../../../../app/config/field-component-registry'
 import {
   findModelManagerModel,
   listModelManagerModels,
@@ -394,6 +395,73 @@ const validateActionContract = (
       : `${label} action does not resolve on model router.`,
     callable ? undefined : `Missing path "${actionPathText(parsed.path)}" on model caller.`,
     { action: parsed.action, path: parsed.path },
+  )
+}
+
+const validateFieldComponentContract = (
+  gate: AuditGate,
+  ref: FieldRef,
+) => {
+  const componentName = String(ref.field.component?.name ?? '').trim()
+  const options = (ref.field.component?.options && typeof ref.field.component.options === 'object')
+    ? ref.field.component.options as Record<string, unknown>
+    : {}
+  const component = componentName ? (fieldComponentRegistry as any)[componentName] : null
+
+  if (!componentName.length) {
+    pushCheck(gate, `${ref.location}.component.name`, 'fail', `${ref.location}: component name is required.`)
+    return
+  }
+
+  if (!component) {
+    pushCheck(
+      gate,
+      `${ref.location}.component.unknown`,
+      'fail',
+      `${ref.location}: component "${componentName}" is not registered.`,
+      `Registered components: ${Object.keys(fieldComponentRegistry).join(', ')}`,
+    )
+    return
+  }
+
+  pushCheck(
+    gate,
+    `${ref.location}.component.registered`,
+    'pass',
+    `${ref.location}: component "${componentName}" is registered.`,
+  )
+
+  const requiredOptions = Array.isArray(component.contract?.requiredOptions)
+    ? component.contract.requiredOptions as string[]
+    : []
+
+  if (!requiredOptions.length) {
+    pushCheck(
+      gate,
+      `${ref.location}.component.requiredOptions`,
+      'pass',
+      `${ref.location}: no required options for "${componentName}".`,
+    )
+    return
+  }
+
+  const missing = requiredOptions.filter((optionKey) => {
+    if (!Object.prototype.hasOwnProperty.call(options, optionKey)) return true
+    const value = (options as any)[optionKey]
+    if (typeof value === 'undefined' || value === null) return true
+    if (typeof value === 'string' && value.trim().length === 0) return true
+    if (Array.isArray(value) && value.length === 0) return true
+    return false
+  })
+
+  pushCheck(
+    gate,
+    `${ref.location}.component.requiredOptions`,
+    missing.length ? 'fail' : 'pass',
+    missing.length
+      ? `${ref.location}: missing required component options for "${componentName}".`
+      : `${ref.location}: required component options present for "${componentName}".`,
+    missing.length ? missing.join(', ') : undefined,
   )
 }
 

@@ -539,9 +539,9 @@ export const readModelDirectoryRecords = async (
     resolvedModelCaller.routerKey,
     configuredCollectionName,
   )
+  const collectionSeed = resolvedCollection?.schema?.name ?? configuredCollectionName
   const collectionName = String(
-    resolvedCollection?.schema?.name
-      ?? configuredCollectionName
+    collectionSeed
       || model.table
       || model.modelKey,
   )
