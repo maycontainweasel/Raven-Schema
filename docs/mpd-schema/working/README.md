@@ -10,3 +10,4 @@ Planned working docs (v1):
 - Typesense refresh and reindex flow
 - Instances: multi‑tenant CRUD flow
 - Helios Model Engine project: `projects/PROJECT-HELIOS-MODEL-ENGINE.md`
+- Helios Fullscreen Page Builder V1: `projects/PROJECT-HELIOS-FULLSCREEN-PAGE-BUILDER-V1.md`

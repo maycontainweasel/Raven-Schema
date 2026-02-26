@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent, type Component } from 'vue'
+import { sourceDbInstance, tenantDbInstances } from '@schema/db'
 import AInput from '#layers/helios-ui/app/components/fields/AInput.vue'
 import ACombobox from '#layers/helios-ui/app/components/fields/ACombobox.vue'
 import AComboboxAsync from '#layers/helios-ui/app/components/fields/AComboboxAsync.vue'
@@ -39,6 +40,26 @@ type AComboboxOption = {
   disabled?: boolean
 }
 
+type ModelTypesenseStatus = {
+  collection?: Record<string, any> | null
+  count?: number
+  preview?: Record<string, any>[]
+}
+
+type RefreshMode = 'source-all' | 'source-instance' | 'tenant-all' | 'tenant-single'
+
+type RefreshRunSummary = {
+  target: string
+  total: number
+  fetched: number
+  filtered: number
+  upserted: number
+  batches: number
+  durationMs: number
+  ok: boolean
+  error?: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const { $process } = useCRUD()
@@ -50,14 +71,32 @@ const modelParam = computed(() => {
   const fromMeta = String((route.meta as any)?.modelKey ?? '').trim().toLowerCase()
   return fromMeta
 })
+const modelTypesense = useModelTypesense(modelParam)
 const search = ref('')
 const createOpen = ref(false)
 const creating = ref(false)
 const createError = ref('')
 const createDraft = ref<Record<string, any>>({})
 const filterState = ref<Record<string, string | string[]>>({})
+const refreshOpen = ref(false)
+const refreshBusy = ref(false)
+const testSingleBusy = ref(false)
+const refreshError = ref('')
+const refreshNotice = ref('')
+const refreshStep = ref('')
+const refreshStatus = ref<ModelTypesenseStatus | null>(null)
+const refreshStatusBusy = ref(false)
+const refreshStatusError = ref('')
+const refreshRuns = ref<RefreshRunSummary[]>([])
+const testSingleResult = ref<Record<string, any> | null>(null)
+const refreshMode = ref<RefreshMode>('source-all')
+const refreshTenantTarget = ref<string>('all')
+const refreshInstanceFilter = ref<string>('all')
+const refreshBatchSize = ref<number>(200)
 const createDialogOverrideModules = import.meta.glob('@/components/admin/overrides/**/CreateDialog.vue')
 const createRecordOverrideModules = import.meta.glob('@/components/admin/overrides/**/createRecord.{ts,js,mjs}')
+const directoryCellOverrideModules = import.meta.glob('@/components/admin/overrides/**/directory/cells/*.vue')
+const directoryCellOverrideCache = new Map<string, Component | null>()
 
 const { data: specData, pending: specPending, error: specError } = await useFetch<ModelSpecResponse>(
   () => `/api/models/layout/${modelParam.value}`,
@@ -128,6 +167,29 @@ const spec = computed<ModelLayoutSpec | null>(() => specData.value?.spec ?? null
 const modelInfo = computed(() => specData.value?.model ?? null)
 const modelLabel = computed(() => modelInfo.value?.label || modelParam.value)
 const modelDataMode = computed<'source' | 'tenant'>(() => modelInfo.value?.dataMode === 'tenant' ? 'tenant' : 'source')
+const sourceDbKey = computed(() => String(sourceDbInstance || '').trim())
+const tenantDbKeys = computed<string[]>(() =>
+  (tenantDbInstances as readonly string[])
+    .map(entry => String(entry || '').trim())
+    .filter(entry => entry.length > 0))
+const refreshTypesenseReady = computed(() => Boolean(spec.value?.directory.typesense.enabled))
+const refreshModeResolved = computed<RefreshMode>(() => {
+  if (modelDataMode.value === 'tenant') {
+    return refreshMode.value === 'tenant-single' ? 'tenant-single' : 'tenant-all'
+  }
+  return refreshMode.value === 'source-instance' ? 'source-instance' : 'source-all'
+})
+const canRunRefresh = computed(() => {
+  const mode = refreshModeResolved.value
+  if (mode === 'tenant-single') return refreshTenantTarget.value.trim().length > 0 && refreshTenantTarget.value !== 'all'
+  if (mode === 'source-instance') return refreshInstanceFilter.value.trim().length > 0 && refreshInstanceFilter.value !== 'all'
+  return true
+})
+const canRunTestSingle = computed(() => {
+  if (!canRunRefresh.value) return false
+  const targets = resolveRefreshTargets()
+  return targets.length === 1
+})
 const directoryErrorMessage = computed(() => {
   const apiError = directoryError.value as any
   return (
@@ -141,6 +203,51 @@ const rows = computed<DirectoryRecord[]>(() => {
   const list = directoryData.value?.records
   return Array.isArray(list) ? list : []
 })
+
+const refreshModeOptions = computed(() => {
+  if (modelDataMode.value === 'tenant') {
+    return [
+      { label: 'All tenant databases', value: 'tenant-all' as const },
+      { label: 'Single tenant database', value: 'tenant-single' as const },
+    ]
+  }
+  return [
+    { label: 'All records from source DB', value: 'source-all' as const },
+    { label: 'Only records tagged to an instance', value: 'source-instance' as const },
+  ]
+})
+
+const toFileToken = (value: string, fallback = 'default') => {
+  const token = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return token || fallback
+}
+
+const findOverrideLoader = (
+  modules: Record<string, () => Promise<unknown>>,
+  suffixes: string[],
+) => {
+  const match = Object.keys(modules).find((key) => suffixes.some((suffix) => key.endsWith(suffix)))
+  return match ? modules[match] : null
+}
+
+const resolveDirectoryCellOverrideComponent = (modelKey: string, columnKey: string): Component | null => {
+  const cacheKey = `${modelKey}::${columnKey}`
+  if (directoryCellOverrideCache.has(cacheKey)) return directoryCellOverrideCache.get(cacheKey) ?? null
+
+  const normalizedModel = toFileToken(modelKey, 'model')
+  const normalizedColumn = toFileToken(columnKey, 'field')
+  const loader = findOverrideLoader(directoryCellOverrideModules, [
+    `components/admin/overrides/${normalizedModel}/directory/cells/${columnKey}.vue`,
+    `components/admin/overrides/${normalizedModel}/directory/cells/${normalizedColumn}.vue`,
+  ])
+  const resolved = loader ? defineAsyncComponent(loader as any) : null
+  directoryCellOverrideCache.set(cacheKey, resolved)
+  return resolved
+}
 
 const toLabel = (value: string) =>
   value
@@ -221,6 +328,189 @@ watch(
   },
   { immediate: true, deep: true },
 )
+
+watch(
+  () => modelDataMode.value,
+  (mode) => {
+    refreshMode.value = mode === 'tenant' ? 'tenant-all' : 'source-all'
+    refreshTenantTarget.value = 'all'
+    refreshInstanceFilter.value = 'all'
+    refreshBatchSize.value = 200
+  },
+  { immediate: true },
+)
+
+const safeNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const readTypesenseStatus = async () => {
+  refreshStatusBusy.value = true
+  refreshStatusError.value = ''
+  try {
+    const statusResponse = await modelTypesense.readStatus({ limit: 1, start: 0 })
+    refreshStatus.value = (statusResponse?.status ?? null) as ModelTypesenseStatus | null
+  }
+  catch (error: any) {
+    refreshStatusError.value = error?.message ?? 'Failed to load TypeSense status.'
+  }
+  finally {
+    refreshStatusBusy.value = false
+  }
+}
+
+const openRefreshDialog = async () => {
+  refreshOpen.value = true
+  refreshError.value = ''
+  refreshNotice.value = ''
+  refreshStep.value = ''
+  refreshRuns.value = []
+  testSingleResult.value = null
+  await readTypesenseStatus()
+}
+
+const resolveRefreshTargets = (): string[] => {
+  if (modelDataMode.value === 'tenant') {
+    if (refreshModeResolved.value === 'tenant-single') {
+      return [refreshTenantTarget.value.trim()].filter(Boolean)
+    }
+    return tenantDbKeys.value
+  }
+  return [sourceDbKey.value].filter(Boolean)
+}
+
+const runModelRefresh = async () => {
+  refreshBusy.value = true
+  refreshError.value = ''
+  refreshNotice.value = ''
+  refreshStep.value = ''
+  refreshRuns.value = []
+
+  try {
+    const targets = resolveRefreshTargets()
+    if (!targets.length) {
+      throw new Error('No target database selected for refresh.')
+    }
+
+    const batchSize = Math.max(1, Math.floor(safeNumber(refreshBatchSize.value, 200)))
+    const instanceFilter =
+      refreshModeResolved.value === 'source-instance' && refreshInstanceFilter.value !== 'all'
+        ? String(refreshInstanceFilter.value || '').trim()
+        : ''
+
+    for (const [index, target] of targets.entries()) {
+      const startedAt = Date.now()
+      refreshStep.value = `Refreshing ${target} (${index + 1}/${targets.length})…`
+      try {
+        const response = await modelTypesense.runAction('refreshCollection', {
+          instance: target,
+          batchSize,
+          instanceFilter: instanceFilter || undefined,
+        })
+        const summary = (response?.result?.result ?? response?.result ?? {}) as Record<string, any>
+        const upsertedRaw = summary.upserted
+        const upserted =
+          typeof upsertedRaw === 'number'
+            ? upsertedRaw
+            : safeNumber((upsertedRaw as any)?.imported, safeNumber((upsertedRaw as any)?.count, 0))
+
+        refreshRuns.value.push({
+          target,
+          total: safeNumber(summary.total, 0),
+          fetched: safeNumber(summary.fetched, 0),
+          filtered: safeNumber(summary.filtered, safeNumber(summary.fetched, 0)),
+          upserted: safeNumber(upserted, 0),
+          batches: Math.max(1, safeNumber(summary.batches, 1)),
+          durationMs: Date.now() - startedAt,
+          ok: summary.ok !== false,
+        })
+      }
+      catch (error: any) {
+        refreshRuns.value.push({
+          target,
+          total: 0,
+          fetched: 0,
+          filtered: 0,
+          upserted: 0,
+          batches: 0,
+          durationMs: Date.now() - startedAt,
+          ok: false,
+          error: error?.message ?? 'Refresh failed.',
+        })
+      }
+    }
+
+    const failed = refreshRuns.value.filter(item => !item.ok).length
+    if (failed > 0) {
+      refreshNotice.value = `Refresh completed with ${failed} failed target${failed === 1 ? '' : 's'}.`
+    } else {
+      refreshNotice.value = `Refresh completed for ${refreshRuns.value.length} target${refreshRuns.value.length === 1 ? '' : 's'}.`
+    }
+
+    await refreshDirectory()
+    await readTypesenseStatus()
+  }
+  catch (error: any) {
+    refreshError.value = error?.message ?? 'Failed to run refresh.'
+  }
+  finally {
+    refreshStep.value = ''
+    refreshBusy.value = false
+  }
+}
+
+const runTestSingle = async () => {
+  testSingleBusy.value = true
+  refreshError.value = ''
+  refreshNotice.value = ''
+  refreshStep.value = ''
+  testSingleResult.value = null
+
+  try {
+    const targets = resolveRefreshTargets()
+    if (targets.length !== 1) {
+      throw new Error('Test Single requires one target. Choose source mode or a single tenant.')
+    }
+
+    const target = targets[0]!
+    const instanceFilter =
+      refreshModeResolved.value === 'source-instance' && refreshInstanceFilter.value !== 'all'
+        ? String(refreshInstanceFilter.value || '').trim()
+        : ''
+
+    refreshStep.value = `Testing one record from ${target}…`
+
+    const response = await modelTypesense.runAction('testSingle', {
+      instance: target,
+      instanceFilter: instanceFilter || undefined,
+      start: 0,
+    })
+    const result = (response?.result?.result ?? response?.result ?? {}) as Record<string, any>
+    testSingleResult.value = result
+
+    console.log('[directory-refresh:test-single]', {
+      model: modelParam.value,
+      authority: modelDataMode.value,
+      target,
+      instanceFilter: instanceFilter || null,
+      payload: result,
+    })
+
+    if (result?.record) {
+      refreshNotice.value = 'Test single succeeded. Raw payload logged to browser console.'
+    } else {
+      refreshNotice.value = 'No record returned for the selected target/filter.'
+    }
+  }
+  catch (error: any) {
+    refreshError.value = error?.message ?? 'Test single failed.'
+  }
+  finally {
+    refreshStep.value = ''
+    testSingleBusy.value = false
+  }
+}
 
 const asComboboxOptions = (raw: unknown): AComboboxOption[] => {
   if (!Array.isArray(raw)) return []
@@ -413,6 +703,21 @@ const setCreateDraft = (value: Record<string, any>) => {
 const getCellValue = (row: DirectoryRecord, key: string) => {
   if (key === 'rid') return row.rid
   return row[key]
+}
+
+const resolveDirectoryCellOverrideProps = (row: DirectoryRecord, column: { key: string, label?: string }) => {
+  const key = String(column.key || '').trim()
+  const value = getCellValue(row, key)
+  return {
+    modelKey: modelParam.value,
+    columnKey: key,
+    columnLabel: String(column.label || toLabel(key)),
+    column,
+    row,
+    rid: String(row.rid || ''),
+    value,
+    formattedValue: formatCell(value),
+  }
 }
 
 const formatCell = (value: unknown) => {
@@ -710,15 +1015,10 @@ const toRecordRoute = (row: DirectoryRecord) => {
         <p class="a-copy">{{ spec?.directory.description || `Manage ${modelLabel.toLowerCase()} records.` }}</p>
       </div>
       <div class="directory-header__actions">
-        <span class="a-chip">
-          {{ `Source: ${String(directoryData?.runtime?.source || 'unknown')}` }}
-        </span>
-        <span
-          class="a-chip"
-          :class="spec?.directory.typesense.enabled ? 'a-chip--success' : 'a-chip--warning'"
-        >
-          {{ spec?.directory.typesense.enabled ? 'Typesense Ready' : 'Typesense Missing' }}
-        </span>
+        <button class="a-btn a-btn--subtle" type="button" @click="openRefreshDialog">
+          <AdminIcon name="refresh" :size="15" />
+          Refresh
+        </button>
         <button
           v-if="spec?.directory.createDialog.enabled"
           class="a-btn a-btn--primary"
@@ -786,7 +1086,13 @@ const toRecordRoute = (row: DirectoryRecord) => {
           <tbody>
             <tr v-for="row in filteredRows" :key="row.rid">
               <td v-for="column in spec?.directory.listing.fields || []" :key="`row-${row.rid}-${column.key}`">
-                <template v-if="column.key.toLowerCase().includes('status')">
+                <template v-if="resolveDirectoryCellOverrideComponent(modelParam, column.key)">
+                  <component
+                    :is="resolveDirectoryCellOverrideComponent(modelParam, column.key)"
+                    v-bind="resolveDirectoryCellOverrideProps(row, column)"
+                  />
+                </template>
+                <template v-else-if="column.key.toLowerCase().includes('status')">
                   <span class="a-status" :class="`a-status--${statusTone(getCellValue(row, column.key))}`">
                     {{ formatCell(getCellValue(row, column.key)) }}
                   </span>
@@ -823,6 +1129,142 @@ const toRecordRoute = (row: DirectoryRecord) => {
         <span v-if="directoryErrorMessage">{{ directoryErrorMessage }}</span>
       </p>
     </section>
+
+    <Teleport to="body">
+      <Transition name="drawer-fade">
+        <div v-if="refreshOpen" class="refresh-overlay" @click.self="refreshOpen = false">
+          <section class="refresh-modal a-card">
+            <div class="refresh-header">
+              <h2 class="drawer-title">Refresh {{ modelLabel }} Directory</h2>
+              <button class="a-btn a-btn--ghost drawer-close" type="button" @click="refreshOpen = false">
+                <AdminIcon name="close" :size="16" />
+              </button>
+            </div>
+
+            <p class="a-copy smt-025">
+              Pull TypeSense resources from the correct database target for this model authority.
+            </p>
+
+            <div class="refresh-chips smt-050">
+              <span class="a-chip">{{ `Authority: ${modelDataMode}` }}</span>
+              <span class="a-chip">{{ `Source DB: ${sourceDbKey || 'unknown'}` }}</span>
+              <span class="a-chip" :class="refreshTypesenseReady ? 'a-chip--success' : 'a-chip--warning'">
+                {{ refreshTypesenseReady ? 'Typesense Ready' : 'Typesense Missing' }}
+              </span>
+              <span v-if="refreshStatusBusy" class="a-chip">Checking status…</span>
+              <span v-else class="a-chip">{{ `Collection Count: ${Number(refreshStatus?.count || 0)}` }}</span>
+            </div>
+
+            <div class="refresh-form smt-075">
+              <label class="a-field">
+                <span class="a-field__label">Refresh Mode</span>
+                <select v-model="refreshMode" class="a-input">
+                  <option v-for="modeOption in refreshModeOptions" :key="modeOption.value" :value="modeOption.value">
+                    {{ modeOption.label }}
+                  </option>
+                </select>
+              </label>
+
+              <label v-if="refreshModeResolved === 'tenant-single'" class="a-field">
+                <span class="a-field__label">Tenant Database</span>
+                <select v-model="refreshTenantTarget" class="a-input">
+                  <option value="all" disabled>Select tenant</option>
+                  <option v-for="tenantKey in tenantDbKeys" :key="tenantKey" :value="tenantKey">
+                    {{ tenantKey }}
+                  </option>
+                </select>
+              </label>
+
+              <label v-if="refreshModeResolved === 'source-instance'" class="a-field">
+                <span class="a-field__label">Instance Tag Filter</span>
+                <select v-model="refreshInstanceFilter" class="a-input">
+                  <option value="all" disabled>Select instance tag</option>
+                  <option v-for="tenantKey in tenantDbKeys" :key="`tag-${tenantKey}`" :value="tenantKey">
+                    {{ tenantKey }}
+                  </option>
+                </select>
+              </label>
+
+              <label class="a-field">
+                <span class="a-field__label">Batch Size</span>
+                <input
+                  v-model.number="refreshBatchSize"
+                  class="a-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                >
+              </label>
+            </div>
+
+            <p v-if="refreshStatusError" class="directory-error smt-050">{{ refreshStatusError }}</p>
+            <p v-if="refreshStep" class="a-copy smt-050">{{ refreshStep }}</p>
+
+            <div v-if="refreshRuns.length" class="a-table-wrap smt-050">
+              <table class="a-table">
+                <thead>
+                  <tr>
+                    <th>Target</th>
+                    <th>Total</th>
+                    <th>Fetched</th>
+                    <th>Filtered</th>
+                    <th>Upserted</th>
+                    <th>Batches</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="run in refreshRuns" :key="`refresh-${run.target}`">
+                    <td>{{ run.target }}</td>
+                    <td>{{ run.total }}</td>
+                    <td>{{ run.fetched }}</td>
+                    <td>{{ run.filtered }}</td>
+                    <td>{{ run.upserted }}</td>
+                    <td>{{ run.batches }}</td>
+                    <td>
+                      <span class="a-status" :class="run.ok ? 'a-status--published' : 'a-status--draft'">
+                        {{ run.ok ? 'ok' : 'failed' }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="drawer-actions smt-075">
+              <button class="a-btn a-btn--subtle" type="button" :disabled="refreshBusy" @click="refreshOpen = false">
+                Close
+              </button>
+              <button
+                class="a-btn a-btn--subtle"
+                type="button"
+                :disabled="refreshBusy || testSingleBusy || !canRunTestSingle"
+                @click="runTestSingle"
+              >
+                {{ testSingleBusy ? 'Testing…' : 'Test Single' }}
+              </button>
+              <button
+                class="a-btn a-btn--primary"
+                type="button"
+                :disabled="refreshBusy || testSingleBusy || !canRunRefresh"
+                @click="runModelRefresh"
+              >
+                {{ refreshBusy ? 'Refreshing…' : 'Run Refresh' }}
+              </button>
+            </div>
+
+            <p v-if="!canRunTestSingle" class="a-copy smt-025">
+              Test Single requires one target. Use source mode or select a single tenant.
+            </p>
+
+            <pre v-if="testSingleResult" class="refresh-json smt-050">{{ JSON.stringify(testSingleResult, null, 2) }}</pre>
+
+            <p v-if="refreshError" class="directory-error smt-050">{{ refreshError }}</p>
+            <p v-else-if="refreshNotice" class="a-copy smt-050">{{ refreshNotice }}</p>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
 
     <Teleport to="body">
       <Transition name="drawer-fade">
@@ -916,6 +1358,57 @@ const toRecordRoute = (row: DirectoryRecord) => {
   font-size: var(--fs--075, 0.86rem);
 }
 
+.refresh-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1710;
+  background: rgba(10, 19, 38, 0.36);
+  display: grid;
+  place-items: center;
+  padding: 0.9rem;
+}
+
+.refresh-modal {
+  width: min(44rem, 100%);
+  max-height: min(92vh, 46rem);
+  overflow-y: auto;
+  padding: 0.9rem;
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+}
+
+.refresh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.refresh-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.refresh-form {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.refresh-json {
+  margin: 0;
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--admin-surface-soft);
+  border: 1px solid var(--admin-border);
+  border-radius: 0.5rem;
+  padding: 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -977,6 +1470,12 @@ const toRecordRoute = (row: DirectoryRecord) => {
 .drawer-fade-enter-from,
 .drawer-fade-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 900px) {
+  .refresh-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1100px) {

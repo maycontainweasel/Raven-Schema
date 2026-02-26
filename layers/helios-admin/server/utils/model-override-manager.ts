@@ -37,6 +37,15 @@ export type WidgetOverrideResult = {
   status: 'created' | 'overwritten' | 'exists'
 }
 
+type DirectoryCellOverrideOptions = {
+  force?: boolean
+}
+
+export type DirectoryCellOverrideResult = {
+  filePath: string
+  status: 'created' | 'overwritten' | 'exists'
+}
+
 const normalizeModelKey = (value: string) =>
   value
     .trim()
@@ -252,6 +261,27 @@ const groups = computed(() => props.context.buildActionGroups?.() ?? [])
 </template>
 `
 
+const directoryCellTemplate = (modelKey: string, fieldKey: string) => `<!-- @helios-generated-model-override kind=directory-cell model=${modelKey} field=${fieldKey} -->
+<script setup lang="ts">
+const props = defineProps<{
+  modelKey: string
+  columnKey: string
+  columnLabel: string
+  column: Record<string, any>
+  row: Record<string, any>
+  rid: string
+  value: unknown
+  formattedValue: string
+}>()
+</script>
+
+<template>
+  <span>
+    {{ props.formattedValue }}
+  </span>
+</template>
+`
+
 const scaffoldOverrideFile = async (
   filePath: string,
   content: string,
@@ -344,4 +374,27 @@ export const scaffoldWidgetOverride = async (
     `${normalizedWidget}.vue`,
   )
   return await scaffoldOverrideFile(filePath, widgetTemplate(modelKey, normalizedWidget), options.force)
+}
+
+export const scaffoldDirectoryCellOverride = async (
+  model: string,
+  fieldKey: string,
+  options: DirectoryCellOverrideOptions = {},
+  cwd = process.cwd(),
+): Promise<DirectoryCellOverrideResult> => {
+  const modelKey = normalizeModelKey(model)
+  const normalizedField = normalizeOverrideToken(fieldKey, 'field')
+  if (!modelKey) {
+    throw new Error('Model key is required to scaffold a directory cell override.')
+  }
+
+  const filePath = resolve(
+    cwd,
+    'app/components/admin/overrides',
+    modelKey,
+    'directory',
+    'cells',
+    `${normalizedField}.vue`,
+  )
+  return await scaffoldOverrideFile(filePath, directoryCellTemplate(modelKey, normalizedField), options.force)
 }

@@ -14,10 +14,10 @@ import {
 
 type TypesenseCaller = {
   collection: () => Promise<any>
-  count?: (input: { data?: Record<string, any> }) => Promise<any>
-  list?: (input: { data?: { limit?: number, start?: number } }) => Promise<any>
-  resource: (input: { data: { id: string | number } }) => Promise<any>
-  refresh: (input: { data?: { limit?: number, start?: number } }) => Promise<any>
+  count?: (input: { instance?: string, data?: Record<string, any> }) => Promise<any>
+  list?: (input: { instance?: string, data?: { limit?: number, start?: number } }) => Promise<any>
+  resource: (input: { instance?: string, data: { id: string | number } }) => Promise<any>
+  refresh: (input: { instance?: string, data?: { limit?: number, start?: number } }) => Promise<any>
 }
 
 const extractFirstObject = (value: any): Record<string, any> | null => {
@@ -39,6 +39,51 @@ const optionalNumber = (value: unknown): number | undefined => {
   const parsed = Number(text)
   if (!Number.isFinite(parsed)) return undefined
   return parsed
+}
+
+const optionalString = (value: unknown): string | undefined => {
+  const text = String(value ?? '').trim()
+  return text.length ? text : undefined
+}
+
+const flattenObjects = (value: any): Record<string, any>[] => {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value.flatMap(entry => flattenObjects(entry))
+  }
+  if (typeof value === 'object') return [value as Record<string, any>]
+  return []
+}
+
+const extractFirstNumber = (value: any): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const next = extractFirstNumber(entry)
+      if (typeof next === 'number') return next
+    }
+    return null
+  }
+  if (value && typeof value === 'object') {
+    for (const key of ['count', 'total', 'value']) {
+      const next = extractFirstNumber((value as any)[key])
+      if (typeof next === 'number') return next
+    }
+  }
+  return null
+}
+
+const filterByInstanceTag = (docs: Record<string, any>[], instanceFilter?: string) => {
+  if (!instanceFilter) return docs
+  return docs.filter((doc) => {
+    const tags = (doc as any)?.instances
+    if (!Array.isArray(tags)) return false
+    return tags.map(entry => String(entry)).includes(instanceFilter)
+  })
 }
 
 const resolveCollectionSchema = (
@@ -129,18 +174,125 @@ export const runTypesenseAction = async (
 
   const limit = optionalNumber(payload.limit)
   const start = optionalNumber(payload.start)
+  const batchSize = Math.max(1, optionalNumber(payload.batchSize) ?? 200)
+  const instance = optionalString(payload.instance)
+  const instanceFilter = optionalString(payload.instanceFilter)
   const idRaw = payload.id
   const id = typeof idRaw === 'number' || typeof idRaw === 'string'
     ? normalizeTypesenseId(idRaw)
     : normalizeTypesenseId(String(idRaw ?? '').trim())
 
-  if (action === 'refreshCollection' || action === 'bulkImport') {
-    const result = await caller.refresh({
+  if (action === 'testSingle') {
+    if (!caller.list) {
+      throw new Error(`Generated Typesense list endpoint is missing for "${modelKey}".`)
+    }
+
+    const page = await caller.list({
+      instance,
       data: {
-        limit,
-        start,
+        limit: 1,
+        start: typeof start === 'number' ? start : 0,
       },
     })
+    const docs = flattenObjects(page)
+    const filteredDocs = filterByInstanceTag(docs, instanceFilter)
+    const record = filteredDocs[0] ?? null
+
+    return {
+      action,
+      result: {
+        ok: Boolean(record),
+        instance: instance ?? null,
+        instanceFilter: instanceFilter ?? null,
+        fetched: docs.length,
+        filtered: filteredDocs.length,
+        record,
+      },
+    }
+  }
+
+  if (action === 'refreshCollection' || action === 'bulkImport') {
+    if (!collectionSchema) throw new Error(`Typesense collection schema missing for "${modelKey}".`)
+
+    if (!caller.list) {
+      const result = await caller.refresh({
+        instance,
+        data: {
+          limit,
+          start,
+        },
+      })
+      return {
+        action,
+        result,
+      }
+    }
+
+    const countResult = caller.count
+      ? await caller.count({ instance, data: {} })
+      : null
+    const total = extractFirstNumber(countResult) ?? 0
+
+    let cursor = typeof start === 'number' && start >= 0 ? start : 0
+    let fetched = 0
+    let filtered = 0
+    let upserted = 0
+    let batches = 0
+    const batchSummaries: Array<{
+      start: number
+      fetched: number
+      filtered: number
+      upserted: number
+    }> = []
+
+    while (true) {
+      const page = await caller.list({
+        instance,
+        data: {
+          limit: batchSize,
+          start: cursor,
+        },
+      })
+      const docs = flattenObjects(page)
+      const fetchedCount = docs.length
+      if (!fetchedCount) break
+      fetched += fetchedCount
+
+      const filteredDocs = filterByInstanceTag(docs, instanceFilter)
+
+      const filteredCount = filteredDocs.length
+      filtered += filteredCount
+
+      let importedCount = 0
+      if (filteredCount > 0) {
+        const importResult = await upsertTypesenseDocuments(collectionSchema, filteredDocs, 'upsert')
+        importedCount = extractFirstNumber((importResult as any)?.imported) ?? filteredCount
+        upserted += importedCount
+      }
+
+      batchSummaries.push({
+        start: cursor,
+        fetched: fetchedCount,
+        filtered: filteredCount,
+        upserted: importedCount,
+      })
+      batches += 1
+
+      if (fetchedCount < batchSize) break
+      cursor += batchSize
+    }
+
+    const result = {
+      ok: true,
+      instance: instance ?? null,
+      instanceFilter: instanceFilter ?? null,
+      total,
+      fetched,
+      filtered,
+      upserted,
+      batches,
+      batchSummaries,
+    }
     return {
       action,
       result,
@@ -181,7 +333,10 @@ export const runTypesenseAction = async (
   if (action === 'addRecord') {
     if (!id) throw new Error('addRecord requires an id.')
     if (!collectionSchema) throw new Error(`Typesense collection schema missing for "${modelKey}".`)
-    const resource = await caller.resource({ data: { id } })
+    const resource = await caller.resource({
+      instance,
+      data: { id },
+    })
     const document = extractFirstObject(resource)
     if (!document) throw new Error(`No Typesense view resource found for id "${String(id)}".`)
     const upsertResult = await upsertTypesenseDocuments(collectionSchema, [document], 'upsert')

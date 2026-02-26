@@ -12,7 +12,7 @@ import type {
 import FieldSectionCard from '#layers/helios-ui/app/components/fields/FieldSectionCard.vue'
 import PageFrameCanvas from '#layers/helios-admin/app/components/admin/builder/PageFrameCanvas.client.vue'
 
-type BuilderRootTab = 'settings' | 'page-builder' | 'page-builder-2'
+type BuilderRootTab = 'settings' | 'page-builder-2'
 type SettingsPanel =
   | 'directory'
   | 'typesense'
@@ -114,6 +114,9 @@ const builder2ViewMode = ref<'edit' | 'runtime'>('edit')
 const fieldSettingsOptionsJson = ref('')
 const fieldSettingsOptionsError = ref('')
 const fieldSettingsOptionsNotice = ref('')
+const builderOverlayOpen = useState('heliosModelBuilderOverlayOpen', () => false)
+const showBuilderCloseConfirm = ref(false)
+const baselineSpecSnapshot = ref('')
 const apiConsole = useApiConsole()
 
 const PAGE_BUILDER2_ROW_ID = 'pb2-row'
@@ -160,6 +163,10 @@ const settingsSections = computed<{ id: SettingsPanel, label: string }[]>(() => 
 })
 
 const form = ref<ModelLayoutSpec | null>(null)
+const serializeSpec = (value: ModelLayoutSpec | null) => value ? JSON.stringify(value) : ''
+const builderHasUnsavedChanges = computed(() => (
+  serializeSpec(form.value) !== baselineSpecSnapshot.value
+))
 
 const { data, pending, error, refresh } = await useFetch<ModelSpecResponse>(
   () => `/api/models/layout/${modelParam.value}`,
@@ -180,6 +187,196 @@ const modelFieldOptions = computed(() => {
     .filter(field => field.length > 0)
 })
 
+type SchemaFieldReferenceRow = {
+  key: string
+  expectedShape: string
+  detail: string
+  source: 'component' | 'naming' | 'default'
+  required: boolean
+}
+
+const normalizeShapeFromComponent = (field: ModelUIFieldSpec): Omit<SchemaFieldReferenceRow, 'key' | 'required'> | null => {
+  const name = String(field.component?.name || '').trim()
+  const options = (field.component?.options && typeof field.component.options === 'object')
+    ? field.component.options
+    : {}
+
+  if (name === 'ANumberInput') {
+    return {
+      expectedShape: 'number',
+      detail: 'Configured with ANumberInput.',
+      source: 'component',
+    }
+  }
+
+  if (name === 'AInput') {
+    const inputType = String((options as any).type || 'text').trim().toLowerCase()
+    if (inputType === 'number') {
+      return {
+        expectedShape: 'number',
+        detail: 'Configured with AInput type=number.',
+        source: 'component',
+      }
+    }
+    if (inputType === 'email') {
+      return {
+        expectedShape: 'string (email)',
+        detail: 'Configured with AInput type=email.',
+        source: 'component',
+      }
+    }
+    return {
+      expectedShape: 'string',
+      detail: `Configured with AInput type=${inputType}.`,
+      source: 'component',
+    }
+  }
+
+  if (name === 'ACombobox') {
+    const multiple = Boolean((options as any).multiple)
+    const rawOptions = Array.isArray((options as any).options) ? (options as any).options : []
+    const enumCount = rawOptions
+      .map((entry) => String((entry && typeof entry === 'object' ? (entry as any).value : '') || '').trim())
+      .filter(Boolean)
+      .length
+    if (multiple) {
+      return {
+        expectedShape: 'string[]',
+        detail: enumCount ? `Configured with ACombobox (multiple=true, ${enumCount} options).` : 'Configured with ACombobox (multiple=true).',
+        source: 'component',
+      }
+    }
+    return {
+      expectedShape: enumCount ? 'enum<string>' : 'string',
+      detail: enumCount ? `Configured with ACombobox (${enumCount} options).` : 'Configured with ACombobox.',
+      source: 'component',
+    }
+  }
+
+  if (name === 'ATagsInput') {
+    return {
+      expectedShape: 'string[]',
+      detail: 'Configured with ATagsInput.',
+      source: 'component',
+    }
+  }
+
+  if (name === 'AColorPicker') {
+    return {
+      expectedShape: 'string (hex color)',
+      detail: 'Configured with AColorPicker.',
+      source: 'component',
+    }
+  }
+
+  if (['ASwitch', 'ASwitchBasic', 'ACheckbox'].includes(name)) {
+    return {
+      expectedShape: 'boolean',
+      detail: `Configured with ${name}.`,
+      source: 'component',
+    }
+  }
+
+  return null
+}
+
+const normalizeShapeFromFieldName = (fieldKey: string): Omit<SchemaFieldReferenceRow, 'key' | 'required'> => {
+  const key = fieldKey.toLowerCase()
+  if (/(^is[A-Z]|^has[A-Z])/.test(fieldKey) || /(enabled|active|disabled|published|archived|verified|deleted|is_|has_)/.test(key)) {
+    return {
+      expectedShape: 'boolean',
+      detail: 'Inferred boolean from field naming.',
+      source: 'naming',
+    }
+  }
+  if (/(count|qty|quantity|price|amount|total|score|year|age|rank|index|order|weight|percent|percentage|duration)/.test(key)) {
+    return {
+      expectedShape: 'number',
+      detail: 'Inferred numeric shape from field naming.',
+      source: 'naming',
+    }
+  }
+  if (/(tags|ids|list|items)$/.test(key)) {
+    return {
+      expectedShape: 'string[]',
+      detail: 'Inferred array shape from field naming.',
+      source: 'naming',
+    }
+  }
+  if (/(status|type|kind|role)$/.test(key)) {
+    return {
+      expectedShape: 'enum<string>',
+      detail: 'Inferred enum-like string from field naming.',
+      source: 'naming',
+    }
+  }
+  if (/email/.test(key)) {
+    return {
+      expectedShape: 'string (email)',
+      detail: 'Inferred email string from field naming.',
+      source: 'naming',
+    }
+  }
+  if (/(date|time|_at|at)$/.test(key)) {
+    return {
+      expectedShape: 'string (date/time)',
+      detail: 'Inferred date/time string from field naming.',
+      source: 'naming',
+    }
+  }
+  return {
+    expectedShape: 'string',
+    detail: 'Defaulted to string shape.',
+    source: 'default',
+  }
+}
+
+const configuredFieldSpecByModelKey = computed(() => {
+  const map = new Map<string, ModelUIFieldSpec>()
+  if (!form.value) return map
+
+  const add = (field?: ModelUIFieldSpec) => {
+    if (!field) return
+    const key = String(field.modelKey || field.field || '').trim().toLowerCase()
+    if (!key) return
+    if (!map.has(key)) map.set(key, field)
+  }
+
+  for (const field of form.value.directory.createDialog.fields || []) add(field)
+  for (const tab of form.value.single.tabs || []) {
+    for (const row of tab.primary || []) {
+      for (const column of row.columns || []) {
+        for (const widget of column.primary || []) {
+          for (const field of widget.fields || []) add(field)
+        }
+      }
+    }
+  }
+
+  return map
+})
+
+const schemaFieldReferenceRows = computed<SchemaFieldReferenceRow[]>(() => {
+  const requiredSet = new Set(
+    Array.isArray(modelInfo.value?.requiredFields)
+      ? modelInfo.value!.requiredFields.map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean)
+      : [],
+  )
+
+  return modelFieldOptions.value.map((key) => {
+    const fromConfig = configuredFieldSpecByModelKey.value.get(key.toLowerCase())
+    const fromComponent = fromConfig ? normalizeShapeFromComponent(fromConfig) : null
+    const normalized = fromComponent || normalizeShapeFromFieldName(key)
+    return {
+      key,
+      expectedShape: normalized.expectedShape,
+      detail: normalized.detail,
+      source: normalized.source,
+      required: requiredSet.has(key.toLowerCase()),
+    }
+  })
+})
+
 const parseOptionalInt = (value: string) => {
   const next = Number(String(value ?? '').trim())
   return Number.isFinite(next) ? next : undefined
@@ -192,6 +389,11 @@ const createDialogOverridePath = computed(() => {
 const createRecordOverridePath = computed(() => {
   return `app/components/admin/overrides/${modelParam.value || '<model>'}/createRecord.ts`
 })
+
+const directoryCellOverridePath = (fieldKey?: string) => {
+  const normalizedField = slugify(String(fieldKey || '').trim(), '<field-key>')
+  return `app/components/admin/overrides/${modelParam.value || '<model>'}/directory/cells/${normalizedField}.vue`
+}
 
 const selectedTabOverrideSlug = ref('')
 const selectedWidgetOverrideId = ref('')
@@ -654,6 +856,36 @@ const generateWidgetOverride = async (force = false) => {
   }
 }
 
+const generateDirectoryCellOverride = async (fieldKey: string, force = false) => {
+  overrideBusy.value = true
+  overrideError.value = ''
+  overrideNotice.value = ''
+
+  try {
+    const normalizedField = String(fieldKey || '').trim()
+    if (!normalizedField) throw new Error('Select a listing field key before generating a directory cell override.')
+
+    const response = await $fetch(`/api/models/overrides/${modelParam.value}/directory-cell`, {
+      method: 'POST',
+      body: { fieldKey: normalizedField, force },
+    })
+
+    overrideResult.value = response as Record<string, any>
+    const status = String((response as any)?.override?.status || 'created')
+    const filePath = String((response as any)?.override?.filePath || '')
+    const actionLabel = force ? 'Directory cell override regenerated' : 'Directory cell override'
+    overrideNotice.value = status === 'exists'
+      ? `Directory cell override already exists at ${filePath}.`
+      : `${actionLabel} ${status} at ${filePath}.`
+  }
+  catch (apiError: any) {
+    overrideError.value = apiError?.data?.statusMessage ?? apiError?.message ?? 'Failed to generate directory cell override.'
+  }
+  finally {
+    overrideBusy.value = false
+  }
+}
+
 watch(
   () => data.value?.spec,
   (nextSpec) => {
@@ -664,6 +896,7 @@ watch(
     }
 
     form.value = clone(nextSpec)
+    baselineSpecSnapshot.value = serializeSpec(form.value)
     activeSettingsPanel.value = 'directory'
     activeTabSlug.value = nextSpec.single.tabs[0]?.slug ?? ''
     saveState.value = 'idle'
@@ -680,6 +913,9 @@ watch(
     overrideNotice.value = ''
     overrideError.value = ''
     overrideResult.value = null
+    builderOverlayOpen.value = false
+    showBuilderCloseConfirm.value = false
+    activeRootTab.value = 'settings'
     apiConsole.clear()
   },
   { immediate: true },
@@ -1571,6 +1807,39 @@ const closeFieldSettings = () => {
   fieldSettingsOptionsNotice.value = ''
 }
 
+const openBuilderOverlay = () => {
+  if (!form.value) return
+  activeRootTab.value = 'page-builder-2'
+  builderOverlayOpen.value = true
+  showBuilderCloseConfirm.value = false
+}
+
+const closeBuilderOverlay = () => {
+  showBuilderCloseConfirm.value = false
+  showSchemaReference.value = false
+  closeFrameSettings()
+  closeFieldSettings()
+  builderOverlayOpen.value = false
+  activeRootTab.value = 'settings'
+}
+
+const requestBuilderOverlayClose = () => {
+  if (saveState.value === 'saving') return
+  if (!builderHasUnsavedChanges.value) {
+    closeBuilderOverlay()
+    return
+  }
+  showBuilderCloseConfirm.value = true
+}
+
+const confirmBuilderOverlayClose = () => {
+  closeBuilderOverlay()
+}
+
+const cancelBuilderOverlayClose = () => {
+  showBuilderCloseConfirm.value = false
+}
+
 const syncFrameInnerClassToWidgets = (frame: ModelUIColumnSpec) => {
   const meta = ensureFrameMeta(frame)
   for (const widget of frame.primary) {
@@ -1664,6 +1933,14 @@ watch(
 )
 
 watch(
+  () => builderOverlayOpen.value,
+  (open) => {
+    if (!import.meta.client) return
+    document.body.style.overflow = open ? 'hidden' : ''
+  },
+)
+
+watch(
   () => fieldSettingsTarget.value?.field.id,
   () => {
     refreshFieldSettingsOptionsJson()
@@ -1712,6 +1989,7 @@ const commitState = async () => {
     })
 
     form.value = clone(response.spec)
+    baselineSpecSnapshot.value = serializeSpec(form.value)
     saveState.value = 'saved'
     notice.value = `Committed model spec for ${response.model.modelKey}.`
   }
@@ -1720,6 +1998,43 @@ const commitState = async () => {
     notice.value = commitError?.data?.statusMessage ?? commitError?.message ?? 'Commit failed.'
   }
 }
+
+const onBuilderKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape') return
+
+  if (showBuilderCloseConfirm.value) {
+    cancelBuilderOverlayClose()
+    return
+  }
+
+  if (!builderOverlayOpen.value) return
+  if (fieldSettingsTarget.value) {
+    closeFieldSettings()
+    return
+  }
+  if (frameSettingsTarget.value) {
+    closeFrameSettings()
+    return
+  }
+  if (showSchemaReference.value) {
+    showSchemaReference.value = false
+    return
+  }
+
+  requestBuilderOverlayClose()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onBuilderKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onBuilderKeydown)
+  builderOverlayOpen.value = false
+  if (import.meta.client) {
+    document.body.style.overflow = ''
+  }
+})
 </script>
 
 <template>
@@ -1756,19 +2071,11 @@ const commitState = async () => {
       </button>
       <button
         class="builder-tab"
-        :class="activeRootTab === 'page-builder' ? 'is-active' : ''"
+        :class="builderOverlayOpen ? 'is-active' : ''"
         type="button"
-        @click="activeRootTab = 'page-builder'"
+        @click="openBuilderOverlay"
       >
         Page Builder
-      </button>
-      <button
-        class="builder-tab"
-        :class="activeRootTab === 'page-builder-2' ? 'is-active' : ''"
-        type="button"
-        @click="activeRootTab = 'page-builder-2'"
-      >
-        Page Builder 2
       </button>
       <span class="builder-source a-chip">source: {{ source }}</span>
     </section>
@@ -2154,11 +2461,22 @@ const commitState = async () => {
             </div>
 
             <div class="list-stack smt-050">
-              <div v-for="(entry, index) in form.directory.listing.fields" :key="`list-field-${index}`" class="list-item-grid">
-                <input v-model="entry.key" class="a-input" type="text" placeholder="field key">
-                <input v-model="entry.label" class="a-input" type="text" placeholder="field label">
-                <input v-model="entry.class" class="a-input" type="text" placeholder="optional class">
-                <button class="a-btn a-btn--ghost" type="button" @click="removeListingField(index)">Remove</button>
+              <div v-for="(entry, index) in form.directory.listing.fields" :key="`list-field-${index}`" class="list-item-stack">
+                <div class="list-item-grid list-item-grid--listing">
+                  <input v-model="entry.key" class="a-input" type="text" placeholder="field key">
+                  <input v-model="entry.label" class="a-input" type="text" placeholder="field label">
+                  <input v-model="entry.class" class="a-input" type="text" placeholder="optional class">
+                  <div class="panel-row__actions">
+                    <button class="a-btn a-btn--subtle" type="button" :disabled="overrideBusy || !String(entry.key || '').trim()" @click="generateDirectoryCellOverride(entry.key, false)">
+                      {{ overrideBusy ? 'Generating…' : 'Cell Override' }}
+                    </button>
+                    <button class="a-btn a-btn--ghost" type="button" :disabled="overrideBusy || !String(entry.key || '').trim()" @click="generateDirectoryCellOverride(entry.key, true)">
+                      {{ overrideBusy ? 'Working…' : 'Regenerate' }}
+                    </button>
+                    <button class="a-btn a-btn--ghost" type="button" @click="removeListingField(index)">Remove</button>
+                  </div>
+                </div>
+                <code v-if="String(entry.key || '').trim()">{{ directoryCellOverridePath(entry.key) }}</code>
               </div>
             </div>
           </article>
@@ -2684,22 +3002,50 @@ const commitState = async () => {
         </section>
       </template>
 
-      <template v-else>
-        <section class="builder-layout-grid">
-          <aside class="a-card section-panel">
+      <template v-else-if="builderOverlayOpen">
+        <div class="builder-overlay" @click.self="requestBuilderOverlayClose">
+          <section class="a-card builder-overlay__surface">
+            <header class="builder-overlay__header">
+              <div>
+                <p class="a-eyebrow">Page Builder</p>
+                <h2 class="panel-title">{{ modelInfo?.label || modelParam }} Layout Builder</h2>
+                <p class="a-copy smt-025">
+                  Visual editor for tab, frame, widget, and field layout. Commit writes back to model UI spec fragments.
+                </p>
+              </div>
+              <div class="builder-overlay__actions">
+                <button class="a-btn a-btn--subtle" type="button" @click="showSchemaReference = true">
+                  Schema Reference
+                </button>
+                <button
+                  class="a-btn a-btn--primary"
+                  type="button"
+                  :disabled="saveState === 'saving' || !form"
+                  @click="commitState"
+                >
+                  {{ saveState === 'saving' ? 'Committing…' : 'Commit' }}
+                </button>
+                <button
+                  class="a-btn a-btn--subtle builder-overlay__close"
+                  type="button"
+                  :disabled="saveState === 'saving'"
+                  @click="requestBuilderOverlayClose"
+                >
+                  Close
+                </button>
+              </div>
+            </header>
+
+            <div class="builder-overlay__body">
+              <section class="builder-layout-grid">
+                <aside class="a-card section-panel">
             <div class="section-panel__header">
-              <h2 class="panel-title">Page Builder 2</h2>
+              <h2 class="panel-title">Page Builder</h2>
               <span class="a-chip">{{ tabs.length }} tabs</span>
             </div>
             <p class="a-copy">
               Visual frame canvas with field previews. Commit writes everything back into the same model fragment.
             </p>
-
-            <div class="api-actions">
-              <button class="a-btn a-btn--subtle" type="button" @click="showSchemaReference = true">
-                Schema Reference
-              </button>
-            </div>
 
             <div class="section-list smt-025">
               <div
@@ -2739,9 +3085,9 @@ const commitState = async () => {
                 Add Tab
               </button>
             </div>
-          </aside>
+                </aside>
 
-          <article v-if="activeTabSpec" class="a-card builder2-panel">
+                <article v-if="activeTabSpec" class="a-card builder2-panel">
             <div class="builder2-panel__head">
               <div>
                 <h2 class="panel-title">{{ activeTabSpec.label }} Canvas</h2>
@@ -2919,8 +3265,11 @@ const commitState = async () => {
                 </div>
               </section>
             </section>
-          </article>
-        </section>
+                </article>
+              </section>
+            </div>
+          </section>
+        </div>
 
         <div v-if="showSchemaReference" class="builder2-modal-backdrop" @click.self="showSchemaReference = false">
           <section class="a-card builder2-modal">
@@ -2928,11 +3277,33 @@ const commitState = async () => {
               <h3 class="panel-title">Schema Reference</h3>
               <button class="a-btn a-btn--ghost" type="button" @click="showSchemaReference = false">Close</button>
             </div>
-            <p class="a-copy smt-025">Available model fields for this layout:</p>
-            <div class="builder2-schema-list smt-050">
-              <span v-for="field in modelFieldOptions" :key="`schema-field-${field}`" class="a-chip">
-                {{ field }}
-              </span>
+            <p class="a-copy smt-025">
+              Available model fields with expected data shape for this layout:
+            </p>
+            <div class="builder2-schema-table smt-050">
+              <div class="builder2-schema-table__head">
+                <span>Field</span>
+                <span>Expected Shape</span>
+                <span>Detail</span>
+              </div>
+              <div
+                v-for="entry in schemaFieldReferenceRows"
+                :key="`schema-field-${entry.key}`"
+                class="builder2-schema-table__row"
+              >
+                <div class="builder2-schema-table__field">
+                  <code>{{ entry.key }}</code>
+                  <span v-if="entry.required" class="a-chip">required</span>
+                </div>
+                <code>{{ entry.expectedShape }}</code>
+                <div class="builder2-schema-table__detail">
+                  <span class="a-chip">{{ entry.source }}</span>
+                  <span>{{ entry.detail }}</span>
+                </div>
+              </div>
+              <p v-if="!schemaFieldReferenceRows.length" class="a-copy">
+                No model fields were returned for this model.
+              </p>
             </div>
           </section>
         </div>
@@ -3095,6 +3466,23 @@ const commitState = async () => {
             </div>
           </section>
         </div>
+
+        <div v-if="showBuilderCloseConfirm" class="builder2-modal-backdrop" @click.self="cancelBuilderOverlayClose">
+          <section class="a-card builder2-modal builder2-modal--confirm">
+            <h3 class="panel-title">Discard unsaved changes?</h3>
+            <p class="a-copy smt-025">
+              You have unsaved layout changes in this builder session. Closing now will discard those edits.
+            </p>
+            <div class="builder-overlay__confirm-actions smt-050">
+              <button class="a-btn a-btn--subtle" type="button" @click="cancelBuilderOverlayClose">
+                Keep Editing
+              </button>
+              <button class="a-btn a-btn--ghost" type="button" @click="confirmBuilderOverlayClose">
+                Discard Changes
+              </button>
+            </div>
+          </section>
+        </div>
       </template>
     </template>
 
@@ -3209,10 +3597,19 @@ const commitState = async () => {
   gap: 0.45rem;
 }
 
+.list-item-stack {
+  display: grid;
+  gap: 0.28rem;
+}
+
 .list-item-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.42rem;
+}
+
+.list-item-grid--listing {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
 }
 
 .api-meta-grid {
@@ -3515,6 +3912,51 @@ const commitState = async () => {
   gap: 0.62rem;
 }
 
+.builder-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--admin-bg) 74%, black 26%);
+}
+
+.builder-overlay__surface {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.62rem;
+  padding: 0.62rem;
+  overflow: hidden;
+}
+
+.builder-overlay__header {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-muted);
+  padding: 0.62rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.builder-overlay__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.builder-overlay__close {
+  min-width: 6.25rem;
+}
+
+.builder-overlay__body {
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
 .builder2-panel__head {
   display: flex;
   align-items: flex-start;
@@ -3619,7 +4061,7 @@ const commitState = async () => {
 .builder2-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 2000;
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -3632,10 +4074,71 @@ const commitState = async () => {
   overflow: auto;
 }
 
-.builder2-schema-list {
+.builder2-modal--confirm {
+  width: min(520px, calc(100vw - 2rem));
+}
+
+.builder-overlay__confirm-actions {
   display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.builder2-schema-table {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-surface-muted);
+  overflow: hidden;
+}
+
+.builder2-schema-table__head,
+.builder2-schema-table__row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 220px) minmax(220px, 1.4fr);
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.45rem 0.55rem;
+}
+
+.builder2-schema-table__head {
+  border-bottom: 1px solid var(--admin-border);
+  font-size: var(--fs--1, 0.78rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--admin-muted-2);
+  font-weight: 600;
+}
+
+.builder2-schema-table__row + .builder2-schema-table__row {
+  border-top: 1px solid color-mix(in srgb, var(--admin-border) 70%, transparent);
+}
+
+.builder2-schema-table__field {
+  display: inline-flex;
+  align-items: center;
   gap: 0.35rem;
+  min-width: 0;
+}
+
+.builder2-schema-table__field code,
+.builder2-schema-table__row code {
+  display: inline-flex;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-surface);
+  padding: 0.18rem 0.34rem;
+  color: var(--admin-text-soft);
+  font-size: var(--fs--1, 0.78rem);
+  overflow-wrap: anywhere;
+}
+
+.builder2-schema-table__detail {
+  display: inline-flex;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 0.35rem;
+  color: var(--admin-text-soft);
+  font-size: var(--fs--1, 0.78rem);
 }
 
 .builder2-runtime {
@@ -3731,6 +4234,24 @@ const commitState = async () => {
     flex-direction: column;
   }
 
+  .builder-overlay__header {
+    flex-direction: column;
+  }
+
+  .builder-overlay__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .builder2-schema-table__head {
+    display: none;
+  }
+
+  .builder2-schema-table__row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+
   .builder2-frame {
     flex-basis: 100% !important;
     max-width: 100% !important;
@@ -3752,6 +4273,10 @@ const commitState = async () => {
 
   .builder-source {
     margin-left: 0;
+  }
+
+  .builder-overlay {
+    padding: 0.5rem;
   }
 }
 </style>

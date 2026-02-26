@@ -6,6 +6,7 @@ type MaybeModelRef = string | Ref<string> | ComputedRef<string> | (() => string)
 export type ModelTypesenseAction =
   | 'countRecords'
   | 'listRecords'
+  | 'testSingle'
   | 'refreshCollection'
   | 'ensureCollection'
   | 'bulkImport'

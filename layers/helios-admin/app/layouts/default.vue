@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 
 const sidebarCollapsed = useState('adminSidebarCollapsed', () => false)
+const modelBuilderOverlayOpen = useState('heliosModelBuilderOverlayOpen', () => false)
 
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
@@ -37,7 +38,10 @@ onBeforeUnmount(() => {
       <AdminSidebar :collapsed="sidebarCollapsed" />
 
       <div class="admin-shell-main">
-        <AdminHeader @toggle="toggleSidebar" />
+        <AdminHeader
+          :class="{ 'is-hidden': modelBuilderOverlayOpen }"
+          @toggle="toggleSidebar"
+        />
 
         <main class="admin-main">
           <div class="admin-shell-pattern" />
@@ -134,6 +138,10 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.admin-topbar.is-hidden {
+  display: none;
 }
 
 .admin-main {
