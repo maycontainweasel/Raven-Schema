@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import interact from 'interactjs'
+import type interactType from 'interactjs'
 
 type PageFrameCanvasItem = {
   id: string
@@ -38,7 +38,14 @@ const draggingId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
 const dropPosition = ref<DropPosition>('after')
 const dragOffset = reactive<Record<string, { x: number, y: number }>>({})
-const interactables = new Map<string, ReturnType<typeof interact>>()
+const interactLib = shallowRef<null | typeof interactType>(null)
+const interactionError = ref('')
+type InteractInstanceLike = {
+  draggable: (options: Record<string, any>) => unknown
+  resizable: (options: Record<string, any>) => unknown
+  unset: () => void
+}
+const interactables = new Map<string, InteractInstanceLike>()
 const resizeWidth = reactive<Record<string, number>>({})
 const isSyncingInteractables = ref(false)
 const syncInteractablesQueued = ref(false)
@@ -178,10 +185,12 @@ const handleResizeEnd = (frameId: string) => {
 }
 
 const bindInteractable = (element: HTMLElement) => {
+  const interact = interactLib.value
+  if (!interact) return
   const frameId = String(element.dataset.pageFrameId || '').trim()
   if (!frameId) return
 
-  const instance = interact(element)
+  const instance = interact(element) as unknown as InteractInstanceLike
 
   instance.draggable({
     enabled: props.draggable,
@@ -208,6 +217,7 @@ const bindInteractable = (element: HTMLElement) => {
 }
 
 const syncInteractables = async () => {
+  if (!interactLib.value) return
   if (isSyncingInteractables.value) {
     syncInteractablesQueued.value = true
     return
@@ -241,7 +251,10 @@ const syncInteractables = async () => {
 watch(
   () => props.frames.map(frame => `${frame.id}:${frame.width}`).join('|'),
   () => {
-    void syncInteractables()
+    void syncInteractables().catch((error) => {
+      interactionError.value = error instanceof Error ? error.message : 'Failed to sync canvas interactions.'
+      console.error('[PageFrameCanvas] syncInteractables failed', error)
+    })
   },
   { immediate: true, flush: 'post' },
 )
@@ -249,13 +262,30 @@ watch(
 watch(
   () => [props.draggable, props.resizable],
   () => {
-    void syncInteractables()
+    void syncInteractables().catch((error) => {
+      interactionError.value = error instanceof Error ? error.message : 'Failed to sync canvas interactions.'
+      console.error('[PageFrameCanvas] syncInteractables failed', error)
+    })
   },
   { deep: true, flush: 'post' },
 )
 
-onMounted(() => {
-  void syncInteractables()
+onMounted(async () => {
+  try {
+    const mod = await import('interactjs')
+    interactLib.value = ((mod as any).default || mod) as typeof interactType
+    interactionError.value = ''
+  }
+  catch (error) {
+    interactionError.value = error instanceof Error ? error.message : 'Failed to load interactjs.'
+    console.error('[PageFrameCanvas] Failed to load interactjs', error)
+    return
+  }
+
+  await syncInteractables().catch((error) => {
+    interactionError.value = error instanceof Error ? error.message : 'Failed to initialize canvas interactions.'
+    console.error('[PageFrameCanvas] Failed to initialize interactions', error)
+  })
 })
 
 onUnmounted(() => {
@@ -272,6 +302,9 @@ onUnmounted(() => {
 
 <template>
   <div ref="rootRef" class="page-frame-canvas">
+    <p v-if="interactionError" class="page-frame-canvas__error">
+      Canvas interaction unavailable: {{ interactionError }}
+    </p>
     <article
       v-for="frame in frames"
       :key="frame.id"
@@ -323,6 +356,17 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.55rem;
+}
+
+.page-frame-canvas__error {
+  width: 100%;
+  margin: 0;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid color-mix(in srgb, #ef4444 32%, var(--admin-border) 68%);
+  border-radius: var(--admin-radius-sm);
+  background: color-mix(in srgb, #ef4444 10%, var(--admin-surface) 90%);
+  color: color-mix(in srgb, #ef4444 70%, var(--admin-text) 30%);
+  font-size: var(--fs--1, 0.82rem);
 }
 
 .page-frame-canvas__frame {

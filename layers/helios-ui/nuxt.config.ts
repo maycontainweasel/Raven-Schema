@@ -9,4 +9,13 @@ export default defineNuxtConfig({
   alias: {
     '#helios-ui': layerRoot,
   },
+  components: {
+    dirs: [
+      {
+        path: fileURLToPath(new URL('./app/components/fields', import.meta.url)),
+        pathPrefix: false,
+        global: true,
+      },
+    ],
+  },
 })

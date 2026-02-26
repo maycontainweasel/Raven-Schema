@@ -14,6 +14,7 @@ import type {
   ModelUIWidgetSpec,
 } from '../../../types/model-spec'
 import FieldSectionCard from '#layers/helios-ui/app/components/fields/FieldSectionCard.vue'
+import ATaxonomyManager from '../../../components/fields/ATaxonomyManager.vue'
 import { resolveFieldComponentOptions } from '../../../utils/field-component-options'
 // Components are auto-imported from the active layer.
 

@@ -221,6 +221,31 @@ export type ModelLayoutSpec = {
   }
 }
 
+export type ModelSpecAssetStatus = {
+  path: string
+  exists: boolean
+  managed?: boolean
+  parseOk?: boolean
+  readError?: string
+  parseError?: string
+}
+
+export type ModelSpecAssetsDiagnostics = {
+  modelKey: string
+  source: 'fragment' | 'default'
+  fragment: ModelSpecAssetStatus
+  generated: ModelSpecAssetStatus & {
+    modelKeyMatch?: boolean
+    routeMatch?: boolean
+  }
+  routes: {
+    directory: ModelSpecAssetStatus
+    record: ModelSpecAssetStatus
+  }
+  warnings: string[]
+  errors: string[]
+}
+
 type InternalModel = Omit<ModelManagerModel, 'hasFragment' | 'hasGenerated'>
 
 const MODEL_HEADER_RE = /^\s*([A-Za-z][\w]*)\s*,\s*([A-Za-z][\w-]*)\b/
@@ -1687,18 +1712,26 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
     generatedManifest.map(entry => [entry.normalizedTable, entry]),
   )
   const manifestIsAvailable = generatedManifest.length > 0
+  const manifestMissingModels: string[] = []
 
   const enriched = await Promise.all(
     baseModels.map(async (model) => {
       const generatedEntry = generatedByTable.get(model.table)
-      if (manifestIsAvailable && !generatedEntry) return null
+      if (manifestIsAvailable && !generatedEntry) {
+        manifestMissingModels.push(model.modelKey)
+      }
 
       const routerKey = generatedEntry?.key || model.routerKey || model.modelKey
       const fragmentPath = fragmentFile(model.modelKey)
-      const hasFragment = await fileExists(fragmentPath)
-      const rawSpec = hasFragment
-        ? await readYamlFile<ModelLayoutSpec>(fragmentPath)
-        : null
+      const fragmentState = await readYamlFileState<ModelLayoutSpec>(fragmentPath)
+      const hasFragment = fragmentState.exists
+      if (fragmentState.exists && !fragmentState.data && (fragmentState.parseError || fragmentState.readError)) {
+        console.warn(
+          `[helios-admin:model-manager] Fragment for "${model.modelKey}" exists but is unreadable/invalid. ` +
+            `${fragmentState.path}: ${fragmentState.parseError || fragmentState.readError}`,
+        )
+      }
+      const rawSpec = fragmentState.data
 
       const routeFromSpec = String(rawSpec?.directory?.route ?? '').trim()
       const directoryRoute = normalizeRoutePath(
@@ -1717,6 +1750,13 @@ export const listModelManagerModels = async (cwd = process.cwd()): Promise<Model
       }
     }),
   )
+
+  if (manifestMissingModels.length) {
+    console.warn(
+      `[helios-admin:model-manager] Generated models manifest is missing ${manifestMissingModels.length} model(s): ` +
+        `${manifestMissingModels.join(', ')}. Falling back to admin/canonical manifest metadata for these models.`,
+    )
+  }
 
   return enriched
     .filter((entry): entry is ModelManagerModel => Boolean(entry))
@@ -1935,14 +1975,94 @@ export const normalizeModelSpec = (
   }
 }
 
-const readYamlFile = async <T>(filePath: string): Promise<T | null> => {
+type ParsedFileState<T> = {
+  path: string
+  exists: boolean
+  raw: string | null
+  data: T | null
+  readError: string | null
+  parseError: string | null
+}
+
+const readYamlFileState = async <T>(filePath: string): Promise<ParsedFileState<T>> => {
   try {
     const raw = await fs.readFile(filePath, 'utf-8')
-    return parseYaml(raw) as T
+    try {
+      return {
+        path: filePath,
+        exists: true,
+        raw,
+        data: parseYaml(raw) as T,
+        readError: null,
+        parseError: null,
+      }
+    }
+    catch (error: any) {
+      return {
+        path: filePath,
+        exists: true,
+        raw,
+        data: null,
+        readError: null,
+        parseError: error?.message || String(error),
+      }
+    }
   }
-  catch {
-    return null
+  catch (error: any) {
+    const code = String(error?.code || '')
+    const isMissing = code === 'ENOENT'
+    return {
+      path: filePath,
+      exists: !isMissing,
+      raw: null,
+      data: null,
+      readError: isMissing ? null : (error?.message || String(error)),
+      parseError: null,
+    }
   }
+}
+
+const readJsonFileState = async <T>(filePath: string): Promise<ParsedFileState<T>> => {
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8')
+    try {
+      return {
+        path: filePath,
+        exists: true,
+        raw,
+        data: JSON.parse(raw) as T,
+        readError: null,
+        parseError: null,
+      }
+    }
+    catch (error: any) {
+      return {
+        path: filePath,
+        exists: true,
+        raw,
+        data: null,
+        readError: null,
+        parseError: error?.message || String(error),
+      }
+    }
+  }
+  catch (error: any) {
+    const code = String(error?.code || '')
+    const isMissing = code === 'ENOENT'
+    return {
+      path: filePath,
+      exists: !isMissing,
+      raw: null,
+      data: null,
+      readError: isMissing ? null : (error?.message || String(error)),
+      parseError: null,
+    }
+  }
+}
+
+const readYamlFile = async <T>(filePath: string): Promise<T | null> => {
+  const state = await readYamlFileState<T>(filePath)
+  return state.data
 }
 
 const ensureDir = async (filePath: string) => {
@@ -2097,24 +2217,182 @@ const syncGeneratedRoutePages = async (
   }
 }
 
-export const readModelSpec = async (
+export const inspectModelSpecAssets = async (
   model: ModelManagerModel,
-  cwd = process.cwd(),
-): Promise<{ spec: ModelLayoutSpec; source: 'fragment' | 'default' }> => {
-  const { fragmentFile } = resolveModelManagerPaths(cwd)
-  const filePath = fragmentFile(model.modelKey)
-  const raw = await readYamlFile<ModelLayoutSpec>(filePath)
+  options: {
+    spec?: ModelLayoutSpec | null
+    source?: 'fragment' | 'default'
+    cwd?: string
+  } = {},
+): Promise<ModelSpecAssetsDiagnostics> => {
+  const cwd = options.cwd ?? process.cwd()
+  const source = options.source ?? 'default'
+  const { fragmentFile, generatedFile, pagesDir } = resolveModelManagerPaths(cwd)
+  const warnings: string[] = []
+  const errors: string[] = []
+  const marker = GENERATED_ROUTE_MARKER
 
-  if (!raw) {
-    return {
-      spec: createDefaultModelSpec(model),
-      source: 'default',
-    }
+  const fragmentPath = fragmentFile(model.modelKey)
+  const generatedPath = generatedFile(model.modelKey)
+  const fragmentState = await readYamlFileState<ModelLayoutSpec>(fragmentPath)
+  const generatedState = await readJsonFileState<Record<string, any>>(generatedPath)
+
+  if (fragmentState.exists && fragmentState.parseError) {
+    errors.push(`Fragment YAML parse failed: ${fragmentState.parseError}`)
+  }
+  if (fragmentState.exists && fragmentState.readError) {
+    errors.push(`Fragment YAML read failed: ${fragmentState.readError}`)
+  }
+  if (!fragmentState.exists) {
+    warnings.push('Fragment YAML file is missing.')
+  }
+
+  if (generatedState.exists && generatedState.parseError) {
+    errors.push(`Generated JSON parse failed: ${generatedState.parseError}`)
+  }
+  if (generatedState.exists && generatedState.readError) {
+    errors.push(`Generated JSON read failed: ${generatedState.readError}`)
+  }
+  if (!generatedState.exists) {
+    warnings.push('Generated JSON file is missing.')
+  }
+
+  const effectiveRoute = normalizeRoutePath(
+    options.spec?.directory?.route || `/admin/${model.table}`,
+    `/admin/${model.table}`,
+  )
+
+  let directoryRoutePath = ''
+  let recordRoutePath = ''
+  try {
+    const routeFiles = resolveGeneratedRouteFiles(effectiveRoute, cwd)
+    directoryRoutePath = routeFiles.directory
+    recordRoutePath = routeFiles.record
+  }
+  catch (error: any) {
+    errors.push(error?.message || String(error))
+  }
+
+  const directorySource = directoryRoutePath ? await readTextFile(directoryRoutePath) : null
+  const recordSource = recordRoutePath ? await readTextFile(recordRoutePath) : null
+
+  const generatedData = generatedState.data
+  const generatedModelKey = String(
+    generatedData?.modelKey ?? generatedData?.spec?.model ?? '',
+  ).trim().toLowerCase()
+  const generatedRoute = String(
+    generatedData?.directoryRoute ?? generatedData?.spec?.directory?.route ?? '',
+  ).trim()
+
+  const modelKeyMatch = generatedData
+    ? generatedModelKey === model.modelKey
+    : undefined
+  const routeMatch = generatedData
+    ? normalizeRoutePath(generatedRoute || effectiveRoute, effectiveRoute) === effectiveRoute
+    : undefined
+
+  if (generatedData && modelKeyMatch === false) {
+    errors.push(
+      `Generated JSON modelKey mismatch (expected "${model.modelKey}", got "${generatedModelKey || '(empty)'}").`,
+    )
+  }
+  if (generatedData && routeMatch === false) {
+    warnings.push(
+      `Generated JSON directoryRoute differs from spec route (generated="${generatedRoute || '(empty)'}", spec="${effectiveRoute}").`,
+    )
+  }
+  if (directoryRoutePath && !directorySource) {
+    warnings.push(`Directory route page is missing (${directoryRoutePath}).`)
+  }
+  if (recordRoutePath && !recordSource) {
+    warnings.push(`Record route page is missing (${recordRoutePath}).`)
   }
 
   return {
-    spec: normalizeModelSpec(raw, model),
+    modelKey: model.modelKey,
+    source,
+    fragment: {
+      path: fragmentPath,
+      exists: fragmentState.exists,
+      parseOk: fragmentState.exists ? Boolean(fragmentState.data) : false,
+      readError: fragmentState.readError || undefined,
+      parseError: fragmentState.parseError || undefined,
+    },
+    generated: {
+      path: generatedPath,
+      exists: generatedState.exists,
+      parseOk: generatedState.exists ? Boolean(generatedState.data) : false,
+      readError: generatedState.readError || undefined,
+      parseError: generatedState.parseError || undefined,
+      modelKeyMatch,
+      routeMatch,
+    },
+    routes: {
+      directory: {
+        path: directoryRoutePath,
+        exists: Boolean(directorySource),
+        managed: Boolean(directorySource?.includes(marker)),
+      },
+      record: {
+        path: recordRoutePath,
+        exists: Boolean(recordSource),
+        managed: Boolean(recordSource?.includes(marker)),
+      },
+    },
+    warnings,
+    errors,
+  }
+}
+
+export const readModelSpec = async (
+  model: ModelManagerModel,
+  cwd = process.cwd(),
+  options: {
+    strictFragment?: boolean
+  } = {},
+): Promise<{
+  spec: ModelLayoutSpec
+  source: 'fragment' | 'default'
+  diagnostics: ModelSpecAssetsDiagnostics
+}> => {
+  const { fragmentFile } = resolveModelManagerPaths(cwd)
+  const filePath = fragmentFile(model.modelKey)
+  const strictFragment = options.strictFragment ?? true
+  const fragmentState = await readYamlFileState<ModelLayoutSpec>(filePath)
+
+  if (!fragmentState.data) {
+    const fallbackSpec = createDefaultModelSpec(model)
+    const diagnostics = await inspectModelSpecAssets(model, {
+      spec: fallbackSpec,
+      source: 'default',
+      cwd,
+    })
+
+    if (fragmentState.exists && strictFragment) {
+      const reason = fragmentState.parseError || fragmentState.readError || 'unknown fragment parse/read error'
+      throw new Error(
+        `Model fragment for "${model.modelKey}" exists but could not be loaded (${filePath}). ${reason}`,
+      )
+    }
+
+    return {
+      spec: fallbackSpec,
+      source: 'default',
+      diagnostics,
+    }
+  }
+
+  const normalized = normalizeModelSpec(fragmentState.data, model)
+  const diagnostics = await inspectModelSpecAssets(model, {
+    spec: normalized,
     source: 'fragment',
+    cwd,
+  })
+
+  return {
+    spec: normalized,
+    source: 'fragment',
+    diagnostics,
   }
 }
 
@@ -2126,9 +2404,15 @@ export const commitModelSpec = async (
   const { fragmentFile, generatedFile } = resolveModelManagerPaths(cwd)
   const fragmentPath = fragmentFile(model.modelKey)
   const generatedPath = generatedFile(model.modelKey)
-  const previousRaw = await readYamlFile<ModelLayoutSpec>(fragmentPath)
-  const previousRoute = previousRaw?.directory?.route
-    ? normalizeRoutePath(previousRaw.directory.route, `/admin/${model.table}`)
+  const previousFragment = await readYamlFileState<ModelLayoutSpec>(fragmentPath)
+  if (previousFragment.exists && !previousFragment.data && (previousFragment.parseError || previousFragment.readError)) {
+    console.warn(
+      `[helios-admin:model-manager] Existing fragment for "${model.modelKey}" is invalid; route cleanup will skip previous-route inference. ` +
+        `${previousFragment.path}: ${previousFragment.parseError || previousFragment.readError}`,
+    )
+  }
+  const previousRoute = previousFragment.data?.directory?.route
+    ? normalizeRoutePath(previousFragment.data.directory.route, `/admin/${model.table}`)
     : null
 
   const normalized = normalizeModelSpec(payload, model)
@@ -2158,10 +2442,16 @@ export const commitModelSpec = async (
   await fs.writeFile(generatedPath, JSON.stringify(generatedOutput, null, 2), 'utf-8')
 
   const routeFiles = await syncGeneratedRoutePages(model, normalized, previousRoute, cwd)
+  const diagnostics = await inspectModelSpecAssets(model, {
+    spec: normalized,
+    source: 'fragment',
+    cwd,
+  })
 
   return {
     spec: normalized,
     committedAt,
+    diagnostics,
     files: {
       fragment: fragmentPath,
       generated: generatedPath,

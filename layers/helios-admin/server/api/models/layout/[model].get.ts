@@ -25,17 +25,26 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const state = await readModelSpec(model)
-  const paths = resolveModelManagerPaths()
+  try {
+    const state = await readModelSpec(model)
+    const paths = resolveModelManagerPaths()
 
-  return {
-    ok: true,
-    model,
-    source: state.source,
-    spec: state.spec,
-    files: {
-      fragment: paths.fragmentFile(model.modelKey),
-      generated: paths.generatedFile(model.modelKey),
-    },
+    return {
+      ok: true,
+      model,
+      source: state.source,
+      spec: state.spec,
+      diagnostics: state.diagnostics,
+      files: {
+        fragment: paths.fragmentFile(model.modelKey),
+        generated: paths.generatedFile(model.modelKey),
+      },
+    }
+  }
+  catch (error: any) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: error?.message ?? `Failed to read model layout for "${model.modelKey}".`,
+    })
   }
 })
