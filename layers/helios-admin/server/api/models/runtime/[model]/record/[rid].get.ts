@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   const specState = await readModelSpec(model)
 
   try {
-    const recordState = await readModelRecordBySlug(event, model, ridParam)
+    const recordState = await readModelRecordBySlug(event, model, ridParam, specState.spec)
     if (!recordState) {
       throw createError({
         statusCode: 404,

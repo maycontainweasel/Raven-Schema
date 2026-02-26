@@ -15,6 +15,7 @@ withDefaults(
     type?: AInputType
     required?: boolean
     disabled?: boolean
+    readOnly?: boolean
   }>(),
   {
     placeholder: '',
@@ -23,6 +24,7 @@ withDefaults(
     type: 'text',
     required: false,
     disabled: false,
+    readOnly: false,
   },
 )
 
@@ -46,6 +48,7 @@ const hasSuffix = computed(() => Boolean(slots.suffix))
         class="a-input"
         :type="type"
         :placeholder="placeholder"
+        :readonly="readOnly"
         autocomplete="off"
       />
 
@@ -60,6 +63,7 @@ const hasSuffix = computed(() => Boolean(slots.suffix))
       class="a-input"
       :type="type"
       :placeholder="placeholder"
+      :readonly="readOnly"
       autocomplete="off"
     />
 

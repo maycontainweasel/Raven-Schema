@@ -960,6 +960,19 @@ const activeTabSpec = computed<ModelUITabSpec | null>(() => {
   return availableTabs.find(tab => tab.slug === activeTabSlug.value) ?? availableTabs[0] ?? null
 })
 
+const builder2RuntimeRows = computed<ModelUITabSpec['primary']>(() => {
+  const tab = activeTabSpec.value
+  if (!tab) return []
+  const rows = Array.isArray(tab.primary) ? tab.primary : []
+  const builderRows = rows.filter((row) => {
+    if (!row || typeof row !== 'object') return false
+    if (String(row.id || '').trim() === PAGE_BUILDER2_ROW_ID) return true
+    const meta = (row.meta && typeof row.meta === 'object') ? row.meta as Record<string, any> : {}
+    return Boolean(meta.builder2)
+  })
+  return builderRows.length ? builderRows : rows
+})
+
 const activeTabWidgetIds = computed(() => {
   const tab = activeTabSpec.value
   if (!tab) return [] as string[]
@@ -1101,6 +1114,7 @@ const newFieldFromModel = (fieldName?: string): ModelUIFieldSpec => {
             placeholder: `Enter ${baseField.replace(/[-_]+/g, ' ')}`,
           },
     },
+    readonly: false,
     validation: {},
   }
 }
@@ -1485,6 +1499,7 @@ const fieldPreviewValue = (field: ModelUIFieldSpec) => {
 }
 
 const setFieldPreviewValue = (field: ModelUIFieldSpec, value: unknown) => {
+  if (field.readonly) return
   const key = resolveFieldPreviewKey(field)
   if (!key) return
   builder2FieldState.value[key] = value
@@ -1546,23 +1561,27 @@ const resolvePreviewFieldProps = (field: ModelUIFieldSpec) => {
     ? field.component.options
     : {}
   const label = String(field.label || resolveFieldPreviewKey(field) || 'Field').trim()
+  const readOnly = Boolean(field.readonly)
+  const disabled = Boolean(field.disabled || (options as any).disabled)
 
   if (componentName === 'ANumberInput') {
     return {
       label,
-      helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+      helperText: String((options as any).helperText || ''),
       min: Number.isFinite(Number((options as any).min)) ? Number((options as any).min) : undefined,
       max: Number.isFinite(Number((options as any).max)) ? Number((options as any).max) : undefined,
       step: Number.isFinite(Number((options as any).step)) ? Number((options as any).step) : 1,
       mode: String((options as any).mode || 'default'),
       showScrubber: Boolean((options as any).showScrubber),
+      disabled,
+      readOnly,
     }
   }
 
   if (componentName === 'ACombobox') {
     return {
       label,
-      helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+      helperText: String((options as any).helperText || ''),
       placeholder: String((options as any).placeholder || `Select ${label.toLowerCase()}`),
       grouped: Boolean((options as any).grouped),
       multiple: Boolean((options as any).multiple),
@@ -1570,24 +1589,29 @@ const resolvePreviewFieldProps = (field: ModelUIFieldSpec) => {
       showIndicator: (options as any).showIndicator !== false,
       highlightMatch: Boolean((options as any).highlightMatch),
       options: normalizeComboboxOptions((options as any).options),
+      disabled: disabled || readOnly,
     }
   }
 
   if (componentName === 'ATagsInput') {
     return {
       label,
-      helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+      helperText: String((options as any).helperText || ''),
       placeholder: String((options as any).placeholder || 'Add tag'),
       withCombobox: Boolean((options as any).withCombobox),
       options: normalizeComboboxOptions((options as any).options),
+      disabled,
+      readOnly,
     }
   }
 
   return {
     label,
-    helperText: `modelKey=${resolveFieldPreviewKey(field)}`,
+    helperText: String((options as any).helperText || ''),
     type: String((options as any).type || 'text'),
     placeholder: String((options as any).placeholder || `Enter ${label.toLowerCase()}`),
+    disabled,
+    readOnly,
   }
 }
 
@@ -1734,6 +1758,7 @@ const fieldContractPreview = computed(() => {
       field: target.field.field,
       modelKey: target.field.modelKey,
       action: target.field.action,
+      readonly: Boolean(target.field.readonly),
       component: target.field.component,
       validation: target.field.validation || {},
     },
@@ -2125,9 +2150,17 @@ onBeforeUnmount(() => {
                 <span class="a-field__label">Slug Policy</span>
                 <select v-model="form.directory.slugPolicy" class="a-select">
                   <option value="rid">rid</option>
+                  <option value="subId">subId</option>
                   <option value="slug">slug</option>
                   <option value="id">id</option>
                   <option value="custom">custom</option>
+                  <option
+                    v-for="fieldKey in modelFieldOptions"
+                    :key="`slug-policy-field-${fieldKey}`"
+                    :value="fieldKey"
+                  >
+                    {{ `field:${fieldKey}` }}
+                  </option>
                 </select>
               </label>
 
@@ -3164,6 +3197,17 @@ onBeforeUnmount(() => {
                           :title="widget.label || widget.name"
                           :description="widget.subtitle || 'Field card preview'"
                         >
+                          <div class="builder2-widget__meta">
+                            <label class="a-field">
+                              <span class="a-field__label">Card Title</span>
+                              <input v-model="widget.label" class="a-input" type="text" placeholder="Exam Details">
+                            </label>
+                            <label class="a-field">
+                              <span class="a-field__label">Card Description</span>
+                              <input v-model="widget.subtitle" class="a-input" type="text" placeholder="Primary model fields.">
+                            </label>
+                          </div>
+
                           <div class="builder2-widget__fields">
                             <div v-for="field in widget.fields" :key="field.id" class="builder2-field">
                               <component
@@ -3214,7 +3258,7 @@ onBeforeUnmount(() => {
 
             <section v-else class="builder2-runtime smt-050">
               <section
-                v-for="row in activeTabSpec.primary"
+                v-for="row in builder2RuntimeRows"
                 :key="`pb2-runtime-row-${row.id}`"
                 class="layout-row"
                 :class="row.class"
@@ -3428,6 +3472,10 @@ onBeforeUnmount(() => {
               <label class="a-field inline-field">
                 <span class="a-field__label">Required</span>
                 <input v-if="fieldValidationState" v-model="fieldValidationState.required" type="checkbox">
+              </label>
+              <label class="a-field inline-field">
+                <span class="a-field__label">Read Only</span>
+                <input v-model="fieldSettingsTarget.field.readonly" type="checkbox">
               </label>
               <label class="a-field">
                 <span class="a-field__label">Min Length</span>
@@ -4151,15 +4199,18 @@ onBeforeUnmount(() => {
 }
 
 .layout-row {
-  display: flex;
-  flex-direction: column;
   gap: 0.55rem;
 }
 
 .layout-col {
-  display: grid;
   gap: 0.55rem;
   min-width: 0;
+}
+
+.builder2-widget__meta {
+  display: grid;
+  gap: 0.42rem;
+  margin-bottom: 0.5rem;
 }
 
 .widget-fields {

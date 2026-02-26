@@ -33,7 +33,14 @@ export default defineEventHandler(async (event) => {
   const specState = await readModelSpec(model)
 
   try {
-    const updated = await updateModelRecordBySlug(event, model, ridParam, payload || {}, id)
+    const updated = await updateModelRecordBySlug(
+      event,
+      model,
+      ridParam,
+      payload || {},
+      id,
+      specState.spec,
+    )
     return {
       ok: true,
       model,

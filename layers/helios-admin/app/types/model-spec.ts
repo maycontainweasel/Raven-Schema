@@ -100,6 +100,14 @@ export type DirectoryCreateDialogSpec = {
   fields: ModelUIFieldSpec[]
 }
 
+export type DirectorySlugPolicy =
+  | 'rid'
+  | 'subId'
+  | 'id'
+  | 'slug'
+  | 'custom'
+  | (string & {})
+
 export type ModelLayoutSpec = {
   version: 2 | 3
   kind: 'helios-model-ui'
@@ -110,7 +118,7 @@ export type ModelLayoutSpec = {
   directory: {
     enabled: boolean
     route: string
-    slugPolicy: 'rid' | 'slug' | 'id' | 'custom'
+    slugPolicy: DirectorySlugPolicy
     title: string
     description: string
     typesense: {

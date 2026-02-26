@@ -877,7 +877,10 @@ const navigateAfterCreateSync = async (syncResponse: ModelCreateRecordSyncRespon
   }
 
   if (syncResponse.slug) {
-    await router.push(`/admin/${modelParam.value}/${encodeURIComponent(syncResponse.slug)}`)
+    const routeBase = String(spec.value?.directory?.route || `/admin/${modelParam.value}`)
+      .trim()
+      .replace(/\/+$/, '')
+    await router.push(`${routeBase}/${encodeURIComponent(syncResponse.slug)}`)
   }
 }
 
@@ -1000,10 +1003,81 @@ const createRecord = async () => {
   }
 }
 
-const toRecordRoute = (row: DirectoryRecord) => {
+const readSubIdFromUnknown = (value: unknown): string | null => {
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    if (trimmed.includes(':')) return trimmed.split(':').slice(1).join(':') || null
+    return trimmed
+  }
+  if (value && typeof value === 'object') {
+    const nested = (value as Record<string, any>).id
+    const nestedTable = (value as Record<string, any>).tb
+    if (typeof nested === 'string' || typeof nested === 'number') {
+      const sub = String(nested).trim()
+      if (!sub) return null
+      if (String(nestedTable || '').trim().length) return sub
+      if (sub.includes(':')) return sub.split(':').slice(1).join(':') || null
+      return sub
+    }
+  }
+  return null
+}
+
+const readRecordValueByKey = (row: DirectoryRecord, key: string): unknown => {
+  if (!key) return undefined
+  if (Object.hasOwn(row, key)) return row[key]
+  const target = key.toLowerCase()
+  const match = Object.keys(row).find(entry => entry.toLowerCase() === target)
+  return match ? row[match] : undefined
+}
+
+const slugifyToken = (value: string) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+const resolveRowSlug = (row: DirectoryRecord) => {
+  const policyRaw = String(spec.value?.directory?.slugPolicy || 'rid').trim()
+  const policy = policyRaw.toLowerCase()
+
   const rid = String(row.rid ?? '').trim()
-  if (!rid) return `/admin/${modelParam.value}`
-  return `/admin/${modelParam.value}/${encodeURIComponent(rid)}`
+  const subId = String(
+    row.__subId
+    ?? readSubIdFromUnknown(row.id)
+    ?? readSubIdFromUnknown(row.rid)
+    ?? '',
+  ).trim()
+
+  if (!policy || policy === 'rid') {
+    return rid || (subId ? `${String(row.__table || modelParam.value).trim()}:${subId}` : '')
+  }
+
+  if (policy === 'subid' || policy === 'sub-id' || policy === 'sub_id' || policy === 'id') {
+    return subId || (rid.includes(':') ? rid.split(':').slice(1).join(':') : rid)
+  }
+
+  if (policy === 'slug' || policy === 'custom') {
+    const direct = String(row.slug ?? row.key ?? row.title ?? row.name ?? '').trim()
+    return slugifyToken(direct)
+  }
+
+  const fieldToken = String(readRecordValueByKey(row, policyRaw) ?? '').trim()
+  if (fieldToken) return fieldToken
+
+  return subId || rid
+}
+
+const toRecordRoute = (row: DirectoryRecord) => {
+  const routeBase = String(spec.value?.directory?.route || `/admin/${modelParam.value}`)
+    .trim()
+    .replace(/\/+$/, '')
+  const slug = String(resolveRowSlug(row) || '').trim()
+  if (!slug) return routeBase
+  return `${routeBase}/${encodeURIComponent(slug)}`
 }
 </script>
 

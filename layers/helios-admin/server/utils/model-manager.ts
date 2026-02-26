@@ -177,6 +177,14 @@ export type DirectoryCreateDialogSpec = {
   fields: ModelUIFieldSpec[]
 }
 
+export type DirectorySlugPolicy =
+  | 'rid'
+  | 'subId'
+  | 'id'
+  | 'slug'
+  | 'custom'
+  | (string & {})
+
 export type ModelLayoutSpec = {
   version: 2 | 3
   kind: 'helios-model-ui'
@@ -187,7 +195,7 @@ export type ModelLayoutSpec = {
   directory: {
     enabled: boolean
     route: string
-    slugPolicy: 'rid' | 'slug' | 'id' | 'custom'
+    slugPolicy: DirectorySlugPolicy
     title: string
     description: string
     typesense: {
@@ -238,6 +246,23 @@ const ensureUnique = <T>(values: T[]) => Array.from(new Set(values))
 const safeText = (value: unknown, fallback: string) => {
   const next = String(value ?? fallback).trim()
   return next.length > 0 ? next : fallback
+}
+
+const normalizeSlugPolicy = (
+  value: unknown,
+  fallback: DirectorySlugPolicy,
+): DirectorySlugPolicy => {
+  const raw = String(value ?? '').trim()
+  if (!raw.length) return fallback
+
+  const token = raw.toLowerCase()
+  if (token === 'rid') return 'rid'
+  if (token === 'id') return 'id'
+  if (token === 'slug') return 'slug'
+  if (token === 'custom') return 'custom'
+  if (token === 'subid' || token === 'sub-id' || token === 'sub_id') return 'subId'
+
+  return raw as DirectorySlugPolicy
 }
 
 const safeArray = (value: unknown): string[] => {
@@ -1863,9 +1888,10 @@ export const normalizeModelSpec = (
     directory: {
       enabled: Boolean(directory?.enabled ?? fallback.directory.enabled),
       route: normalizeRoutePath(directory?.route, fallback.directory.route),
-      slugPolicy: ['rid', 'slug', 'id', 'custom'].includes(String(directory?.slugPolicy))
-        ? (String(directory?.slugPolicy) as ModelLayoutSpec['directory']['slugPolicy'])
-        : fallback.directory.slugPolicy,
+      slugPolicy: normalizeSlugPolicy(
+        directory?.slugPolicy,
+        fallback.directory.slugPolicy,
+      ),
       title: safeText(directory?.title, fallback.directory.title),
       description: safeText(directory?.description, fallback.directory.description),
       typesense: {

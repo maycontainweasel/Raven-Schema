@@ -122,6 +122,84 @@ const parseRidString = (value: string): { table: string, subId: string } | null 
   }
 }
 
+type NormalizedSlugPolicy =
+  | { kind: 'rid' }
+  | { kind: 'subId' }
+  | { kind: 'slug' }
+  | { kind: 'custom' }
+  | { kind: 'field', fieldKey: string }
+
+const normalizeSlugPolicy = (value: unknown): NormalizedSlugPolicy => {
+  const raw = String(value ?? '').trim()
+  const token = raw.toLowerCase()
+
+  if (!token || token === 'rid') return { kind: 'rid' }
+  if (token === 'subid' || token === 'sub-id' || token === 'sub_id' || token === 'id') {
+    return { kind: 'subId' }
+  }
+  if (token === 'slug') return { kind: 'slug' }
+  if (token === 'custom') return { kind: 'custom' }
+
+  return { kind: 'field', fieldKey: raw }
+}
+
+const resolveRecordValueByKey = (record: AnyRecord, key: string): unknown => {
+  if (!record || !key) return undefined
+  if (Object.hasOwn(record, key)) return record[key]
+
+  const target = key.toLowerCase()
+  const match = Object.keys(record).find((entry) => entry.toLowerCase() === target)
+  return match ? record[match] : undefined
+}
+
+const valueToToken = (value: unknown): string | null => {
+  if (value === null || typeof value === 'undefined') return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : null
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const token = valueToToken(entry)
+      if (token) return token
+    }
+    return null
+  }
+  if (typeof value === 'object') {
+    const source = value as AnyRecord
+    const nested = valueToToken(source.id ?? source.value ?? source.key ?? source.slug)
+    const table = valueToToken(source.tb)
+    if (table && nested) return `${table}:${nested}`
+    return nested
+  }
+  return null
+}
+
+const tokenMatchesSlug = (
+  value: unknown,
+  slug: string,
+  options?: { allowSlugify?: boolean },
+) => {
+  const token = valueToToken(value)
+  if (!token) return false
+
+  const left = token.trim()
+  const right = slug.trim()
+  if (!left.length || !right.length) return false
+  if (left === right) return true
+  if (left.toLowerCase() === right.toLowerCase()) return true
+
+  if (options?.allowSlugify) {
+    const slugified = slugify(left, left)
+    if (slugified === right || slugified.toLowerCase() === right.toLowerCase()) return true
+  }
+
+  return false
+}
+
 const resolveCreateActionProcedure = (modelKey: string, action: unknown) => {
   const normalizedModel = String(modelKey || '').trim().toLowerCase()
   const raw = String(action ?? '').trim() || `${normalizedModel}.create`
@@ -472,24 +550,30 @@ const resolveSlugPolicyValue = (
   identifiers: RuntimeRecordIdentifiers,
   fallbackTable: string,
 ) => {
-  const policy = spec.directory.slugPolicy
+  const policy = normalizeSlugPolicy(spec.directory.slugPolicy)
   const fallback = identifiers.subId || identifiers.rid || `record-${Date.now()}`
   const directSlug = String(record.slug ?? record.key ?? '').trim()
   const titleSeed = String(record.title ?? record.name ?? (directSlug || fallback)).trim()
 
-  if (policy === 'rid') {
+  if (policy.kind === 'rid') {
     if (identifiers.rid) return identifiers.rid
     if (identifiers.subId) return `${identifiers.table || fallbackTable}:${identifiers.subId}`
     return fallback
   }
 
-  if (policy === 'id') {
+  if (policy.kind === 'subId') {
     return identifiers.subId || fallback
   }
 
-  if (policy === 'slug' || policy === 'custom') {
+  if (policy.kind === 'slug' || policy.kind === 'custom') {
     if (directSlug) return slugify(directSlug, fallback)
     return slugify(titleSeed, fallback)
+  }
+
+  if (policy.kind === 'field') {
+    const fieldValue = resolveRecordValueByKey(record, policy.fieldKey)
+    const fieldToken = valueToToken(fieldValue)
+    if (fieldToken) return fieldToken
   }
 
   return fallback
@@ -510,6 +594,66 @@ const slugLookupCandidates = (slugValue: string): Array<string | number> => {
   }
 
   return unique(candidates.map((entry) => String(entry))).map((entry) => toInputId(entry))
+}
+
+const readListRecordsForLookup = async (modelCaller: ModelCaller) => {
+  const list = modelCaller.typesense?.list
+  if (!list) return [] as AnyRecord[]
+  const listRaw = await list({
+    data: {
+      limit: -1,
+      start: 0,
+    },
+  })
+  return normalizeList(listRaw)
+}
+
+const findRecordBySlugPolicy = async (
+  modelCaller: ModelCaller,
+  policy: NormalizedSlugPolicy,
+  slugValue: string,
+): Promise<AnyRecord | null> => {
+  const slug = safeDecode(slugValue).trim()
+  if (!slug.length) return null
+
+  const records = await readListRecordsForLookup(modelCaller)
+  if (!records.length) return null
+
+  for (const record of records) {
+    if (policy.kind === 'field') {
+      const value = resolveRecordValueByKey(record, policy.fieldKey)
+      if (tokenMatchesSlug(value, slug, { allowSlugify: true })) return record
+      continue
+    }
+
+    if (policy.kind === 'slug' || policy.kind === 'custom') {
+      const candidates = [
+        resolveRecordValueByKey(record, 'slug'),
+        resolveRecordValueByKey(record, 'key'),
+        resolveRecordValueByKey(record, 'title'),
+        resolveRecordValueByKey(record, 'name'),
+      ]
+
+      if (candidates.some((entry) => tokenMatchesSlug(entry, slug, { allowSlugify: true }))) {
+        return record
+      }
+      continue
+    }
+
+    if (policy.kind === 'subId') {
+      const identifiers = resolveRuntimeRecordIdentifiers(record)
+      if (tokenMatchesSlug(identifiers.subId, slug)) return record
+      continue
+    }
+
+    if (policy.kind === 'rid') {
+      const identifiers = resolveRuntimeRecordIdentifiers(record)
+      if (tokenMatchesSlug(identifiers.rid, slug)) return record
+      continue
+    }
+  }
+
+  return null
 }
 
 export const readModelDirectoryRecords = async (
@@ -714,19 +858,57 @@ export const readModelRecordBySlug = async (
   event: H3Event,
   model: ModelManagerModel,
   slugValue: string,
+  spec?: ModelLayoutSpec,
 ) => {
   const resolvedModelCaller = await resolveModelCaller(event, model)
   const modelCaller = resolvedModelCaller.caller
   const resource = modelCaller.typesense?.resource
-  if (!resource) {
+  const policy = normalizeSlugPolicy(spec?.directory?.slugPolicy)
+
+  const lookupByPolicy = async () => {
+    const matched = await findRecordBySlugPolicy(modelCaller, policy, slugValue)
+    if (!matched) return null
+
+    const identifiers = resolveRuntimeRecordIdentifiers(matched, model.table)
+    if (identifiers.subId && resource) {
+      try {
+        const raw = await resource({ data: { id: toInputId(identifiers.subId) } })
+        const record = extractFirstObject(raw)
+        if (record) {
+          return {
+            record,
+            identifiers: resolveRuntimeRecordIdentifiers(record, model.table),
+          }
+        }
+      }
+      catch {
+        // fallback to matched list record below
+      }
+    }
+
+    return {
+      record: matched,
+      identifiers,
+    }
+  }
+
+  if (!resource && !modelCaller.typesense?.list) {
     return null
   }
 
+  if (policy.kind === 'field' || policy.kind === 'slug' || policy.kind === 'custom') {
+    return await lookupByPolicy()
+  }
+
   const candidates = slugLookupCandidates(slugValue)
-  if (!candidates.length) return null
+  if (!candidates.length) {
+    if (modelCaller.typesense?.list) return await lookupByPolicy()
+    return null
+  }
 
   for (const id of candidates) {
     try {
+      if (!resource) break
       const raw = await resource({ data: { id } })
       const record = extractFirstObject(raw)
       if (!record) continue
@@ -741,6 +923,7 @@ export const readModelRecordBySlug = async (
     }
   }
 
+  if (modelCaller.typesense?.list) return await lookupByPolicy()
   return null
 }
 
@@ -750,6 +933,7 @@ export const updateModelRecordBySlug = async (
   slugValue: string,
   payload: Record<string, any>,
   explicitId?: unknown,
+  spec?: ModelLayoutSpec,
 ) => {
   const resolvedModelCaller = await resolveModelCaller(event, model)
   const modelCaller = resolvedModelCaller.caller
@@ -763,6 +947,10 @@ export const updateModelRecordBySlug = async (
   const normalizedExplicit = normalizeSubId(parsedExplicit?.subId || (explicitId as any))
 
   let updateId = normalizedExplicit
+  if (!updateId) {
+    const resolvedBySlug = await readModelRecordBySlug(event, model, slugValue, spec)
+    updateId = String(resolvedBySlug?.identifiers?.subId || '').trim() || null
+  }
   if (!updateId) {
     const candidates = slugLookupCandidates(slugValue)
     const first = candidates[0]

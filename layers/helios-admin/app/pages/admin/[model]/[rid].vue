@@ -137,6 +137,7 @@ const sourceRecord = computed<Record<string, any> | null>(() => {
   return value && typeof value === 'object' ? value : null
 })
 const recordIdentifiers = computed(() => recordData.value?.identifiers ?? null)
+const PAGE_BUILDER2_ROW_ID = 'pb2-row'
 
 const fieldState = ref<Record<string, any>>({})
 const taxonomyState = ref<Record<string, TaxonomyFieldState>>({})
@@ -311,6 +312,18 @@ const resolveFieldBinding = (field: ModelUIFieldSpec): ModelUIFieldBinding => {
 }
 
 const isTaxonomyField = (field: ModelUIFieldSpec) => resolveFieldBinding(field).kind === 'taxonomy'
+const isFieldReadOnly = (field: ModelUIFieldSpec) => Boolean(field.readonly)
+
+const resolveRuntimeRows = (tab: ModelUITabSpec): ModelUITabSpec['primary'] => {
+  const rows = Array.isArray(tab.primary) ? tab.primary : []
+  const builderRows = rows.filter((row) => {
+    if (!row || typeof row !== 'object') return false
+    if (String(row.id || '').trim() === PAGE_BUILDER2_ROW_ID) return true
+    const meta = (row.meta && typeof row.meta === 'object') ? row.meta as Record<string, any> : {}
+    return Boolean(meta.builder2)
+  })
+  return builderRows.length ? builderRows : rows
+}
 
 const resolveRecordFieldValue = (record: Record<string, any> | null, field: ModelUIFieldSpec) => {
   if (!record) return undefined
@@ -398,7 +411,7 @@ const allFieldSpecs = computed(() => {
   const merged: ModelUIFieldSpec[] = []
 
   for (const tab of tabs) {
-    for (const row of tab.primary) {
+    for (const row of resolveRuntimeRows(tab)) {
       for (const column of row.columns) {
         for (const widget of column.primary) {
           for (const field of widget.fields) {
@@ -499,6 +512,7 @@ const taxonomyTreeForField = (field: ModelUIFieldSpec) => {
 }
 
 const setTaxonomyTreeForField = (field: ModelUIFieldSpec, tree: TaxonomyTreeNode[]) => {
+  if (isFieldReadOnly(field)) return
   const key = resolveFieldKey(field)
   const state = taxonomyStateFor(field)
   taxonomyState.value = {
@@ -555,7 +569,7 @@ const loadTaxonomyField = async (field: ModelUIFieldSpec, ticket: number) => {
       },
     }
 
-    setFieldValue(field, selected)
+    applyFieldValue(field, selected)
   }
   catch (error: any) {
     if (ticket !== taxonomyLoadTicket) return
@@ -764,9 +778,12 @@ const resolveFieldProps = (field: ModelUIFieldSpec) => {
     field.component?.options,
     { applyDefaults: true, allowUnknown: true },
   ).resolvedOptions as Record<string, any>
+  const readOnly = isFieldReadOnly(field)
+  const disabled = Boolean(options.disabled) || Boolean(field.disabled)
   const base = {
     label: field.label || toLabel(key),
-    helperText: options.helperText || `modelKey=${key}`,
+    helperText: String(options.helperText || ''),
+    disabled,
   }
   const placeholder = String(options.placeholder ?? `Enter ${toLabel(key).toLowerCase()}`).trim()
 
@@ -787,6 +804,7 @@ const resolveFieldProps = (field: ModelUIFieldSpec) => {
       clearable: Boolean(options.clearable ?? true),
       showIndicator: Boolean(options.showIndicator ?? true),
       emptyText: String(options.emptyText ?? 'No options found.'),
+      disabled: disabled || readOnly,
     }
   }
 
@@ -802,6 +820,7 @@ const resolveFieldProps = (field: ModelUIFieldSpec) => {
       showIndicator: Boolean(options.showIndicator ?? true),
       emptyText: String(options.emptyText ?? 'No options found.'),
       minChars: Number(options.minChars ?? 1),
+      disabled: disabled || readOnly,
     }
   }
 
@@ -809,10 +828,11 @@ const resolveFieldProps = (field: ModelUIFieldSpec) => {
     ...base,
     type: String(options.type ?? 'text'),
     placeholder,
+    readOnly,
   }
 }
 
-function setFieldValue(field: ModelUIFieldSpec, value: unknown) {
+function applyFieldValue(field: ModelUIFieldSpec, value: unknown) {
   const key = resolveFieldKey(field)
   const nextValue = isTaxonomyField(field)
     ? (Array.isArray(value)
@@ -823,6 +843,11 @@ function setFieldValue(field: ModelUIFieldSpec, value: unknown) {
     ...fieldState.value,
     [key]: nextValue,
   }
+}
+
+function setFieldValue(field: ModelUIFieldSpec, value: unknown) {
+  if (isFieldReadOnly(field)) return
+  applyFieldValue(field, value)
 }
 
 const saveDraft = async () => {
@@ -962,6 +987,7 @@ const buildActionGroupsForFields = (fields: ModelUIFieldSpec[]): ActionGroup[] =
   const taxonomyDetachByAction = new Map<string, { terms: Set<string>, fields: Set<string> }>()
 
   for (const field of fields) {
+    if (isFieldReadOnly(field)) continue
     const fieldKey = resolveFieldKey(field)
     if (!fieldKey) continue
 
@@ -1271,7 +1297,7 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
 
           <template v-else>
             <section
-              v-for="row in activeTab.primary"
+              v-for="row in resolveRuntimeRows(activeTab)"
               :key="row.id"
               class="layout-row"
               :class="row.class"
@@ -1319,7 +1345,9 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
                               :taxonomy-label="field.label || toLabel(resolveFieldKey(field))"
                               :title="field.label || toLabel(resolveFieldKey(field))"
                               :description="taxonomyState[resolveFieldKey(field)]?.error || 'Manage taxonomy terms for this record.'"
-                              :create-term-action="(payload) => createTaxonomyTerm(field, payload)"
+                              :draggable="!isFieldReadOnly(field)"
+                              :checkable="!isFieldReadOnly(field)"
+                              :create-term-action="isFieldReadOnly(field) ? undefined : ((payload) => createTaxonomyTerm(field, payload))"
                               @update:model-value="setTaxonomyTreeForField(field, $event)"
                               @update:checked-ids="setFieldValue(field, $event)"
                             />
@@ -1449,13 +1477,10 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
 }
 
 .layout-row {
-  display: flex;
-  flex-direction: column;
   gap: 0.55rem;
 }
 
 .layout-col {
-  display: grid;
   gap: 0.55rem;
   min-width: 0;
 }
