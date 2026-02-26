@@ -3,6 +3,7 @@ dependencies:
   "vue-sonner": "^2.0.9"
   "yaml": "^2.8.1"
   "@ark-ui/vue": "5.31.0"
+  "interactjs": "^1.10.27"
 
 devDependencies:
   "@iconify-json/lucide": "^1.2.88"

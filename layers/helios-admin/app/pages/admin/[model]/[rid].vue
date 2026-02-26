@@ -2,10 +2,12 @@
 import { defineAsyncComponent, type Component } from 'vue'
 import type {
   ModelLayoutSpec,
+  ModelUIColumnSpec,
   ModelUIFieldBinding,
   ModelUIFieldBindingModel,
   ModelUIFieldBindingSubtable,
   ModelUIFieldBindingTaxonomy,
+  ModelUIRowSpec,
   ModelSpecResponse,
   ModelUIFieldSpec,
   ModelUITabSpec,
@@ -323,6 +325,62 @@ const resolveRuntimeRows = (tab: ModelUITabSpec): ModelUITabSpec['primary'] => {
     return Boolean(meta.builder2)
   })
   return builderRows.length ? builderRows : rows
+}
+
+const clampGridCols = (value: unknown) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 24
+  return Math.max(1, Math.min(48, Math.round(parsed)))
+}
+
+const frameSpanFromWidth = (width: number, gridCols: number) => {
+  return Math.max(1, Math.min(gridCols, Math.round((Math.max(1, width) / 100) * gridCols)))
+}
+
+const normalizeFrameBounds = (colStart: unknown, colEnd: unknown, gridCols: number) => {
+  const startParsed = Number(colStart)
+  const endParsed = Number(colEnd)
+  const start = Number.isFinite(startParsed) ? Math.round(startParsed) : 1
+  const end = Number.isFinite(endParsed) ? Math.round(endParsed) : gridCols + 1
+  const clampedStart = Math.max(1, Math.min(gridCols, start))
+  const minEnd = clampedStart + 1
+  const clampedEnd = Math.max(minEnd, Math.min(gridCols + 1, end))
+  return {
+    colStart: clampedStart,
+    colEnd: clampedEnd,
+  }
+}
+
+const readBuilder2RowMeta = (row: ModelUIRowSpec) => {
+  const root = (row.meta && typeof row.meta === 'object') ? row.meta : {}
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  return {
+    gridCols: clampGridCols(raw.gridCols ?? 24),
+  }
+}
+
+const readFrameBounds = (row: ModelUIRowSpec, column: ModelUIColumnSpec) => {
+  const rowMeta = readBuilder2RowMeta(row)
+  const root = (column.meta && typeof column.meta === 'object') ? column.meta : {}
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  const width = Number.isFinite(Number(raw.width)) ? Number(raw.width) : 50
+  const span = frameSpanFromWidth(width, rowMeta.gridCols)
+  return normalizeFrameBounds(raw.colStart ?? 1, raw.colEnd ?? (1 + span), rowMeta.gridCols)
+}
+
+const runtimeRowStyle = (row: ModelUIRowSpec) => {
+  const rowMeta = readBuilder2RowMeta(row)
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${rowMeta.gridCols}, minmax(0, 1fr))`,
+  }
+}
+
+const runtimeColumnStyle = (row: ModelUIRowSpec, column: ModelUIColumnSpec) => {
+  const bounds = readFrameBounds(row, column)
+  return {
+    gridColumn: `${bounds.colStart} / ${bounds.colEnd}`,
+  }
 }
 
 const resolveRecordFieldValue = (record: Record<string, any> | null, field: ModelUIFieldSpec) => {
@@ -1301,12 +1359,14 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
               :key="row.id"
               class="layout-row"
               :class="row.class"
+              :style="runtimeRowStyle(row)"
             >
               <div
                 v-for="column in row.columns"
                 :key="column.id"
                 class="layout-col"
                 :class="column.class"
+                :style="runtimeColumnStyle(row, column)"
               >
                 <template v-for="widget in column.primary" :key="widget.id">
                   <component
