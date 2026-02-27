@@ -1366,6 +1366,7 @@ type Builder2FrameMeta = {
 }
 
 const clampFrameWidth = (value: unknown) => clampPercentWidth(value, 20, 100)
+const clampWidgetWidth = (value: unknown) => clampPercentWidth(value, 20, 100)
 const clampGridCols = (value: unknown) => {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return 24
@@ -1375,6 +1376,14 @@ const clampGridCols = (value: unknown) => {
 type Builder2RowMeta = {
   gridCols: number
 }
+
+type Builder2WidgetMeta = {
+  width: number
+  colStart: number
+  colEnd: number
+}
+
+const BUILDER2_WIDGET_GRID_COLS = 12
 
 const frameSpanFromWidth = (width: number, gridCols: number) => {
   return Math.max(1, Math.min(gridCols, Math.round((Math.max(1, width) / 100) * gridCols)))
@@ -1512,29 +1521,122 @@ const updateFrameMeta = (column: ModelUIColumnSpec, patch: Partial<Builder2Frame
   column.class = buildFrameClass(next.width, next.outerClass) || undefined
 }
 
+const readWidgetMeta = (widget: ModelUIWidgetSpec, gridCols = BUILDER2_WIDGET_GRID_COLS): Builder2WidgetMeta => {
+  const root = (widget.meta && typeof widget.meta === 'object') ? widget.meta : {}
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  const width = clampWidgetWidth(raw.width ?? 100)
+  const span = frameSpanFromWidth(width, gridCols)
+  const bounds = normalizeFrameBounds(raw.colStart ?? 1, raw.colEnd ?? (1 + span), gridCols)
+  return {
+    width,
+    colStart: bounds.colStart,
+    colEnd: bounds.colEnd,
+  }
+}
+
+const ensureWidgetMeta = (widget: ModelUIWidgetSpec, gridCols = BUILDER2_WIDGET_GRID_COLS) => {
+  const meta = readWidgetMeta(widget, gridCols)
+  if (!widget.meta || typeof widget.meta !== 'object') widget.meta = {}
+  const root = widget.meta as Record<string, any>
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  root.builder2 = {
+    ...raw,
+    ...meta,
+  }
+  return meta
+}
+
+const updateWidgetMeta = (widget: ModelUIWidgetSpec, patch: Partial<Builder2WidgetMeta>, gridCols = BUILDER2_WIDGET_GRID_COLS) => {
+  const current = ensureWidgetMeta(widget, gridCols)
+  const nextWidth = patch.width === undefined ? current.width : clampWidgetWidth(patch.width)
+  let nextColStart = patch.colStart === undefined ? current.colStart : Number(patch.colStart)
+  let nextColEnd = patch.colEnd === undefined ? current.colEnd : Number(patch.colEnd)
+  if (patch.width !== undefined && patch.colStart === undefined && patch.colEnd === undefined) {
+    nextColEnd = Number(nextColStart) + frameSpanFromWidth(nextWidth, gridCols)
+  }
+  const bounds = normalizeFrameBounds(nextColStart, nextColEnd, gridCols)
+  const next: Builder2WidgetMeta = {
+    width: nextWidth,
+    colStart: bounds.colStart,
+    colEnd: bounds.colEnd,
+  }
+  if (!widget.meta || typeof widget.meta !== 'object') widget.meta = {}
+  const root = widget.meta as Record<string, any>
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  root.builder2 = {
+    ...raw,
+    ...next,
+  }
+}
+
+const normalizeBuilder2WidgetPositions = (frame: ModelUIColumnSpec, gridCols = BUILDER2_WIDGET_GRID_COLS) => {
+  let cursor = 1
+  for (const widget of frame.primary || []) {
+    const root = (widget.meta && typeof widget.meta === 'object') ? widget.meta : {}
+    const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+    const current = readWidgetMeta(widget, gridCols)
+    const span = frameSpanFromWidth(current.width, gridCols)
+    const hasExplicitStart = Number.isFinite(Number(raw.colStart))
+    const hasExplicitEnd = Number.isFinite(Number(raw.colEnd))
+    const explicitBounds = (hasExplicitStart || hasExplicitEnd)
+      ? normalizeFrameBounds(
+          hasExplicitStart ? Number(raw.colStart) : cursor,
+          hasExplicitEnd
+            ? Number(raw.colEnd)
+            : ((hasExplicitStart ? Number(raw.colStart) : cursor) + span),
+          gridCols,
+        )
+      : null
+    const explicitSpan = explicitBounds ? explicitBounds.colEnd - explicitBounds.colStart : span
+    const canReuseExplicit = Boolean(
+      explicitBounds
+      && explicitSpan === span
+      && explicitBounds.colStart >= cursor
+      && explicitBounds.colEnd <= (gridCols + 1),
+    )
+
+    let colStart = (canReuseExplicit && explicitBounds) ? explicitBounds.colStart : cursor
+    if (colStart > gridCols || (colStart + span) > (gridCols + 1)) {
+      colStart = 1
+    }
+    const colEnd = Math.min(gridCols + 1, colStart + span)
+    updateWidgetMeta(widget, { width: current.width, colStart, colEnd }, gridCols)
+    cursor = colEnd
+    if (cursor > gridCols) cursor = 1
+  }
+}
+
 const normalizeBuilder2FramePositions = (row: ModelUIRowSpec) => {
   const rowMeta = readBuilder2RowMeta(row)
   let cursor = 1
   for (const column of row.columns || []) {
     const root = (column.meta && typeof column.meta === 'object') ? column.meta : {}
     const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+    const current = readFrameMeta(column, rowMeta.gridCols)
+    const span = frameSpanFromWidth(current.width, rowMeta.gridCols)
     const hasExplicitStart = Number.isFinite(Number(raw.colStart))
     const hasExplicitEnd = Number.isFinite(Number(raw.colEnd))
-    const current = readFrameMeta(column, rowMeta.gridCols)
+    const explicitBounds = (hasExplicitStart || hasExplicitEnd)
+      ? normalizeFrameBounds(
+          hasExplicitStart ? Number(raw.colStart) : cursor,
+          hasExplicitEnd
+            ? Number(raw.colEnd)
+            : ((hasExplicitStart ? Number(raw.colStart) : cursor) + span),
+          rowMeta.gridCols,
+        )
+      : null
+    const explicitSpan = explicitBounds ? explicitBounds.colEnd - explicitBounds.colStart : span
+    const canReuseExplicit = Boolean(
+      explicitBounds
+      && explicitSpan === span
+      && explicitBounds.colStart >= cursor
+      && explicitBounds.colEnd <= (rowMeta.gridCols + 1),
+    )
 
-    if (hasExplicitStart || hasExplicitEnd) {
-      updateFrameMeta(column, {
-        width: current.width,
-        outerClass: current.outerClass,
-        innerClass: current.innerClass,
-        colStart: current.colStart,
-        colEnd: current.colEnd,
-      }, rowMeta.gridCols)
-      continue
+    let colStart = (canReuseExplicit && explicitBounds) ? explicitBounds.colStart : cursor
+    if (colStart > rowMeta.gridCols || (colStart + span) > (rowMeta.gridCols + 1)) {
+      colStart = 1
     }
-
-    const span = frameSpanFromWidth(current.width, rowMeta.gridCols)
-    const colStart = cursor
     const colEnd = colStart + span
     updateFrameMeta(column, {
       width: current.width,
@@ -1564,9 +1666,12 @@ const pageBuilder2CanvasFrames = computed(() =>
   pageBuilder2Frames.value.map((frame) => {
     const row = pageBuilder2Row.value
     const rowMeta = row ? readBuilder2RowMeta(row) : { gridCols: 24 }
+    const meta = readFrameMeta(frame, rowMeta.gridCols)
     return {
       id: frame.id,
-      width: readFrameMeta(frame, rowMeta.gridCols).width,
+      width: meta.width,
+      colStart: meta.colStart,
+      colEnd: meta.colEnd,
       data: frame,
     }
   }),
@@ -1606,6 +1711,50 @@ const onBuilder2PositionFrame = (payload: { id: string, colStart: number, colEnd
   }, rowMeta.gridCols)
 }
 
+const findBuilder2WidgetById = (frame: ModelUIColumnSpec, widgetId: string) =>
+  frame.primary.find(widget => widget.id === widgetId) ?? null
+
+const pageBuilder2WidgetCanvasFrames = (frameId: string) => {
+  const frame = findBuilder2FrameById(frameId)
+  if (!frame) return []
+  return (frame.primary || []).map((widget) => {
+    const meta = ensureWidgetMeta(widget, BUILDER2_WIDGET_GRID_COLS)
+    return {
+      id: widget.id,
+      width: meta.width,
+      colStart: meta.colStart,
+      colEnd: meta.colEnd,
+      data: widget,
+    }
+  })
+}
+
+const onBuilder2MoveWidget = (
+  frameId: string,
+  payload: { fromId: string, toId: string, position: 'before' | 'after' },
+) => {
+  const frame = findBuilder2FrameById(frameId)
+  if (!frame) return
+  frame.primary = reorderByDrop(frame.primary, payload.fromId, payload.toId, payload.position)
+  normalizeBuilder2WidgetPositions(frame, BUILDER2_WIDGET_GRID_COLS)
+}
+
+const onBuilder2ResizeWidget = (frameId: string, payload: { id: string, width: number }) => {
+  const frame = findBuilder2FrameById(frameId)
+  if (!frame) return
+  const widget = findBuilder2WidgetById(frame, payload.id)
+  if (!widget) return
+  updateWidgetMeta(widget, { width: payload.width }, BUILDER2_WIDGET_GRID_COLS)
+}
+
+const onBuilder2PositionWidget = (frameId: string, payload: { id: string, colStart: number, colEnd: number }) => {
+  const frame = findBuilder2FrameById(frameId)
+  if (!frame) return
+  const widget = findBuilder2WidgetById(frame, payload.id)
+  if (!widget) return
+  updateWidgetMeta(widget, { colStart: payload.colStart, colEnd: payload.colEnd }, BUILDER2_WIDGET_GRID_COLS)
+}
+
 const addBuilder2WidgetById = (frameId: string) => {
   const frame = findBuilder2FrameById(frameId)
   if (!frame) return
@@ -1616,6 +1765,7 @@ const removeBuilder2Widget = (frameId: string, widgetId: string) => {
   const frame = findBuilder2FrameById(frameId)
   if (!frame) return
   removeWidget(frame, widgetId)
+  normalizeBuilder2WidgetPositions(frame, BUILDER2_WIDGET_GRID_COLS)
 }
 
 const resolveFieldPreviewKey = (field: ModelUIFieldSpec) =>
@@ -1818,11 +1968,12 @@ const addBuilder2Frame = () => {
   const frameIndex = row.columns.length + 1
   const width = row.columns.length ? 50 : 100
   const span = frameSpanFromWidth(width, rowMeta.gridCols)
-  const maxUsed = row.columns.reduce((max, column) => {
-    const meta = readFrameMeta(column, rowMeta.gridCols)
-    return Math.max(max, meta.colEnd)
-  }, 1)
-  const colStart = Math.min(rowMeta.gridCols, maxUsed)
+  const lastFrame = row.columns[row.columns.length - 1]
+  const lastMeta = lastFrame ? readFrameMeta(lastFrame, rowMeta.gridCols) : null
+  let colStart = lastMeta ? lastMeta.colEnd : 1
+  if (colStart > rowMeta.gridCols || (colStart + span) > (rowMeta.gridCols + 1)) {
+    colStart = 1
+  }
   const colEnd = Math.min(rowMeta.gridCols + 1, colStart + span)
   const frame: ModelUIColumnSpec = {
     id: makeId('frame'),
@@ -1841,7 +1992,7 @@ const addBuilder2Frame = () => {
   }
   row.columns.push(frame)
   ensureFrameMeta(frame, rowMeta.gridCols)
-  addWidget(frame)
+  addBuilder2Widget(frame)
 }
 
 const removeBuilder2Frame = (frameId: string) => {
@@ -1860,6 +2011,17 @@ const addBuilder2Widget = (column: ModelUIColumnSpec) => {
   const widget = column.primary[column.primary.length - 1]
   if (!widget) return
   if (!widget.class && meta.innerClass) widget.class = meta.innerClass
+  const width = column.primary.length > 1 ? 50 : 100
+  const span = frameSpanFromWidth(width, BUILDER2_WIDGET_GRID_COLS)
+  const previous = column.primary[column.primary.length - 2]
+  const previousMeta = previous ? readWidgetMeta(previous, BUILDER2_WIDGET_GRID_COLS) : null
+  let colStart = previousMeta ? previousMeta.colEnd : 1
+  if (colStart > BUILDER2_WIDGET_GRID_COLS || (colStart + span) > (BUILDER2_WIDGET_GRID_COLS + 1)) {
+    colStart = 1
+  }
+  const colEnd = Math.min(BUILDER2_WIDGET_GRID_COLS + 1, colStart + span)
+  updateWidgetMeta(widget, { width, colStart, colEnd }, BUILDER2_WIDGET_GRID_COLS)
+  normalizeBuilder2WidgetPositions(column, BUILDER2_WIDGET_GRID_COLS)
 }
 
 const addBuilder2Field = (widget: ModelUIWidgetSpec) => {
@@ -1868,6 +2030,23 @@ const addBuilder2Field = (widget: ModelUIWidgetSpec) => {
   if (!nextField) return
   const key = resolveFieldPreviewKey(nextField)
   if (key && builder2FieldState.value[key] === undefined) builder2FieldState.value[key] = ''
+}
+
+const addBuilder2FieldByFrame = (widget: unknown) => {
+  if (!widget || typeof widget !== 'object') return
+  addBuilder2Field(widget as ModelUIWidgetSpec)
+}
+
+const openFieldSettingsByFrame = (frameId: string, widgetId: unknown, fieldId: string) => {
+  const resolvedWidgetId = String(widgetId || '').trim()
+  if (!resolvedWidgetId) return
+  openFieldSettings(frameId, resolvedWidgetId, fieldId)
+}
+
+const removeBuilder2WidgetByFrame = (frameId: string, widgetId: unknown) => {
+  const resolvedWidgetId = String(widgetId || '').trim()
+  if (!resolvedWidgetId) return
+  removeBuilder2Widget(frameId, resolvedWidgetId)
 }
 
 const findFieldEditorTarget = () => {
@@ -2048,6 +2227,21 @@ const builder2ColumnStyle = (row: ModelUIRowSpec, column: ModelUIColumnSpec) => 
   }
 }
 
+const builder2WidgetGridStyle = () => {
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${BUILDER2_WIDGET_GRID_COLS}, minmax(0, 1fr))`,
+    gap: '0.55rem',
+  }
+}
+
+const builder2WidgetStyle = (widget: ModelUIWidgetSpec) => {
+  const meta = readWidgetMeta(widget, BUILDER2_WIDGET_GRID_COLS)
+  return {
+    gridColumn: `${meta.colStart} / ${meta.colEnd}`,
+  }
+}
+
 const setFieldComponentName = (field: ModelUIFieldSpec, name: string) => {
   const nextName = String(name || 'AInput').trim() || 'AInput'
   field.component.name = nextName
@@ -2128,7 +2322,10 @@ watch(
     if (!activeTabSpec.value) return
     const row = ensureBuilder2Row(activeTabSpec.value)
     const rowMeta = readBuilder2RowMeta(row)
-    row.columns.forEach(column => ensureFrameMeta(column, rowMeta.gridCols))
+    row.columns.forEach((column) => {
+      ensureFrameMeta(column, rowMeta.gridCols)
+      normalizeBuilder2WidgetPositions(column, BUILDER2_WIDGET_GRID_COLS)
+    })
     normalizeBuilder2FramePositions(row)
   },
   { immediate: true },
@@ -3348,6 +3545,9 @@ onBeforeUnmount(() => {
                 :max-width="100"
                 :draggable="true"
                 :resizable="true"
+                drag-handle-selector=".builder2-frame__head"
+                drag-ignore-selector=".builder2-frame__resize-edge"
+                resize-edge-selector=".builder2-frame__resize-edge"
                 @move-frame="onBuilder2MoveFrame"
                 @resize-frame="onBuilder2ResizeFrame"
                 @position-frame="onBuilder2PositionFrame"
@@ -3365,46 +3565,60 @@ onBeforeUnmount(() => {
                         </button>
                       </div>
                     </div>
+                    <div class="builder2-frame__resize-edge" aria-hidden="true" />
 
                     <div class="builder2-frame__widgets" :class="readFrameMeta(canvasFrame.data).innerClass">
-                      <section
-                        v-for="widget in canvasFrame.data?.primary || []"
-                        :key="widget.id"
-                        class="builder2-widget"
+                      <PageFrameCanvas
+                        :frames="pageBuilder2WidgetCanvasFrames(frameId)"
+                        :grid-cols="BUILDER2_WIDGET_GRID_COLS"
+                        :min-width="20"
+                        :max-width="100"
+                        :draggable="true"
+                        :resizable="true"
+                        @move-frame="onBuilder2MoveWidget(frameId, $event)"
+                        @resize-frame="onBuilder2ResizeWidget(frameId, $event)"
+                        @position-frame="onBuilder2PositionWidget(frameId, $event)"
                       >
-                        <FieldSectionCard
-                          :title="widget.label || ''"
-                          :description="widget.subtitle || ''"
-                        >
-                          <div class="builder2-widget__fields">
-                            <div v-for="field in widget.fields" :key="field.id" class="builder2-field">
-                              <component
-                                :is="resolvePreviewComponentName(field)"
-                                :model-value="fieldPreviewModelValue(field)"
-                                v-bind="resolvePreviewFieldProps(field)"
-                                @update:model-value="setFieldPreviewValue(field, $event)"
-                              />
-                              <button
-                                class="builder2-field__settings"
-                                type="button"
-                                @click="openFieldSettings(frameId, widget.id, field.id)"
-                              >
-                                <AdminIcon name="settings" :size="12" />
-                              </button>
-                            </div>
-                          </div>
+                        <template #frame="{ frame: widgetFrame }">
+                          <section
+                            class="builder2-widget"
+                            :class="String(widgetFrame.data?.class || '')"
+                          >
+                            <FieldSectionCard
+                              :title="widgetFrame.data?.label || ''"
+                              :description="widgetFrame.data?.subtitle || ''"
+                            >
+                              <div class="builder2-widget__fields">
+                                <div v-for="field in widgetFrame.data?.fields || []" :key="field.id" class="builder2-field">
+                                  <component
+                                    :is="resolvePreviewComponentName(field)"
+                                    :model-value="fieldPreviewModelValue(field)"
+                                    v-bind="resolvePreviewFieldProps(field)"
+                                    @update:model-value="setFieldPreviewValue(field, $event)"
+                                  />
+                                  <button
+                                    class="builder2-field__settings"
+                                    type="button"
+                                    @click="openFieldSettingsByFrame(frameId, widgetFrame.data?.id, field.id)"
+                                  >
+                                    <AdminIcon name="settings" :size="12" />
+                                  </button>
+                                </div>
+                              </div>
 
-                          <div class="api-actions smt-050">
-                            <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2Field(widget)">
-                              <AdminIcon name="plus" :size="14" />
-                              Field
-                            </button>
-                            <button class="a-btn a-btn--ghost" type="button" @click="removeBuilder2Widget(frameId, widget.id)">
-                              Remove Card
-                            </button>
-                          </div>
-                        </FieldSectionCard>
-                      </section>
+                              <div class="api-actions smt-050">
+                                <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2FieldByFrame(widgetFrame.data)">
+                                  <AdminIcon name="plus" :size="14" />
+                                  Field
+                                </button>
+                                <button class="a-btn a-btn--ghost" type="button" @click="removeBuilder2WidgetByFrame(frameId, widgetFrame.data?.id)">
+                                  Remove Card
+                                </button>
+                              </div>
+                            </FieldSectionCard>
+                          </section>
+                        </template>
+                      </PageFrameCanvas>
 
                       <button class="a-btn a-btn--subtle" type="button" @click="addBuilder2WidgetById(frameId)">
                         <AdminIcon name="plus" :size="14" />
@@ -3439,43 +3653,47 @@ onBeforeUnmount(() => {
                   :class="column.class"
                   :style="builder2ColumnStyle(row, column)"
                 >
-                  <template v-for="widget in column.primary" :key="`pb2-runtime-widget-${widget.id}`">
-                    <FieldSectionCard
-                      v-if="widget.type === 'fields-card'"
-                      :title="widget.label || ''"
-                      :description="widget.subtitle || ''"
-                    >
-                      <div class="widget-fields">
-                        <div
-                          v-for="layoutRow in widgetRuntimeLayoutRows(widget)"
-                          :key="`${widget.id}-${layoutRow.id}`"
-                          class="widget-fields__row"
-                          :class="layoutRow.class"
+                  <div class="builder2-runtime-widgets" :style="builder2WidgetGridStyle()">
+                    <template v-for="widget in column.primary" :key="`pb2-runtime-widget-${widget.id}`">
+                      <div class="builder2-runtime-widget" :style="builder2WidgetStyle(widget)">
+                        <FieldSectionCard
+                          v-if="widget.type === 'fields-card'"
+                          :title="widget.label || ''"
+                          :description="widget.subtitle || ''"
                         >
-                          <div
-                            v-for="layoutColumn in layoutRow.columns"
-                            :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
-                            class="widget-fields__col"
-                            :class="layoutColumn.class"
-                          >
-                            <component
-                              :is="resolvePreviewComponentName(field)"
-                              v-for="field in layoutColumn.fields"
-                              :key="field.id"
-                              :model-value="fieldPreviewModelValue(field)"
-                              v-bind="resolvePreviewFieldProps(field)"
-                              @update:model-value="setFieldPreviewValue(field, $event)"
-                            />
+                          <div class="widget-fields">
+                            <div
+                              v-for="layoutRow in widgetRuntimeLayoutRows(widget)"
+                              :key="`${widget.id}-${layoutRow.id}`"
+                              class="widget-fields__row"
+                              :class="layoutRow.class"
+                            >
+                              <div
+                                v-for="layoutColumn in layoutRow.columns"
+                                :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
+                                class="widget-fields__col"
+                                :class="layoutColumn.class"
+                              >
+                                <component
+                                  :is="resolvePreviewComponentName(field)"
+                                  v-for="field in layoutColumn.fields"
+                                  :key="field.id"
+                                  :model-value="fieldPreviewModelValue(field)"
+                                  v-bind="resolvePreviewFieldProps(field)"
+                                  @update:model-value="setFieldPreviewValue(field, $event)"
+                                />
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </FieldSectionCard>
+                        </FieldSectionCard>
 
-                    <article v-else class="a-card widget-generic">
-                      <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
-                      <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
-                    </article>
-                  </template>
+                        <article v-else class="a-card widget-generic">
+                          <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
+                          <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
+                        </article>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </section>
             </section>
@@ -4262,6 +4480,7 @@ onBeforeUnmount(() => {
 }
 
 .builder2-frame {
+  position: relative;
   min-width: 260px;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius-md);
@@ -4291,9 +4510,24 @@ onBeforeUnmount(() => {
   gap: 0.32rem;
 }
 
+.builder2-frame__resize-edge {
+  position: absolute;
+  top: 0.35rem;
+  right: -0.3rem;
+  bottom: 0.35rem;
+  width: 0.65rem;
+  cursor: ew-resize;
+  z-index: 4;
+  touch-action: none;
+}
+
 .builder2-frame__widgets {
   display: grid;
   gap: 0.45rem;
+}
+
+.builder2-widget {
+  min-width: 0;
 }
 
 .builder2-widget__fields {
@@ -4433,6 +4667,15 @@ onBeforeUnmount(() => {
 
 .layout-col {
   gap: 0.55rem;
+  min-width: 0;
+}
+
+.builder2-runtime-widgets {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.builder2-runtime-widget {
   min-width: 0;
 }
 

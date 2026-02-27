@@ -369,6 +369,50 @@ const readFrameBounds = (row: ModelUIRowSpec, column: ModelUIColumnSpec) => {
   return normalizeFrameBounds(raw.colStart ?? 1, raw.colEnd ?? (1 + span), rowMeta.gridCols)
 }
 
+const resolveRuntimeFrameBoundsMap = (row: ModelUIRowSpec) => {
+  const rowMeta = readBuilder2RowMeta(row)
+  const boundsByColumnId: Record<string, { colStart: number, colEnd: number }> = {}
+  let cursor = 1
+
+  for (const column of row.columns || []) {
+    const root = (column.meta && typeof column.meta === 'object') ? column.meta : {}
+    const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+    const width = Number.isFinite(Number(raw.width)) ? Number(raw.width) : 50
+    const span = frameSpanFromWidth(width, rowMeta.gridCols)
+
+    const hasExplicitStart = Number.isFinite(Number(raw.colStart))
+    const hasExplicitEnd = Number.isFinite(Number(raw.colEnd))
+    const explicitBounds = (hasExplicitStart || hasExplicitEnd)
+      ? normalizeFrameBounds(
+          hasExplicitStart ? Number(raw.colStart) : cursor,
+          hasExplicitEnd
+            ? Number(raw.colEnd)
+            : ((hasExplicitStart ? Number(raw.colStart) : cursor) + span),
+          rowMeta.gridCols,
+        )
+      : null
+    const explicitSpan = explicitBounds ? explicitBounds.colEnd - explicitBounds.colStart : span
+    const canReuseExplicit = Boolean(
+      explicitBounds
+      && explicitSpan === span
+      && explicitBounds.colStart >= cursor
+      && explicitBounds.colEnd <= (rowMeta.gridCols + 1),
+    )
+
+    let colStart = (canReuseExplicit && explicitBounds) ? explicitBounds.colStart : cursor
+    if (colStart > rowMeta.gridCols || (colStart + span) > (rowMeta.gridCols + 1)) {
+      colStart = 1
+    }
+    const colEnd = Math.min(rowMeta.gridCols + 1, colStart + span)
+    boundsByColumnId[column.id] = { colStart, colEnd }
+
+    cursor = colEnd
+    if (cursor > rowMeta.gridCols) cursor = 1
+  }
+
+  return boundsByColumnId
+}
+
 const runtimeRowStyle = (row: ModelUIRowSpec) => {
   const rowMeta = readBuilder2RowMeta(row)
   return {
@@ -378,7 +422,74 @@ const runtimeRowStyle = (row: ModelUIRowSpec) => {
 }
 
 const runtimeColumnStyle = (row: ModelUIRowSpec, column: ModelUIColumnSpec) => {
-  const bounds = readFrameBounds(row, column)
+  const bounds = resolveRuntimeFrameBoundsMap(row)[column.id] ?? readFrameBounds(row, column)
+  return {
+    gridColumn: `${bounds.colStart} / ${bounds.colEnd}`,
+  }
+}
+
+const BUILDER2_WIDGET_GRID_COLS = 12
+
+const readWidgetBounds = (widget: ModelUIWidgetSpec) => {
+  const root = (widget.meta && typeof widget.meta === 'object') ? widget.meta : {}
+  const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+  const width = Number.isFinite(Number(raw.width)) ? Number(raw.width) : 100
+  const span = frameSpanFromWidth(width, BUILDER2_WIDGET_GRID_COLS)
+  return normalizeFrameBounds(raw.colStart ?? 1, raw.colEnd ?? (1 + span), BUILDER2_WIDGET_GRID_COLS)
+}
+
+const resolveRuntimeWidgetBoundsMap = (column: ModelUIColumnSpec) => {
+  const boundsByWidgetId: Record<string, { colStart: number, colEnd: number }> = {}
+  let cursor = 1
+
+  for (const widget of column.primary || []) {
+    const root = (widget.meta && typeof widget.meta === 'object') ? widget.meta : {}
+    const raw = (root.builder2 && typeof root.builder2 === 'object') ? root.builder2 as Record<string, any> : {}
+    const width = Number.isFinite(Number(raw.width)) ? Number(raw.width) : 100
+    const span = frameSpanFromWidth(width, BUILDER2_WIDGET_GRID_COLS)
+
+    const hasExplicitStart = Number.isFinite(Number(raw.colStart))
+    const hasExplicitEnd = Number.isFinite(Number(raw.colEnd))
+    const explicitBounds = (hasExplicitStart || hasExplicitEnd)
+      ? normalizeFrameBounds(
+          hasExplicitStart ? Number(raw.colStart) : cursor,
+          hasExplicitEnd
+            ? Number(raw.colEnd)
+            : ((hasExplicitStart ? Number(raw.colStart) : cursor) + span),
+          BUILDER2_WIDGET_GRID_COLS,
+        )
+      : null
+    const explicitSpan = explicitBounds ? explicitBounds.colEnd - explicitBounds.colStart : span
+    const canReuseExplicit = Boolean(
+      explicitBounds
+      && explicitSpan === span
+      && explicitBounds.colStart >= cursor
+      && explicitBounds.colEnd <= (BUILDER2_WIDGET_GRID_COLS + 1),
+    )
+
+    let colStart = (canReuseExplicit && explicitBounds) ? explicitBounds.colStart : cursor
+    if (colStart > BUILDER2_WIDGET_GRID_COLS || (colStart + span) > (BUILDER2_WIDGET_GRID_COLS + 1)) {
+      colStart = 1
+    }
+    const colEnd = Math.min(BUILDER2_WIDGET_GRID_COLS + 1, colStart + span)
+    boundsByWidgetId[widget.id] = { colStart, colEnd }
+    cursor = colEnd
+    if (cursor > BUILDER2_WIDGET_GRID_COLS) cursor = 1
+  }
+
+  return boundsByWidgetId
+}
+
+const runtimeWidgetGridStyle = () => {
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${BUILDER2_WIDGET_GRID_COLS}, minmax(0, 1fr))`,
+    gap: '0.55rem',
+  }
+}
+
+const runtimeWidgetStyle = (column: ModelUIColumnSpec, widget: ModelUIWidgetSpec) => {
+  const bounds = resolveRuntimeWidgetBoundsMap(column)[widget.id] ?? readWidgetBounds(widget)
   return {
     gridColumn: `${bounds.colStart} / ${bounds.colEnd}`,
   }
@@ -1369,78 +1480,85 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
                 :class="column.class"
                 :style="runtimeColumnStyle(row, column)"
               >
-                <template v-for="widget in column.primary" :key="widget.id">
-                  <component
-                    :is="widgetOverrideFor(widget)"
-                    v-if="widgetOverrideFor(widget)"
-                    class="a-card widget-override"
-                    :context="buildOverrideContext(activeTab, widget)"
-                  />
-
-                  <FieldSectionCard
-                    v-else-if="widget.type === 'fields-card'"
-                    :title="widget.label"
-                    :description="widget.subtitle"
+                <div class="layout-widget-grid" :style="runtimeWidgetGridStyle()">
+                  <div
+                    v-for="widget in column.primary"
+                    :key="widget.id"
+                    class="layout-widget"
+                    :style="runtimeWidgetStyle(column, widget)"
                   >
-                    <div class="widget-fields">
-                      <div
-                        v-for="layoutRow in widgetLayoutRows(widget)"
-                        :key="`${widget.id}-${layoutRow.id}`"
-                        class="widget-fields__row"
-                        :class="layoutRow.class"
-                      >
+                    <component
+                      :is="widgetOverrideFor(widget)"
+                      v-if="widgetOverrideFor(widget)"
+                      class="a-card widget-override"
+                      :context="buildOverrideContext(activeTab, widget)"
+                    />
+
+                    <FieldSectionCard
+                      v-else-if="widget.type === 'fields-card'"
+                      :title="widget.label"
+                      :description="widget.subtitle"
+                    >
+                      <div class="widget-fields">
                         <div
-                          v-for="layoutColumn in layoutRow.columns"
-                          :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
-                          class="widget-fields__col"
-                          :class="layoutColumn.class"
+                          v-for="layoutRow in widgetLayoutRows(widget)"
+                          :key="`${widget.id}-${layoutRow.id}`"
+                          class="widget-fields__row"
+                          :class="layoutRow.class"
                         >
-                          <template
-                            v-for="field in layoutColumn.fields"
-                            :key="field.id"
+                          <div
+                            v-for="layoutColumn in layoutRow.columns"
+                            :key="`${widget.id}-${layoutRow.id}-${layoutColumn.id}`"
+                            class="widget-fields__col"
+                            :class="layoutColumn.class"
                           >
-                            <ATaxonomyManager
-                              v-if="isTaxonomyField(field)"
-                              :model-value="taxonomyTreeForField(field)"
-                              :checked-ids="taxonomySelectedIdsForField(field)"
-                              :taxonomy-label="field.label || toLabel(resolveFieldKey(field))"
-                              :title="field.label || toLabel(resolveFieldKey(field))"
-                              :description="taxonomyState[resolveFieldKey(field)]?.error || 'Manage taxonomy terms for this record.'"
-                              :draggable="!isFieldReadOnly(field)"
-                              :checkable="!isFieldReadOnly(field)"
-                              :create-term-action="isFieldReadOnly(field) ? undefined : ((payload) => createTaxonomyTerm(field, payload))"
-                              @update:model-value="setTaxonomyTreeForField(field, $event)"
-                              @update:checked-ids="setFieldValue(field, $event)"
-                            />
-                            <component
-                              :is="resolveFieldComponent(field.component.name)"
-                              v-else
-                              :model-value="fieldState[resolveFieldKey(field)]"
-                              v-bind="resolveFieldProps(field)"
-                              @update:model-value="setFieldValue(field, $event)"
-                            />
-                          </template>
+                            <template
+                              v-for="field in layoutColumn.fields"
+                              :key="field.id"
+                            >
+                              <ATaxonomyManager
+                                v-if="isTaxonomyField(field)"
+                                :model-value="taxonomyTreeForField(field)"
+                                :checked-ids="taxonomySelectedIdsForField(field)"
+                                :taxonomy-label="field.label || toLabel(resolveFieldKey(field))"
+                                :title="field.label || toLabel(resolveFieldKey(field))"
+                                :description="taxonomyState[resolveFieldKey(field)]?.error || 'Manage taxonomy terms for this record.'"
+                                :draggable="!isFieldReadOnly(field)"
+                                :checkable="!isFieldReadOnly(field)"
+                                :create-term-action="isFieldReadOnly(field) ? undefined : ((payload) => createTaxonomyTerm(field, payload))"
+                                @update:model-value="setTaxonomyTreeForField(field, $event)"
+                                @update:checked-ids="setFieldValue(field, $event)"
+                              />
+                              <component
+                                :is="resolveFieldComponent(field.component.name)"
+                                v-else
+                                :model-value="fieldState[resolveFieldKey(field)]"
+                                v-bind="resolveFieldProps(field)"
+                                @update:model-value="setFieldValue(field, $event)"
+                              />
+                            </template>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div v-if="widget.saveLabel || widget.action" class="widget-actions smt-050">
-                      <button
-                        class="a-btn a-btn--subtle"
-                        type="button"
-                        :disabled="Boolean(widgetSaving[widget.id])"
-                        @click="saveWidget(widget)"
-                      >
-                        {{ widgetSaving[widget.id] ? 'Saving…' : (widget.saveLabel || 'Save') }}
-                      </button>
-                    </div>
-                  </FieldSectionCard>
+                      <div v-if="widget.saveLabel || widget.action" class="widget-actions smt-050">
+                        <button
+                          class="a-btn a-btn--subtle"
+                          type="button"
+                          :disabled="Boolean(widgetSaving[widget.id])"
+                          @click="saveWidget(widget)"
+                        >
+                          {{ widgetSaving[widget.id] ? 'Saving…' : (widget.saveLabel || 'Save') }}
+                        </button>
+                      </div>
+                    </FieldSectionCard>
 
-                  <article v-else class="a-card widget-generic">
-                    <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
-                    <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
-                  </article>
-                </template>
+                    <article v-else class="a-card widget-generic">
+                      <h3 class="widget-generic__title">{{ widget.label || widget.name }}</h3>
+                      <p class="a-copy">Custom widget placeholder (type={{ widget.type }})</p>
+                    </article>
+                  </div>
+                </div>
               </div>
             </section>
           </template>
@@ -1543,6 +1661,15 @@ const saveWidget = async (widget: ModelUIWidgetSpec) => {
 
 .layout-col {
   gap: 0.55rem;
+  min-width: 0;
+}
+
+.layout-widget-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.layout-widget {
   min-width: 0;
 }
 

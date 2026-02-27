@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import interact from 'interactjs'
-
 type PageFrameCanvasItem = {
   id: string
   width: number
+  colStart?: number
+  colEnd?: number
   data?: any
 }
 
@@ -17,6 +17,9 @@ const props = withDefaults(
     maxWidth?: number
     draggable?: boolean
     resizable?: boolean
+    dragHandleSelector?: string
+    dragIgnoreSelector?: string
+    resizeEdgeSelector?: string
   }>(),
   {
     gridCols: 24,
@@ -24,6 +27,9 @@ const props = withDefaults(
     maxWidth: 100,
     draggable: true,
     resizable: true,
+    dragHandleSelector: '.page-frame-canvas__drag-handle, .page-frame-canvas__drag-strip, .builder2-frame__head',
+    dragIgnoreSelector: '.page-frame-canvas__resize-handle',
+    resizeEdgeSelector: '.page-frame-canvas__resize-handle, .page-frame-canvas__resize-edge',
   },
 )
 
@@ -45,20 +51,51 @@ type InteractInstanceLike = {
   unset: () => void
 }
 type InteractModule = (target: Element | string) => InteractInstanceLike
-const interactLib = interact as unknown as InteractModule
+const interactLib = shallowRef<null | InteractModule>(null)
 const interactables = new Map<string, InteractInstanceLike>()
 const resizeWidth = reactive<Record<string, number>>({})
 const isSyncingInteractables = ref(false)
 const syncInteractablesQueued = ref(false)
 
 const clampWidth = (value: unknown) => clampPercentWidth(value, props.minWidth, props.maxWidth)
+const clampGridCols = (value: unknown) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 24
+  return Math.max(1, Math.min(48, Math.round(parsed)))
+}
+const frameSpanFromWidth = (width: number, gridCols: number) =>
+  Math.max(1, Math.min(gridCols, Math.round((Math.max(1, width) / 100) * gridCols)))
+const normalizeFrameBounds = (colStart: unknown, colEnd: unknown, width: number, gridCols: number) => {
+  const span = frameSpanFromWidth(width, gridCols)
+  const startParsed = Number(colStart)
+  const endParsed = Number(colEnd)
+  let start = Number.isFinite(startParsed) ? Math.round(startParsed) : 1
+  let end = Number.isFinite(endParsed) ? Math.round(endParsed) : start + span
+  if (start < 1) start = 1
+  if (start > gridCols) start = gridCols
+  if (end <= start) end = start + span
+  if (end > gridCols + 1) end = gridCols + 1
+  const minEnd = Math.min(gridCols + 1, start + 1)
+  if (end < minEnd) end = minEnd
+  return { colStart: start, colEnd: end }
+}
+const resolveFrameBounds = (frame: PageFrameCanvasItem) => {
+  const gridCols = clampGridCols(props.gridCols)
+  return normalizeFrameBounds(frame.colStart, frame.colEnd, frame.width, gridCols)
+}
+const canvasStyle = computed(() => {
+  const cols = clampGridCols(props.gridCols)
+  return {
+    '--page-frame-grid-cols': String(cols),
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+  } as Record<string, string>
+})
 
 const frameStyle = (frame: PageFrameCanvasItem) => {
-  const width = clampWidth(frame.width)
+  const bounds = resolveFrameBounds(frame)
   const offset = dragOffset[frame.id] || { x: 0, y: 0 }
   return {
-    flex: `0 0 ${width}%`,
-    maxWidth: `${width}%`,
+    gridColumn: `${bounds.colStart} / ${bounds.colEnd}`,
     transform: `translate(${offset.x}px, ${offset.y}px)`,
   }
 }
@@ -133,10 +170,11 @@ const handleDragMove = (frameId: string, event: any) => {
 const handleDragEnd = (frameId: string) => {
   const container = rootRef.value
   const frameElement = resolveFrameElementById(frameId)
+  const frame = findFrameById(frameId)
   if (container && frameElement) {
     const containerRect = container.getBoundingClientRect()
     const frameRect = frameElement.getBoundingClientRect()
-    const gridCols = Math.max(1, Math.round(Number(props.gridCols || 24)))
+    const gridCols = clampGridCols(props.gridCols)
     if (containerRect.width > 0 && gridCols > 0) {
       const cellWidth = containerRect.width / gridCols
       const start = Math.max(
@@ -146,8 +184,10 @@ const handleDragEnd = (frameId: string) => {
           Math.round((frameRect.left - containerRect.left) / cellWidth) + 1,
         ),
       )
-      const widthPercent = clampWidth(findFrameById(frameId)?.width ?? 100)
-      const span = Math.max(1, Math.min(gridCols, Math.round((widthPercent / 100) * gridCols)))
+      const currentBounds = frame
+        ? resolveFrameBounds(frame)
+        : normalizeFrameBounds(1, 2, 100, gridCols)
+      const span = Math.max(1, currentBounds.colEnd - currentBounds.colStart)
       const end = Math.max(start + 1, Math.min(gridCols + 1, start + span))
       emit('position-frame', { id: frameId, colStart: start, colEnd: end })
     }
@@ -186,15 +226,17 @@ const handleResizeEnd = (frameId: string) => {
 }
 
 const bindInteractable = (element: HTMLElement) => {
+  const interact = interactLib.value
+  if (!interact) return
   const frameId = String(element.dataset.pageFrameId || '').trim()
   if (!frameId) return
 
-  const instance = interactLib(element) as unknown as InteractInstanceLike
+  const instance = interact(element) as unknown as InteractInstanceLike
 
   instance.draggable({
     enabled: props.draggable,
-    allowFrom: '.page-frame-canvas__drag-handle, .page-frame-canvas__drag-strip, .builder2-frame__head',
-    ignoreFrom: '.page-frame-canvas__resize-handle',
+    allowFrom: props.dragHandleSelector,
+    ignoreFrom: props.dragIgnoreSelector,
     listeners: {
       start: () => handleDragStart(frameId),
       move: (event: any) => handleDragMove(frameId, event),
@@ -204,7 +246,7 @@ const bindInteractable = (element: HTMLElement) => {
 
   instance.resizable({
     enabled: props.resizable,
-    edges: { right: '.page-frame-canvas__resize-handle, .page-frame-canvas__resize-edge' },
+    edges: { right: props.resizeEdgeSelector },
     listeners: {
       start: () => handleResizeStart(frameId),
       move: (event: any) => handleResizeMove(frameId, event),
@@ -216,6 +258,7 @@ const bindInteractable = (element: HTMLElement) => {
 }
 
 const syncInteractables = async () => {
+  if (!interactLib.value) return
   if (isSyncingInteractables.value) {
     syncInteractablesQueued.value = true
     return
@@ -258,7 +301,7 @@ watch(
 )
 
 watch(
-  () => [props.draggable, props.resizable],
+  () => [props.draggable, props.resizable, props.dragHandleSelector, props.dragIgnoreSelector, props.resizeEdgeSelector],
   () => {
     void syncInteractables().catch((error) => {
       interactionError.value = error instanceof Error ? error.message : 'Failed to sync canvas interactions.'
@@ -268,9 +311,19 @@ watch(
   { deep: true, flush: 'post' },
 )
 
-onMounted(() => {
-  interactionError.value = ''
-  void syncInteractables().catch((error) => {
+onMounted(async () => {
+  try {
+    const mod = await import('interactjs')
+    interactLib.value = ((mod as any).default || mod) as InteractModule
+    interactionError.value = ''
+  }
+  catch (error) {
+    interactionError.value = error instanceof Error ? error.message : 'Failed to load interactjs.'
+    console.error('[PageFrameCanvas] Failed to load interactjs', error)
+    return
+  }
+
+  await syncInteractables().catch((error) => {
     interactionError.value = error instanceof Error ? error.message : 'Failed to initialize canvas interactions.'
     console.error('[PageFrameCanvas] Failed to initialize interactions', error)
   })
@@ -289,7 +342,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="rootRef" class="page-frame-canvas">
+  <div ref="rootRef" class="page-frame-canvas" :style="canvasStyle">
     <p v-if="interactionError" class="page-frame-canvas__error">
       Canvas interaction unavailable: {{ interactionError }}
     </p>
@@ -340,10 +393,30 @@ onUnmounted(() => {
 
 <style scoped>
 .page-frame-canvas {
-  display: flex;
-  flex-wrap: wrap;
+  position: relative;
+  display: grid;
   align-items: flex-start;
   gap: 0.55rem;
+  padding: 0.25rem;
+  border-radius: var(--admin-radius-sm);
+  overflow: hidden;
+}
+
+.page-frame-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0.25rem;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--admin-border) 55%, transparent) 0,
+    color-mix(in srgb, var(--admin-border) 55%, transparent) 1px,
+    transparent 1px,
+    transparent calc(100% / var(--page-frame-grid-cols, 24))
+  );
+  border-radius: inherit;
+  opacity: 0.6;
+  z-index: 0;
 }
 
 .page-frame-canvas__error {
@@ -359,7 +432,8 @@ onUnmounted(() => {
 
 .page-frame-canvas__frame {
   position: relative;
-  min-width: 260px;
+  min-width: 0;
+  z-index: 1;
   transition: box-shadow 150ms ease, border-color 150ms ease;
 }
 
