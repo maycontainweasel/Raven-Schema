@@ -3,6 +3,11 @@ import { dirname, resolve } from 'node:path'
 import { defineEventHandler, readBody } from 'h3'
 import { buildColorsScss, getEnabledColorMap, normalizeColorPalettes } from './colors'
 import { buildSemanticScss, buildSemanticShortcuts, createDefaultThemeSettings, normalizeThemeSettings } from './themes'
+import {
+  ensureHeliosBaselineArtifacts,
+  ensureNuxtAdditions as ensureHeliosNuxtAdditions,
+  ensureUnoConfigBridge as ensureHeliosUnoConfigBridge,
+} from './setup'
 
 type HeliosTypeConfig = {
   baseFontPx: number
@@ -677,6 +682,12 @@ export default defineEventHandler(async (event) => {
   const breakpoints = normalizeBreakpoints(body?.breakpoints, requestedConfig)
   const baseConfig = breakpoints[0]?.config ?? requestedConfig
   const rootDir = process.cwd()
+  try {
+    await ensureHeliosBaselineArtifacts(rootDir, { ensureConfigBridges: true })
+  }
+  catch (error) {
+    console.warn('[helios] Unable to auto-initialize baseline artifacts from /api/helios/type/commit:', error)
+  }
   const colorFragmentFile = resolve(rootDir, 'app/helios/fragments/colors.json')
   const colorSettingsFile = resolve(rootDir, 'app/helios/generated/colors.settings.json')
   const themeFragmentFile = resolve(rootDir, 'app/helios/fragments/theme.json')
@@ -773,8 +784,8 @@ export default defineEventHandler(async (event) => {
   await fs.writeFile(unoGeneratedFile, buildUnoGenerated(baseConfig, setup, breakpoints, palettes, themes), 'utf-8')
 
   const notes = [
-    ...(await ensureNuxtAdditions(rootDir)),
-    ...(await ensureUnoConfigBridge(rootDir)),
+    ...(await ensureHeliosNuxtAdditions(rootDir)),
+    ...(await ensureHeliosUnoConfigBridge(rootDir)),
   ]
 
   return {

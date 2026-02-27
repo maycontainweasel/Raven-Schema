@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type interactType from 'interactjs'
+import interact from 'interactjs'
 
 type PageFrameCanvasItem = {
   id: string
@@ -38,13 +38,14 @@ const draggingId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
 const dropPosition = ref<DropPosition>('after')
 const dragOffset = reactive<Record<string, { x: number, y: number }>>({})
-const interactLib = shallowRef<null | typeof interactType>(null)
 const interactionError = ref('')
 type InteractInstanceLike = {
   draggable: (options: Record<string, any>) => unknown
   resizable: (options: Record<string, any>) => unknown
   unset: () => void
 }
+type InteractModule = (target: Element | string) => InteractInstanceLike
+const interactLib = interact as unknown as InteractModule
 const interactables = new Map<string, InteractInstanceLike>()
 const resizeWidth = reactive<Record<string, number>>({})
 const isSyncingInteractables = ref(false)
@@ -185,12 +186,10 @@ const handleResizeEnd = (frameId: string) => {
 }
 
 const bindInteractable = (element: HTMLElement) => {
-  const interact = interactLib.value
-  if (!interact) return
   const frameId = String(element.dataset.pageFrameId || '').trim()
   if (!frameId) return
 
-  const instance = interact(element) as unknown as InteractInstanceLike
+  const instance = interactLib(element) as unknown as InteractInstanceLike
 
   instance.draggable({
     enabled: props.draggable,
@@ -217,7 +216,6 @@ const bindInteractable = (element: HTMLElement) => {
 }
 
 const syncInteractables = async () => {
-  if (!interactLib.value) return
   if (isSyncingInteractables.value) {
     syncInteractablesQueued.value = true
     return
@@ -270,19 +268,9 @@ watch(
   { deep: true, flush: 'post' },
 )
 
-onMounted(async () => {
-  try {
-    const mod = await import('interactjs')
-    interactLib.value = ((mod as any).default || mod) as typeof interactType
-    interactionError.value = ''
-  }
-  catch (error) {
-    interactionError.value = error instanceof Error ? error.message : 'Failed to load interactjs.'
-    console.error('[PageFrameCanvas] Failed to load interactjs', error)
-    return
-  }
-
-  await syncInteractables().catch((error) => {
+onMounted(() => {
+  interactionError.value = ''
+  void syncInteractables().catch((error) => {
     interactionError.value = error instanceof Error ? error.message : 'Failed to initialize canvas interactions.'
     console.error('[PageFrameCanvas] Failed to initialize interactions', error)
   })

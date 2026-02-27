@@ -103,6 +103,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   Notes:
   - `site:helios:setup` now ensures a safe root route by creating `app/pages/index.vue` with `/ -> /helios` redirect when missing.
   - It also ensures `app/app.vue` is Nuxt page-shell compatible when the file is missing or still using `NuxtWelcome`.
+  - It now seeds baseline Helios files under `app/helios/{fragments,generated,scss}` so `/helios` can run before first manual commit.
 
 - `site:create [name]`  
   Generate a Nuxt app scaffold from a local template and write a site spec.  
@@ -224,6 +225,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - `pnpm -C apps/schema run site:helios:setup target`
   - `pnpm -C apps/schema run site:helios:setup -- --spec sites/target.yaml --yes`
   Notes:
+  - Seeds baseline files under `app/helios/{fragments,generated,scss}` when missing.
   - Creates `app/helios/fragments/setup.json` and default `app/helios/fragments/type.json` if missing.
   - Ensures `app/pages/index.vue` redirects `/` to `/helios` when no root page exists.
   - Ensures `app/app.vue` uses a Nuxt page shell when missing or still on `NuxtWelcome`.

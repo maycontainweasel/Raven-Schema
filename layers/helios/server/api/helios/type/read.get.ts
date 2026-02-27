@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { defineEventHandler } from 'h3'
 import { normalizeColorPalettes, type HeliosColorPalette } from './colors'
 import { createDefaultThemeSettings, normalizeThemeSettings, type HeliosThemeSettings } from './themes'
+import { ensureHeliosBaselineArtifacts } from './setup'
 
 type HeliosTypeConfig = {
   baseFontPx: number
@@ -202,6 +203,12 @@ const normalizeDocument = (value: any) => {
 
 export default defineEventHandler(async () => {
   const rootDir = process.cwd()
+  try {
+    await ensureHeliosBaselineArtifacts(rootDir, { ensureConfigBridges: true })
+  }
+  catch (error) {
+    console.warn('[helios] Unable to auto-initialize baseline artifacts from /api/helios/type/read:', error)
+  }
 
   try {
     const raw = await fs.readFile(fragmentPath(rootDir), 'utf-8')

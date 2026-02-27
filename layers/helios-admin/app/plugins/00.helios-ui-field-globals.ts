@@ -12,6 +12,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   for (const [name, component] of Object.entries(HeliosFields)) {
     if (!isVueComponent(component)) continue
+    if (app.component(name)) continue
     app.component(name, component as any)
   }
 })

@@ -1057,6 +1057,11 @@ const argv = yargs(hideBin(process.argv))
       if (bootstrapResult.rootRedirectCreated) {
         console.log(`↪️  Added root redirect: ${path.relative(repoRoot, path.join(appRoot, 'app/pages/index.vue'))}`);
       }
+      if (bootstrapResult.baselineFilesCreated.length > 0) {
+        console.log(
+          `🧩 Seeded Helios baseline files (${bootstrapResult.baselineFilesCreated.length}) under ${path.relative(repoRoot, path.join(appRoot, 'app/helios'))}.`
+        );
+      }
       console.log(`🧩 Setup fragment: ${path.relative(repoRoot, setupFragmentPath)}`);
       console.log(`✍️  Open /helios and click Commit to regenerate app/helios/generated + app/helios/scss artifacts.`);
     }
