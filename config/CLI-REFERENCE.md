@@ -230,6 +230,20 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - Ensures `app/pages/index.vue` redirects `/` to `/helios` when no root page exists.
   - Ensures `app/app.vue` uses a Nuxt page shell when missing or still on `NuxtWelcome`.
 
+- `site:helios:doctor [name]`
+  Validate Helios setup health for a target site/app.
+  Examples:
+  - `pnpm -C apps/schema run site:helios:doctor heliosadmin`
+  - `pnpm -C apps/schema run site:helios:doctor -- --spec sites/heliosadmin.yaml --json`
+  Checks:
+  - Baseline Helios artifacts under `app/helios/{fragments,generated,scss}`
+  - `nuxt.config.additions.ts` Helios css/module/unocss bridge tokens
+  - `uno.config.ts` Helios merge bridge tokens
+  - Required Helios packages in `package.json`
+  - App shell/root page and `layers.lock.json` health hints
+  Exit code:
+  - Returns non-zero when required checks fail.
+
 - `site:layers:remove [name] <layers..>`  
   Remove layers from a site (use `--force` to remove `schema-core`).  
   Examples:

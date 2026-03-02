@@ -64,6 +64,7 @@ import { runSitePm2Logs } from './cli/sitePm2Logs';
 import { runSiteAdopt } from './cli/siteAdopt';
 import { runSiteMigrate } from './cli/siteMigrate';
 import { ensureHeliosAppScaffold } from './cli/heliosBootstrap';
+import { printHeliosDoctorReport, runHeliosDoctor } from './cli/heliosDoctor';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures, applySchemaKitDefaults } from './lib/schemaKitConfig';
@@ -1064,6 +1065,58 @@ const argv = yargs(hideBin(process.argv))
       }
       console.log(`🧩 Setup fragment: ${path.relative(repoRoot, setupFragmentPath)}`);
       console.log(`✍️  Open /helios and click Commit to regenerate app/helios/generated + app/helios/scss artifacts.`);
+    }
+  )
+  .command(
+    'site:helios:doctor [name]',
+    'Check Helios setup health for a target site/app',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('json', {
+          type: 'boolean',
+          default: false,
+          describe: 'Output report as JSON',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      let rawName = args.name || args.n || args._?.[1];
+      if (!rawName && args._?.[2]) {
+        rawName = args._[2];
+      }
+
+      const { specEntry, appRoot, repoRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: rawName ? String(rawName) : '',
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+
+      const report = await runHeliosDoctor({
+        appRoot,
+        projectName: specEntry.spec.slug,
+      });
+
+      if (args.json === true) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        printHeliosDoctorReport(report, repoRoot);
+      }
+
+      if (!report.ready) {
+        process.exitCode = 1;
+      }
     }
   )
   .command(

@@ -61,7 +61,7 @@ const clampWidth = (value: unknown) => clampPercentWidth(value, props.minWidth, 
 const clampGridCols = (value: unknown) => {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return 24
-  return Math.max(1, Math.min(48, Math.round(parsed)))
+  return Math.max(1, Math.min(96, Math.round(parsed)))
 }
 const frameSpanFromWidth = (width: number, gridCols: number) =>
   Math.max(1, Math.min(gridCols, Math.round((Math.max(1, width) / 100) * gridCols)))
@@ -108,10 +108,16 @@ const frameClass = (frameId: string) => {
 }
 
 const findFrameById = (id: string) => props.frames.find(frame => frame.id === id) ?? null
+const getCanvasFrameElements = (root: HTMLElement) => {
+  return Array.from(root.children)
+    .filter((entry): entry is HTMLElement => {
+      return entry instanceof HTMLElement && Boolean(String(entry.dataset.pageFrameId || '').trim())
+    })
+}
 const resolveFrameElementById = (frameId: string) => {
   const root = rootRef.value
   if (!root) return null
-  const frames = Array.from(root.querySelectorAll<HTMLElement>('[data-page-frame-id]'))
+  const frames = getCanvasFrameElements(root)
   return frames.find(entry => String(entry.dataset.pageFrameId || '').trim() === frameId) ?? null
 }
 
@@ -275,9 +281,22 @@ const syncInteractables = async () => {
     }
     interactables.clear()
 
-    const frameElements = Array.from(root.querySelectorAll<HTMLElement>('[data-page-frame-id]'))
+    const frameElements = getCanvasFrameElements(root)
+    let failed = 0
     for (const element of frameElements) {
-      bindInteractable(element)
+      try {
+        bindInteractable(element)
+      }
+      catch (error) {
+        failed += 1
+        console.error('[PageFrameCanvas] Failed binding interaction for frame', element.dataset.pageFrameId, error)
+      }
+    }
+    if (failed > 0) {
+      interactionError.value = `Some interactions could not be initialized (${failed}).`
+    }
+    else if (interactionError.value.startsWith('Some interactions could not be initialized')) {
+      interactionError.value = ''
     }
   }
   finally {

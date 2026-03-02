@@ -1370,7 +1370,7 @@ const clampWidgetWidth = (value: unknown) => clampPercentWidth(value, 20, 100)
 const clampGridCols = (value: unknown) => {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return 24
-  return Math.max(1, Math.min(48, Math.round(parsed)))
+  return Math.max(1, Math.min(96, Math.round(parsed)))
 }
 
 type Builder2RowMeta = {
@@ -3763,7 +3763,7 @@ onBeforeUnmount(() => {
                   class="a-input"
                   type="number"
                   min="1"
-                  max="48"
+                  max="96"
                   @input="updateBuilder2RowMeta(frameSettingsTarget.row, { gridCols: Number(($event.target as HTMLInputElement).value) }); normalizeBuilder2FramePositions(frameSettingsTarget.row)"
                 >
               </label>

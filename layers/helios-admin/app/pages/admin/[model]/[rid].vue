@@ -331,7 +331,7 @@ const resolveRuntimeRows = (tab: ModelUITabSpec): ModelUITabSpec['primary'] => {
 const clampGridCols = (value: unknown) => {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return 24
-  return Math.max(1, Math.min(48, Math.round(parsed)))
+  return Math.max(1, Math.min(96, Math.round(parsed)))
 }
 
 const frameSpanFromWidth = (width: number, gridCols: number) => {
