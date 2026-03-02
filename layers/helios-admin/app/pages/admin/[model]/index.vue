@@ -76,6 +76,10 @@ const search = ref('')
 const createOpen = ref(false)
 const creating = ref(false)
 const createError = ref('')
+const deleteOpen = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
+const deleteTarget = ref<DirectoryRecord | null>(null)
 const createDraft = ref<Record<string, any>>({})
 const filterState = ref<Record<string, string | string[]>>({})
 const refreshOpen = ref(false)
@@ -203,6 +207,16 @@ const rows = computed<DirectoryRecord[]>(() => {
   const list = directoryData.value?.records
   return Array.isArray(list) ? list : []
 })
+const listingActions = computed(() => {
+  const actions = spec.value?.directory?.listing?.actions
+  return {
+    manage: Boolean(actions?.manage ?? true),
+    delete: Boolean(actions?.delete ?? true),
+  }
+})
+const showManageAction = computed(() => listingActions.value.manage)
+const showDeleteAction = computed(() => listingActions.value.delete)
+const hasRowActions = computed(() => showManageAction.value || showDeleteAction.value)
 
 const refreshModeOptions = computed(() => {
   if (modelDataMode.value === 'tenant') {
@@ -324,6 +338,9 @@ watch(
     search.value = ''
     createOpen.value = false
     createError.value = ''
+    deleteOpen.value = false
+    deleteError.value = ''
+    deleteTarget.value = null
     void refreshDirectory()
   },
   { immediate: true, deep: true },
@@ -1079,6 +1096,82 @@ const toRecordRoute = (row: DirectoryRecord) => {
   if (!slug) return routeBase
   return `${routeBase}/${encodeURIComponent(slug)}`
 }
+
+const resolveDeleteId = (row: DirectoryRecord | null) => {
+  if (!row) return ''
+  const rid = String(row.rid || '').trim()
+  if (rid) return rid
+  const subId = String(
+    row.__subId
+    ?? readSubIdFromUnknown(row.id)
+    ?? readSubIdFromUnknown(row.rid)
+    ?? '',
+  ).trim()
+  if (subId) return subId
+  return ''
+}
+
+const resolveDeleteLabel = (row: DirectoryRecord | null) => {
+  if (!row) return ''
+  const preferred = String(
+    row.title
+    ?? row.name
+    ?? row.label
+    ?? row.key
+    ?? resolveDeleteId(row),
+  ).trim()
+  return preferred || modelLabel.value
+}
+
+const closeDeleteDialog = () => {
+  if (deleting.value) return
+  deleteOpen.value = false
+  deleteTarget.value = null
+  deleteError.value = ''
+}
+
+const openDeleteDialog = (row: DirectoryRecord) => {
+  deleteTarget.value = row
+  deleteError.value = ''
+  deleteOpen.value = true
+}
+
+const deleteRecord = async () => {
+  const target = deleteTarget.value
+  const id = resolveDeleteId(target)
+  if (!target || !id) {
+    deleteError.value = 'Could not resolve record id for delete.'
+    return
+  }
+
+  deleting.value = true
+  deleteError.value = ''
+
+  try {
+    await $process(`${modelParam.value}.delete`, { id }, {
+      authority: modelDataMode.value,
+      autoToast: true,
+      consoleLogging: true,
+      trackAttempts: false,
+      throwOnFailure: true,
+    })
+    await refreshDirectory()
+    closeDeleteDialog()
+  }
+  catch (error: any) {
+    console.error('[model-delete] failed', {
+      model: modelParam.value,
+      id,
+      statusMessage: error?.data?.statusMessage,
+      debug: error?.data?.data,
+      error,
+    })
+    deleteError.value = error?.data?.statusMessage ?? error?.message ?? 'Delete failed.'
+  }
+  finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -1154,7 +1247,7 @@ const toRecordRoute = (row: DirectoryRecord) => {
               <th v-for="column in spec?.directory.listing.fields || []" :key="`head-${column.key}`">
                 {{ column.label || toLabel(column.key) }}
               </th>
-              <th class="text-right">Actions</th>
+              <th v-if="hasRowActions" class="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1178,12 +1271,28 @@ const toRecordRoute = (row: DirectoryRecord) => {
                   {{ formatCell(getCellValue(row, column.key)) }}
                 </template>
               </td>
-              <td class="text-right">
-                <NuxtLink class="a-link" :to="toRecordRoute(row)">Manage</NuxtLink>
+              <td v-if="hasRowActions" class="text-right">
+                <div class="row-actions">
+                  <NuxtLink
+                    v-if="showManageAction"
+                    class="a-link"
+                    :to="toRecordRoute(row)"
+                  >
+                    Manage
+                  </NuxtLink>
+                  <button
+                    v-if="showDeleteAction"
+                    class="a-link row-actions__delete"
+                    type="button"
+                    @click="openDeleteDialog(row)"
+                  >
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
             <tr v-if="!specPending && !directoryPending && filteredRows.length === 0">
-              <td :colspan="(spec?.directory.listing.fields.length || 0) + 1" class="empty-row">
+              <td :colspan="(spec?.directory.listing.fields.length || 0) + (hasRowActions ? 1 : 0)" class="empty-row">
                 No records match your filters.
               </td>
             </tr>
@@ -1342,6 +1451,39 @@ const toRecordRoute = (row: DirectoryRecord) => {
 
     <Teleport to="body">
       <Transition name="drawer-fade">
+        <div v-if="deleteOpen" class="refresh-overlay" @click.self="closeDeleteDialog">
+          <section class="refresh-modal a-card">
+            <div class="refresh-header">
+              <h2 class="drawer-title">{{ `Delete ${modelLabel}` }}</h2>
+              <button class="a-btn a-btn--ghost drawer-close" type="button" @click="closeDeleteDialog">
+                <AdminIcon name="close" :size="16" />
+              </button>
+            </div>
+
+            <p class="a-copy smt-025">
+              {{ `Delete "${resolveDeleteLabel(deleteTarget)}"? This action cannot be reversed.` }}
+            </p>
+            <p class="a-copy smt-025">
+              {{ `Record ID: ${resolveDeleteId(deleteTarget) || 'unknown'}` }}
+            </p>
+
+            <div class="drawer-actions smt-075">
+              <button class="a-btn a-btn--subtle" type="button" :disabled="deleting" @click="closeDeleteDialog">
+                Cancel
+              </button>
+              <button class="a-btn a-btn--ghost row-actions__delete-btn" type="button" :disabled="deleting" @click="deleteRecord">
+                {{ deleting ? 'Deleting…' : 'Delete' }}
+              </button>
+            </div>
+
+            <p v-if="deleteError" class="directory-error smt-050">{{ deleteError }}</p>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="drawer-fade">
         <div v-if="createOpen" class="drawer-overlay" @click.self="createOpen = false">
           <aside class="drawer-panel">
             <div class="drawer-header">
@@ -1430,6 +1572,30 @@ const toRecordRoute = (row: DirectoryRecord) => {
   margin: 0;
   color: var(--admin-danger);
   font-size: var(--fs--075, 0.86rem);
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.row-actions__delete {
+  color: var(--admin-danger);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.row-actions__delete:hover {
+  text-decoration: underline;
+}
+
+.row-actions__delete-btn {
+  color: var(--admin-danger);
 }
 
 .refresh-overlay {

@@ -132,6 +132,19 @@ const splitCsv = (value: string): string[] => {
     .filter(entry => entry.length > 0)
 }
 
+const ensureDirectoryListingActions = (spec: ModelLayoutSpec | null) => {
+  if (!spec) return
+  if (!spec.directory.listing || typeof spec.directory.listing !== 'object') {
+    ;(spec.directory as any).listing = { fields: [], filters: [], actions: { manage: true, delete: true } }
+    return
+  }
+  const current = (spec.directory.listing as any).actions
+  ;(spec.directory.listing as any).actions = {
+    manage: Boolean(current?.manage ?? true),
+    delete: Boolean(current?.delete ?? true),
+  }
+}
+
 const slugify = (value: string, fallback: string) => {
   const slug = value
     .trim()
@@ -897,6 +910,7 @@ watch(
     }
 
     form.value = clone(nextSpec)
+    ensureDirectoryListingActions(form.value)
     baselineSpecSnapshot.value = serializeSpec(form.value)
     activeSettingsPanel.value = 'directory'
     activeTabSlug.value = nextSpec.single.tabs[0]?.slug ?? ''
@@ -2547,6 +2561,16 @@ onBeforeUnmount(() => {
                 <span class="a-field__label">Description</span>
                 <textarea v-model="form.directory.description" class="a-textarea" rows="2" />
               </label>
+
+              <div class="a-field inline-field">
+                <span class="a-field__label">Show Manage Action</span>
+                <input v-model="form.directory.listing.actions.manage" type="checkbox">
+              </div>
+
+              <div class="a-field inline-field">
+                <span class="a-field__label">Enable Delete Action</span>
+                <input v-model="form.directory.listing.actions.delete" type="checkbox">
+              </div>
             </div>
           </article>
 

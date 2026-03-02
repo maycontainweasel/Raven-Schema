@@ -91,6 +91,11 @@ export type DirectoryFilterSpec = {
   component: ModelUIComponentSpec
 }
 
+export type DirectoryListingActionsSpec = {
+  manage: boolean
+  delete: boolean
+}
+
 export type DirectoryCreateDialogSpec = {
   enabled: boolean
   action: string
@@ -131,6 +136,7 @@ export type ModelLayoutSpec = {
     listing: {
       fields: DirectoryListingFieldSpec[]
       filters: DirectoryFilterSpec[]
+      actions: DirectoryListingActionsSpec
     }
     createDialog: DirectoryCreateDialogSpec
   }

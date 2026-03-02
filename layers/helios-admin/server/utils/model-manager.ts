@@ -168,6 +168,11 @@ export type DirectoryFilterSpec = {
   component: ModelUIComponentSpec
 }
 
+export type DirectoryListingActionsSpec = {
+  manage: boolean
+  delete: boolean
+}
+
 export type DirectoryCreateDialogSpec = {
   enabled: boolean
   action: string
@@ -208,6 +213,7 @@ export type ModelLayoutSpec = {
     listing: {
       fields: DirectoryListingFieldSpec[]
       filters: DirectoryFilterSpec[]
+      actions: DirectoryListingActionsSpec
     }
     createDialog: DirectoryCreateDialogSpec
   }
@@ -601,6 +607,17 @@ const normalizeFilterSpec = (
   }
 
   return Array.from(deduped.values())
+}
+
+const normalizeListingActions = (
+  value: unknown,
+  fallback: DirectoryListingActionsSpec,
+): DirectoryListingActionsSpec => {
+  const source = (value && typeof value === 'object') ? value as Record<string, any> : {}
+  return {
+    manage: Boolean(source.manage ?? fallback.manage),
+    delete: Boolean(source.delete ?? fallback.delete),
+  }
 }
 
 const normalizeComponent = (
@@ -1809,6 +1826,10 @@ export const createDefaultModelSpec = (model: ModelManagerModel): ModelLayoutSpe
       listing: {
         fields: directoryFields,
         filters: directoryFilters,
+        actions: {
+          manage: true,
+          delete: true,
+        },
       },
       createDialog: {
         enabled: true,
@@ -1950,6 +1971,7 @@ export const normalizeModelSpec = (
       listing: {
         fields: normalizeListingFields(directoryListing?.fields, fallback.directory.listing.fields),
         filters: normalizeFilterSpec(directoryListing?.filters, fallback.directory.listing.filters),
+        actions: normalizeListingActions(directoryListing?.actions, fallback.directory.listing.actions),
       },
       createDialog: {
         enabled: Boolean(directoryCreateDialog?.enabled ?? fallback.directory.createDialog.enabled),
