@@ -11,9 +11,9 @@ table:
   permissions: full
 id:
   type: string
-  structure: key
   exportType: true
   exportName: LeadConsentId
+  structure: key
 fields:
   - key:
       type: string

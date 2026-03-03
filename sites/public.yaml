@@ -1,0 +1,50 @@
+name: public
+slug: public
+template: templates/nuxt-4.3.0
+target: apps/public
+nuxtConfig:
+  unocss:
+    nuxtLayers: true
+    preflight: true
+    configFile: ./uno.config.ts
+  devServer:
+    port: 2947
+    host: 0.0.0.0
+  vite:
+    server:
+      allowedHosts:
+        - public.gr.schema.local
+      origin: https://public.gr.schema.local:4443
+      hmr:
+        protocol: wss
+        host: public.gr.schema.local
+        clientPort: 4443
+        path: /__vitews
+        port: 46966
+  extends:
+    - ./layers/schema-core
+    - ./layers/helios
+  modules:
+    - "@unocss/nuxt"
+    - "@pinia/nuxt"
+    - "@vueuse/nuxt"
+  css:
+    - ~/helios/scss/index.scss
+  vite:
+    css:
+      preprocessorOptions:
+        scss:
+          additionalData: |
+            @use "~/assets/scss/variables.scss" as *;
+            @use "~/assets/scss/mq.scss" as *;
+            @use "~/assets/scss/scale.scss" as *;
+
+deploy:
+  ssl:
+    email: ""
+    redirect: true
+layers:
+  - schema-core
+  - helios
+schemaKit:
+  capabilities: {}

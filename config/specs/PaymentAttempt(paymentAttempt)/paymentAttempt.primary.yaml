@@ -11,9 +11,9 @@ table:
   permissions: full
 id:
   type: string
-  structure: attemptRef
   exportType: true
   exportName: PaymentAttemptId
+  structure: attemptRef
 fields:
   - attemptRef:
       type: string

@@ -11,9 +11,9 @@ table:
   permissions: full
 id:
   type: string
-  structure: stringID<parent, index>
   exportType: true
   exportName: BookingParticipantId
+  structure: stringID<parent, index>
 fields:
   - booking:
       type: record<booking>

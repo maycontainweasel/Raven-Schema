@@ -11,9 +11,9 @@ table:
   permissions: full
 id:
   type: string
-  structure: reference
   exportType: true
   exportName: BookingId
+  structure: reference
 fields:
   - reference:
       type: string

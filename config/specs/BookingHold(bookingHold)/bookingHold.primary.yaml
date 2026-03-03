@@ -11,9 +11,9 @@ table:
   permissions: full
 id:
   type: string
-  structure: holdRef
   exportType: true
   exportName: BookingHoldId
+  structure: holdRef
 fields:
   - holdRef:
       type: string
