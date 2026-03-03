@@ -136,6 +136,12 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   Example:
   - `pnpm -C apps/schema run site:config:sync my-site`
 
+- `site:refresh [name]`  
+  Run site setup fixes and regenerate `nuxt.config.generated.ts` from the site spec.  
+  Examples:
+  - `pnpm -C apps/schema run site:refresh public`
+  - `pnpm -C apps/schema run site:refresh -- --spec sites/public.yaml`
+
 - `site:delete [name]`  
   Remove nginx server block, certs, and hosts entry for a site.  
   Examples:
