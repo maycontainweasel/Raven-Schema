@@ -138,7 +138,8 @@ config/types/*
 config/typesense/*
 config/ui/*
 config/ui-back/*
-!/sites/
+/sites/
+/sites/** 
 !/sites/README.md
 !/sites/README.md
 
