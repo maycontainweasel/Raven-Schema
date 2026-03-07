@@ -2264,6 +2264,54 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:refresh [name]',
+    'Refresh site layers/setup and regenerate nuxt.config.generated.ts',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name (used to resolve sites/<slug>.yaml)',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('fix', {
+          type: 'boolean',
+          default: true,
+          describe: 'Run site setup fixes before regenerating config',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const { bundle, specEntry, project, appRoot } = await resolveSiteLayerTarget({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+      });
+      if (args.fix !== false) {
+        await runSiteSetupFlow({
+          projectRoot,
+          bundle,
+          project,
+          specEntry,
+          fix: true,
+        });
+      }
+      const effectiveConfig = await buildSiteNuxtConfig({
+        projectRoot,
+        spec: specEntry.spec,
+        appRoot,
+      });
+      await writeGeneratedNuxtConfig(appRoot, effectiveConfig);
+      console.log(`✅ Refreshed ${specEntry.spec.slug}: setup + nuxt.config.generated.ts updated.`);
+    }
+  )
+  .command(
     'nginx:setup',
     'Create/update an Nginx server config, mkcert certs, hosts entry, and restart nginx',
     (yargsBuilder: any) =>

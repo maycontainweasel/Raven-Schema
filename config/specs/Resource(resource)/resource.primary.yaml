@@ -1,0 +1,149 @@
+version: 1
+kind: table
+name: Resource
+primary: true
+tableType: primary
+description: Bookable resource such as bay, coach, or facility
+table:
+  model: resource
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: ResourceId
+  structure: key
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - name:
+      type: string
+      required: true
+      default: ""
+  - type:
+      type: enum<"bay" | "coach" | "facility">
+      required: true
+      default: bay
+  - resourceCode:
+      type: string
+      required: true
+      default: ""
+  - handedness:
+      type: enum<"right_only" | "left_capable" | "n_a">
+      required: true
+      default: n_a
+  - capacity:
+      type: number
+      required: true
+      default: 4
+  - timezone:
+      type: string
+      required: true
+      default: Africa/Johannesburg
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - sortOrder:
+      type: number
+      default: 0
+  - metadata:
+      type: object
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: resource
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - name
+      - type
+      - resourceCode
+      - handedness
+      - capacity
+      - timezone
+      - active
+      - sortOrder
+      - metadata
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - key
+      - name
+      - type
+      - resourceCode
+      - active
+    functionMode: generate
+    function: viewResourceTypesense
+    as:
+      - type: $type
+      - active: $active
+  schema:
+    collection: resource
+    fields:
+      - name: id
+        type: string
+      - name: key
+        type: string
+      - name: name
+        type: string
+      - name: type
+        type: string
+        facet: true
+      - name: resourceCode
+        type: string
+      - name: active
+        type: bool
+        facet: true
+    sortableFields:
+      - name
+    settings:
+      enable_nested_fields: true
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - key
+        - name
+        - resourceCode
+        - type
+      filters:
+        - type
+        - active
+refreshViews: true
+admin:
+  slugPolicy: key

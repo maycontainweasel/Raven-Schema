@@ -1,0 +1,183 @@
+version: 1
+kind: table
+name: Booking
+primary: true
+tableType: primary
+description: Customer booking record from hold through paid confirmation
+table:
+  model: booking
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: BookingId
+  structure: reference
+fields:
+  - reference:
+      type: string
+      required: true
+      default: ""
+  - service:
+      type: record<serviceDefinition>
+      required: true
+      default: ""
+      assign: true
+  - status:
+      type: enum<"held" | "pending_payment" | "paid_confirmed" | "cancelled" |
+        "expired">
+      required: true
+      default: held
+  - paymentStatus:
+      type: enum<"initiated" | "pending" | "paid" | "failed" | "cancelled">
+      required: true
+      default: initiated
+  - customerName:
+      type: string
+      required: true
+      default: ""
+  - customerEmail:
+      type: email
+      required: true
+      default: ""
+  - customerMobile:
+      type: string
+      required: true
+      default: ""
+  - startAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - endAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - timezone:
+      type: string
+      required: true
+      default: Africa/Johannesburg
+  - timeBand:
+      type: enum<"peak" | "off_peak" | "mixed">
+      required: true
+      default: off_peak
+  - players:
+      type: number
+      required: true
+      default: 1
+  - juniors:
+      type: number
+      default: 0
+  - seniors:
+      type: number
+      default: 0
+  - leftHandedRequired:
+      type: boolean
+      default: false
+  - termsAccepted:
+      type: boolean
+      required: true
+      default: false
+  - marketingConsent:
+      type: boolean
+      default: false
+  - specialRequests:
+      type: string
+      default: ""
+  - holdExpiresAt:
+      type: datetime
+      default: null
+  - subtotal:
+      type: number
+      required: true
+      default: 0
+  - discountTotal:
+      type: number
+      required: true
+      default: 0
+  - total:
+      type: number
+      required: true
+      default: 0
+  - currency:
+      type: string
+      required: true
+      default: ZAR
+  - promotionCode:
+      type: string
+      default: ""
+  - promotionLabel:
+      type: string
+      default: ""
+  - orderRef:
+      type: string
+      default: ""
+  - metadata:
+      type: object
+subTables:
+  - name: BookingParticipant
+    model: bookingParticipant
+    autoCreate: false
+    tableType: submany
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: booking
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - reference
+      - service
+      - status
+      - paymentStatus
+      - customerName
+      - customerEmail
+      - customerMobile
+      - startAt
+      - endAt
+      - timezone
+      - timeBand
+      - players
+      - juniors
+      - seniors
+      - leftHandedRequired
+      - termsAccepted
+      - marketingConsent
+      - specialRequests
+      - holdExpiresAt
+      - subtotal
+      - discountTotal
+      - total
+      - currency
+      - promotionCode
+      - promotionLabel
+      - orderRef
+      - metadata
+refreshViews: true
+admin:
+  slugPolicy: reference

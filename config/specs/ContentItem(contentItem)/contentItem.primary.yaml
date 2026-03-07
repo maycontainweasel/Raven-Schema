@@ -1,0 +1,149 @@
+version: 1
+kind: table
+name: ContentItem
+primary: true
+tableType: primary
+description: CMS content item for blog, video, and photo records
+table:
+  model: contentItem
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: ContentItemId
+  structure: key
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - title:
+      type: string
+      required: true
+      default: ""
+  - slug:
+      type: string
+      required: true
+      default: ""
+  - type:
+      type: enum<"blog" | "video" | "photo">
+      required: true
+      default: blog
+  - status:
+      type: enum<"draft" | "published" | "archived">
+      required: true
+      default: draft
+  - excerpt:
+      type: string
+      default: ""
+  - body:
+      type: string
+      default: ""
+  - mediaUrl:
+      type: string
+      default: ""
+  - coverImageUrl:
+      type: string
+      default: ""
+  - publishedAt:
+      type: datetime
+      default: null
+  - createdBy:
+      type: record<u>
+      default: ""
+      assign: true
+  - metadata:
+      type: object
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: contentItem
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - title
+      - slug
+      - type
+      - status
+      - excerpt
+      - body
+      - mediaUrl
+      - coverImageUrl
+      - publishedAt
+      - createdBy
+      - metadata
+taxonomies:
+  - key: category
+    labels:
+      singular: Category
+      plural: Categories
+    taxonomy:
+      id: stringID<contentItem, category>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - hierarchical:
+            type: boolean
+            required: false
+            default: false
+        - permalink:
+            type: <permalink<<field:key>>>
+            required: false
+            assign: true
+        - description: Content categories
+    term:
+      id: <field:key>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - description:
+            type: string
+            required: false
+        - parent:
+            type: record<term>
+            required: false
+            default: ""
+    hierarchical: true
+    cardinality: many
+    storeOnModel: false
+    payloadField: categories
+    processor: functions
+refreshViews: true
+admin:
+  slugPolicy: key

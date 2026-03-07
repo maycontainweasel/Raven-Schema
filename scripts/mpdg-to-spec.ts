@@ -1521,7 +1521,8 @@ function inferDefaultAndType(valRaw?: string): { defaultValue: any; type?: strin
   if (looksLikeSurrealExpression(val)) {
     return { defaultValue: val, type: undefined };
   }
-  if (val === '0' || val === '1') return { defaultValue: Number(val), type: 'number' };
+  if (/^-?\d+(\.\d+)?$/.test(val)) return { defaultValue: Number(val), type: 'number' };
+  if (val === 'null') return { defaultValue: null, type: undefined };
   if (val === 'false' || val === 'true') return { defaultValue: val === 'true', type: 'boolean' };
   if (val === '[]') return { defaultValue: [], type: 'array' };
   if (val === '{}') return { defaultValue: {}, type: 'object' };
