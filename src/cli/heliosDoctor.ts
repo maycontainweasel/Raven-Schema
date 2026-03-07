@@ -1,5 +1,6 @@
 import path from 'path';
 import { readFile, stat } from 'fs/promises';
+import { parse as parseYaml } from 'yaml';
 
 export type HeliosDoctorSeverity = 'error' | 'warning' | 'info';
 
@@ -65,6 +66,37 @@ const UNO_TOKENS = [
   'mergeConfigs(',
 ] as const;
 
+const ADMIN_MODELS_MANIFEST_PATH = 'modules/schema-kit/runtime/generated/admin-models.json';
+const MODEL_FRAGMENT_DIR = 'app/helios/fragments/models';
+const MODEL_GENERATED_DIR = 'app/helios/generated/models';
+const MODEL_PAGES_DIR = 'app/pages';
+const GENERATED_ROUTE_MARKER = '@helios-generated-model-route';
+
+type AdminModelManifest = {
+  models?: Record<string, {
+    key?: string;
+    table?: string;
+    admin?: {
+      enabled?: boolean;
+    };
+  }>;
+};
+
+type ModelSpecLike = {
+  directory?: {
+    route?: string;
+    createDialog?: {
+      action?: string;
+    };
+    listing?: {
+      actions?: {
+        manage?: boolean;
+        delete?: boolean;
+      };
+    };
+  };
+};
+
 async function pathExists(absPath: string): Promise<boolean> {
   const entry = await stat(absPath).catch(() => null);
   return Boolean(entry);
@@ -101,12 +133,257 @@ function readJsonSafe<T>(source: string | null): T | null {
   }
 }
 
+function readYamlSafe<T>(source: string | null): T | null {
+  if (!source) return null;
+  try {
+    return parseYaml(source) as T;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRoutePath(value: unknown, fallback: string) {
+  const raw = String(value ?? '').trim();
+  const seeded = raw.length ? raw : fallback;
+  const prefixed = seeded.startsWith('/') ? seeded : `/${seeded}`;
+  return prefixed.replace(/\/{2,}/g, '/').replace(/\/$/, '') || fallback;
+}
+
+function resolveGeneratedRouteFiles(appRoot: string, routePath: string) {
+  const normalized = normalizeRoutePath(routePath, '/admin');
+  const clean = normalized.replace(/^\//, '');
+  const segments = clean.length ? clean.split('/').map((segment) => segment.trim()).filter(Boolean) : [];
+  const baseDir = path.join(appRoot, MODEL_PAGES_DIR, ...segments);
+  return {
+    directory: path.join(baseDir, 'index.vue'),
+    record: path.join(baseDir, '[rid].vue'),
+  };
+}
+
+async function appendModelSpecItems(
+  items: HeliosDoctorItem[],
+  appRoot: string,
+  projectName: string,
+) {
+  const manifestPath = path.join(appRoot, ADMIN_MODELS_MANIFEST_PATH);
+  const manifestSource = await readTextIfExists(manifestPath);
+  const manifest = readJsonSafe<AdminModelManifest>(manifestSource);
+
+  if (!manifestSource) {
+    items.push({
+      key: 'models:manifest:missing',
+      label: `Model manifest exists: ${ADMIN_MODELS_MANIFEST_PATH}`,
+      ok: false,
+      severity: 'error',
+      fixHint: `Run: pnpm -C apps/schema run schema:generate`,
+    });
+    return;
+  }
+
+  if (!manifest || !manifest.models || typeof manifest.models !== 'object') {
+    items.push({
+      key: 'models:manifest:invalid',
+      label: 'Model manifest is valid JSON with a models object',
+      ok: false,
+      severity: 'error',
+      fixHint: `Re-generate schema assets: pnpm -C apps/schema run schema:refresh`,
+    });
+    return;
+  }
+
+  const manifestEntries = Object.entries(manifest.models)
+    .map(([fallbackKey, entry]) => {
+      const key = String(entry?.key || fallbackKey || '').trim().toLowerCase();
+      const table = String(entry?.table || key || '').trim();
+      const adminEnabled = entry?.admin?.enabled !== false;
+      if (!key || !table) return null;
+      return { key, table, adminEnabled };
+    })
+    .filter(Boolean) as Array<{ key: string; table: string; adminEnabled: boolean }>;
+
+  const auditableModels = manifestEntries.filter((entry) => entry.adminEnabled);
+  items.push({
+    key: 'models:manifest:count',
+    label: `Model manifest loaded (${auditableModels.length} admin model${auditableModels.length === 1 ? '' : 's'})`,
+    ok: true,
+    severity: 'info',
+  });
+
+  const routeOwners = new Map<string, string[]>();
+
+  for (const model of auditableModels) {
+    const fragmentPath = path.join(appRoot, MODEL_FRAGMENT_DIR, `${model.key}.ui.yaml`);
+    const generatedPath = path.join(appRoot, MODEL_GENERATED_DIR, `${model.key}.ui.json`);
+
+    const fragmentSource = await readTextIfExists(fragmentPath);
+    const generatedSource = await readTextIfExists(generatedPath);
+    const fragmentSpec = readYamlSafe<ModelSpecLike>(fragmentSource);
+    const generatedJson = readJsonSafe<{ modelKey?: string; directoryRoute?: string; spec?: ModelSpecLike }>(generatedSource);
+
+    const fallbackRoute = normalizeRoutePath(`/admin/${model.table}`, `/admin/${model.table}`);
+    const routeFromFragment = fragmentSpec?.directory?.route;
+    const routeFromGenerated = generatedJson?.directoryRoute ?? generatedJson?.spec?.directory?.route;
+    const route = normalizeRoutePath(routeFromFragment ?? routeFromGenerated, fallbackRoute);
+    const routeFiles = resolveGeneratedRouteFiles(appRoot, route);
+
+    if (!routeOwners.has(route)) routeOwners.set(route, []);
+    routeOwners.get(route)!.push(model.key);
+
+    if (!fragmentSource) {
+      items.push({
+        key: `models:${model.key}:fragment-missing`,
+        label: `Model fragment exists for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: path.relative(appRoot, fragmentPath),
+        fixHint: `Open /models/${model.key} and click Commit Spec.`,
+      });
+    } else if (!fragmentSpec) {
+      items.push({
+        key: `models:${model.key}:fragment-parse`,
+        label: `Model fragment YAML parses for "${model.key}"`,
+        ok: false,
+        severity: 'error',
+        details: path.relative(appRoot, fragmentPath),
+        fixHint: `Fix YAML parse issues in ${path.relative(appRoot, fragmentPath)}.`,
+      });
+    }
+
+    if (!generatedSource) {
+      items.push({
+        key: `models:${model.key}:generated-missing`,
+        label: `Generated model JSON exists for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: path.relative(appRoot, generatedPath),
+        fixHint: `Open /models/${model.key} and click Commit Spec.`,
+      });
+    } else if (!generatedJson) {
+      items.push({
+        key: `models:${model.key}:generated-parse`,
+        label: `Generated model JSON parses for "${model.key}"`,
+        ok: false,
+        severity: 'error',
+        details: path.relative(appRoot, generatedPath),
+        fixHint: `Re-commit model "${model.key}" to regenerate JSON output.`,
+      });
+    }
+
+    if (generatedJson && String(generatedJson.modelKey || '').trim().toLowerCase() !== model.key) {
+      items.push({
+        key: `models:${model.key}:generated-modelkey-mismatch`,
+        label: `Generated modelKey matches "${model.key}"`,
+        ok: false,
+        severity: 'error',
+        details: `Found "${String(generatedJson.modelKey || '').trim() || '(empty)'}" in ${path.relative(appRoot, generatedPath)}`,
+        fixHint: `Re-commit model "${model.key}" to regenerate the generated JSON.`,
+      });
+    }
+
+    const directoryRouteSource = await readTextIfExists(routeFiles.directory);
+    const recordRouteSource = await readTextIfExists(routeFiles.record);
+
+    if (!directoryRouteSource) {
+      items.push({
+        key: `models:${model.key}:directory-route-missing`,
+        label: `Directory route page exists for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: path.relative(appRoot, routeFiles.directory),
+        fixHint: `Commit model "${model.key}" to regenerate routes.`,
+      });
+    } else if (!directoryRouteSource.includes(GENERATED_ROUTE_MARKER)) {
+      items.push({
+        key: `models:${model.key}:directory-route-unmanaged`,
+        label: `Directory route page is managed for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: path.relative(appRoot, routeFiles.directory),
+        fixHint: `Remove/rename unmanaged route file and re-commit model "${model.key}".`,
+      });
+    }
+
+    if (!recordRouteSource) {
+      items.push({
+        key: `models:${model.key}:record-route-missing`,
+        label: `Record route page exists for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: path.relative(appRoot, routeFiles.record),
+        fixHint: `Commit model "${model.key}" to regenerate routes.`,
+      });
+    } else if (!recordRouteSource.includes(GENERATED_ROUTE_MARKER)) {
+      items.push({
+        key: `models:${model.key}:record-route-unmanaged`,
+        label: `Record route page is managed for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: path.relative(appRoot, routeFiles.record),
+        fixHint: `Remove/rename unmanaged route file and re-commit model "${model.key}".`,
+      });
+    }
+
+    const createAction = String(
+      fragmentSpec?.directory?.createDialog?.action
+      ?? generatedJson?.spec?.directory?.createDialog?.action
+      ?? '',
+    ).trim();
+    if (!createAction.includes('.')) {
+      items.push({
+        key: `models:${model.key}:create-action-invalid`,
+        label: `Create action is valid for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: createAction ? `Found "${createAction}"` : 'Action is missing',
+        fixHint: `Set create action to "${model.key}.create" in /models/${model.key}.`,
+      });
+    }
+
+    const listingActions = fragmentSpec?.directory?.listing?.actions ?? generatedJson?.spec?.directory?.listing?.actions;
+    if (!listingActions || typeof listingActions !== 'object') {
+      items.push({
+        key: `models:${model.key}:listing-actions-missing`,
+        label: `Listing actions are configured for "${model.key}"`,
+        ok: false,
+        severity: 'warning',
+        details: 'Missing directory.listing.actions (manage/delete).',
+        fixHint: `Open /models/${model.key}, toggle listing actions, and commit spec.`,
+      });
+    }
+  }
+
+  for (const [route, owners] of routeOwners.entries()) {
+    if (owners.length <= 1) continue;
+    items.push({
+      key: `models:route-collision:${route}`,
+      label: `Directory route "${route}" is unique`,
+      ok: false,
+      severity: 'error',
+      details: `Shared by models: ${owners.join(', ')}`,
+      fixHint: 'Update conflicting directory routes in /models and re-commit specs.',
+    });
+  }
+
+  const modelErrors = items.filter((item) => item.key.startsWith('models:') && !item.ok && item.severity === 'error').length;
+  const modelWarnings = items.filter((item) => item.key.startsWith('models:') && !item.ok && item.severity === 'warning').length;
+  items.push({
+    key: 'models:summary',
+    label: `Model spec audit summary: ${modelErrors} error(s), ${modelWarnings} warning(s)`,
+    ok: modelErrors === 0,
+    severity: modelErrors === 0 ? 'info' : 'error',
+    details: `Audited ${auditableModels.length} admin model spec(s).`,
+    fixHint: modelErrors > 0 ? `Run: pnpm -C apps/schema run site:helios:doctor ${projectName}` : undefined,
+  });
+}
+
 export async function runHeliosDoctor(options: {
   appRoot: string;
   projectName: string;
+  includeModelSpecs?: boolean;
 }): Promise<HeliosDoctorReport> {
   const items: HeliosDoctorItem[] = [];
   const { appRoot, projectName } = options;
+  const includeModelSpecs = options.includeModelSpecs !== false;
 
   for (const relPath of REQUIRED_ARTIFACTS) {
     const absPath = path.join(appRoot, relPath);
@@ -198,6 +475,10 @@ export async function runHeliosDoctor(options: {
     severity: 'warning',
     fixHint: `Run: pnpm -C apps/schema run site:layers:add ${projectName} helios`,
   });
+
+  if (includeModelSpecs) {
+    await appendModelSpecItems(items, appRoot, projectName);
+  }
 
   const errorCount = items.filter((item) => !item.ok && item.severity === 'error').length;
   const warningCount = items.filter((item) => !item.ok && item.severity === 'warning').length;
