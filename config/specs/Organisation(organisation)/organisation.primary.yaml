@@ -1,0 +1,196 @@
+version: 1
+kind: table
+name: Organisation
+primary: true
+tableType: primary
+description: Company/organisation record
+table:
+  model: organisation
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: OrganisationId
+  structure: slug
+modelSettings:
+  authority: source
+fields:
+  - title:
+      type: string
+      required: true
+      default: ""
+  - slug:
+      type: string
+      required: true
+      default: ""
+  - description:
+      type: string
+      default: ""
+  - website:
+      type: string
+      default: ""
+  - email:
+      type: string
+      default: ""
+  - phone:
+      type: string
+      default: ""
+  - industry:
+      type: string
+      default: ""
+  - size:
+      type: string
+      default: ""
+  - logo:
+      type: string
+      default: ""
+  - address:
+      type: object
+      fields:
+        line1:
+          type: string
+          default: ""
+        line2:
+          type: string
+          default: ""
+        city:
+          type: string
+          default: ""
+        region:
+          type: string
+          default: ""
+        postcode:
+          type: string
+          default: ""
+        country:
+          type: string
+          default: ""
+  - instances:
+      type: array<string>
+      default: []
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - createdAt:
+      type: datetime
+      default: time::now()
+  - updatedAt:
+      type: datetime
+      default: time::now()
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: organisation
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - title
+      - slug
+      - description
+      - website
+      - email
+      - phone
+      - industry
+      - size
+      - logo
+      - address
+      - instances
+      - active
+      - createdAt
+      - updatedAt
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - title
+      - slug
+      - description
+      - active
+    functionMode: generate
+    function: viewOrganisationTypesense
+    as:
+      - instances: $instances || []
+  schema:
+    collection: organisation
+    fields:
+      - name: id
+        type: string
+      - name: title
+        type: string
+      - name: slug
+        type: string
+      - name: description
+        type: string
+      - name: active
+        type: bool
+      - name: instances
+        type: string[]
+        facet: true
+    sortableFields:
+      - title
+      - slug
+    settings:
+      enable_nested_fields: true
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - title
+        - slug
+        - description
+      queryByWeights:
+        - 3
+        - 2
+        - 1
+      filters:
+        - instances
+        - active
+relations:
+  - edge: OrganisationUsers
+    left: organisation
+    right: u
+    cardinality: many
+    storeOnModel: false
+    payloadField: users
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+instance: true
+refreshViews: true
+admin:
+  slugPolicy: slug
+  authority: source
+  data: source

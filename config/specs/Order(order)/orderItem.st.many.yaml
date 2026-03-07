@@ -1,0 +1,98 @@
+version: 1
+kind: table
+name: OrderItem
+primary: false
+tableType: submany
+description: Line item snapshot
+table:
+  model: orderItem
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: OrderItemId
+fields:
+  - kind:
+      type: enum<"product" | "productVariant" | "extensionProduct" |
+        "extensionVariant" | "exam" | "other">
+      required: true
+      default: product
+  - refTable:
+      type: string
+      default: ""
+  - refId:
+      type: string
+      default: ""
+  - label:
+      type: string
+      default: ""
+  - description:
+      type: string
+      default: ""
+  - quantity:
+      type: int
+      default: 1
+  - unitAmount:
+      type: number
+      default: 0
+  - totalAmount:
+      type: number
+      default: 0
+  - currency:
+      type: record<currency>
+      default: ""
+      assign: true
+  - period:
+      type: int
+      default: 0
+  - numberOfDays:
+      type: int
+      default: 0
+  - stripePriceID:
+      type: string
+      default: ""
+  - instance:
+      type: string
+      default: ""
+  - metadata:
+      type: object
+  - order:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: OrderItem
+      in: order
+      out: orderItem
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: orderItem
+  parent: order
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true

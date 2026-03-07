@@ -1,0 +1,10 @@
+DEFINE TABLE IF NOT EXISTS faq TYPE NORMAL SCHEMALESS PERMISSIONS FULL;
+
+DEFINE TABLE OVERWRITE FAQPublic TYPE NORMAL AS
+SELECT
+    id,
+    question,
+    answer,
+    category,
+    instances
+FROM faq;

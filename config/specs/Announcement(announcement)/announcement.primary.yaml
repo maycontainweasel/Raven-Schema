@@ -1,0 +1,183 @@
+version: 1
+kind: table
+name: Announcement
+primary: true
+tableType: primary
+description: Time-bound announcements shown across instances
+table:
+  model: announcement
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: AnnouncementId
+modelSettings:
+  authority: tenant
+fields:
+  - title:
+      type: string
+      required: true
+      default: ""
+  - message:
+      type: string
+      required: true
+      default: ""
+  - style:
+      type: enum<"banner" | "flyout" | "modal">
+      required: true
+      default: banner
+  - severity:
+      type: enum<"info" | "success" | "warning" | "danger">
+      required: true
+      default: info
+  - dismissible:
+      type: boolean
+      required: true
+      default: true
+  - startsAt:
+      type: datetime
+      default: ""
+  - endsAt:
+      type: datetime
+      default: ""
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - instances:
+      type: array
+      required: true
+      default: []
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: announcement
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - title
+      - message
+      - style
+      - severity
+      - dismissible
+      - startsAt
+      - endsAt
+      - active
+      - instances
+    as:
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+  - name: Public
+    fields:
+      - id
+      - title
+      - message
+      - style
+      - severity
+      - dismissible
+      - startsAt
+      - endsAt
+      - active
+      - instances
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - title
+      - message
+      - style
+      - severity
+      - active
+    functionMode: generate
+    function: viewAnnouncementTypesense
+    as:
+      - instances: $instances
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+    __programFieldLists:
+      post:
+        - status
+        - createdAt
+        - updatedAt
+  schema:
+    collection: announcement
+    fields:
+      - name: id
+        type: string
+      - name: title
+        type: string
+      - name: message
+        type: string
+      - name: style
+        type: string
+      - name: severity
+        type: string
+      - name: active
+        type: bool
+      - name: instances
+        type: string[]
+        facet: true
+      - name: post
+        type: object
+        fields:
+          - name: status
+            type: string
+          - name: createdAt
+            type: string
+          - name: updatedAt
+            type: string
+    sortableFields:
+      - title
+      - active
+    settings:
+      enable_nested_fields: true
+      default_sorting_field: title
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - title
+        - message
+      queryByWeights:
+        - 2
+        - 1
+      filters:
+        - instances
+    fields:
+      post:
+        fields: {}
+instance: true
+post: true
+refreshViews: true
+admin:
+  authority: tenant
+  data: tenant

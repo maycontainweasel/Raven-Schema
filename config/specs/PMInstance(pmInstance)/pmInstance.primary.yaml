@@ -1,0 +1,206 @@
+version: 1
+kind: table
+name: PMInstance
+primary: true
+tableType: primary
+description: Website instance configuration (deployment settings)
+table:
+  model: pmInstance
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: PMInstanceId
+  structure: key
+modelSettings:
+  authority: source
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - instance:
+      type: record<instance>
+      required: true
+      default: ""
+      assign: true
+  - title:
+      type: string
+      required: true
+      default: ""
+  - status:
+      type: enum<"active" | "inactive" | "maintenance">
+      required: true
+      default: active
+  - flag:
+      type: string
+      default: ""
+  - description:
+      type: string
+      default: ""
+  - domains:
+      type: array<string>
+      default: []
+  - primaryDomain:
+      type: string
+      default: ""
+  - locale:
+      type: string
+      default: en-GB
+  - timezone:
+      type: string
+      default: Europe/London
+  - currency:
+      type: string
+      default: GBP
+  - currencies:
+      type: array<string>
+      default: []
+  - pricingOptions:
+      type: array<number>
+      default: []
+  - apiKeys:
+      type: object
+  - surrealdb:
+      type: object
+      fields:
+        url:
+          type: string
+          default: ""
+        namespace:
+          type: string
+          default: ""
+        database:
+          type: string
+          default: ""
+        user:
+          type: string
+          default: ""
+        pass:
+          type: string
+          default: ""
+  - redis:
+      type: object
+      fields:
+        host:
+          type: string
+          default: ""
+        port:
+          type: number
+          default: 0
+        password:
+          type: string
+          default: ""
+        database:
+          type: number
+          default: 0
+  - content:
+      type: object
+  - createdAt:
+      type: datetime
+      default: time::now()
+  - updatedAt:
+      type: datetime
+      default: time::now()
+  - createdBy:
+      type: string
+      default: ""
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: pMInstance
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - instance
+      - title
+      - status
+      - flag
+      - description
+      - domains
+      - primaryDomain
+      - locale
+      - timezone
+      - currency
+      - currencies
+      - pricingOptions
+      - apiKeys
+      - surrealdb
+      - redis
+      - content
+      - createdAt
+      - updatedAt
+      - createdBy
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - key
+      - title
+      - status
+    functionMode: generate
+    function: viewPMInstanceTypesense
+  schema:
+    collection: pminstance
+    fields:
+      - name: id
+        type: string
+      - name: key
+        type: string
+      - name: title
+        type: string
+      - name: status
+        type: string
+    sortableFields:
+      - title
+      - key
+    settings:
+      enable_nested_fields: true
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - title
+        - key
+      queryByWeights:
+        - 2
+        - 1
+      filters:
+        - status
+refreshViews: true
+admin:
+  slugPolicy: key
+  authority: source
+  data: source

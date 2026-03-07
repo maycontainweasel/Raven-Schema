@@ -1,0 +1,74 @@
+version: 1
+kind: table
+name: QuestionOption
+primary: false
+tableType: submany
+description: Multiple choice options
+table:
+  model: qOption
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: QuestionOptionId
+  structure: stringID<parent, optionKey>
+fields:
+  - optionKey:
+      type: md5<$label>
+      assign: true
+  - label:
+      type: string
+      required: true
+      default: ""
+  - correct:
+      type: boolean
+      default: false
+  - order:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: QuestionOption
+      in: q
+      out: qOption
+subTables:
+  - name: QuestionOptionRecord
+    model: qor
+    autoCreate: true
+    tableType: subsingle
+  - name: UserQuestionOptionRecord
+    model: uqor
+    autoCreate: false
+    tableType: submany
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: questionOption
+  parent: q
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true

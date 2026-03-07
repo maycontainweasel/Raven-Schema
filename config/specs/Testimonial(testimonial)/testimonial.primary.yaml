@@ -1,0 +1,183 @@
+version: 1
+kind: table
+name: Testimonial
+primary: true
+tableType: primary
+description: Customer testimonials and quotes
+table:
+  model: testimonial
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: TestimonialId
+modelSettings:
+  authority: source
+fields:
+  - name:
+      type: string
+      required: true
+      default: ""
+  - role:
+      type: string
+      default: ""
+  - organisation:
+      type: string
+      default: ""
+  - quote:
+      type: string
+      required: true
+      default: ""
+  - avatar:
+      type: string
+      default: ""
+  - rating:
+      type: number
+      default: 0
+  - order:
+      type: number
+      default: 0
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - instances:
+      type: array
+      required: true
+      default: []
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: testimonial
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - name
+      - role
+      - organisation
+      - quote
+      - rating
+      - order
+      - active
+      - instances
+    as:
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+  - name: Public
+    fields:
+      - id
+      - name
+      - role
+      - organisation
+      - quote
+      - rating
+      - order
+      - active
+      - instances
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - name
+      - role
+      - organisation
+      - quote
+      - rating
+      - order
+    functionMode: generate
+    function: viewTestimonialTypesense
+    as:
+      - instances: $instances
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+    __programFieldLists:
+      post:
+        - status
+        - createdAt
+        - updatedAt
+  schema:
+    collection: testimonial
+    fields:
+      - name: id
+        type: string
+      - name: name
+        type: string
+      - name: role
+        type: string
+      - name: organisation
+        type: string
+      - name: quote
+        type: string
+      - name: rating
+        type: int32
+      - name: order
+        type: int32
+      - name: instances
+        type: string[]
+        facet: true
+      - name: post
+        type: object
+        fields:
+          - name: status
+            type: string
+          - name: createdAt
+            type: string
+          - name: updatedAt
+            type: string
+    sortableFields:
+      - order
+      - name
+    settings:
+      enable_nested_fields: true
+      default_sorting_field: order
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - name
+        - quote
+        - organisation
+      queryByWeights:
+        - 2
+        - 2
+        - 1
+      filters:
+        - instances
+    fields:
+      post:
+        fields: {}
+instance: true
+post: true
+refreshViews: true
+admin:
+  authority: source
+  data: source

@@ -1,0 +1,72 @@
+version: 1
+kind: table
+name: SessionQuestion
+primary: true
+tableType: primary
+description: Session-specific question metadata
+table:
+  model: SessionQuestions
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: SessionQuestionId
+fields:
+  - s:
+      type: record<s>
+      required: true
+      default: ""
+      assign: true
+  - q:
+      type: record<q>
+      required: true
+      default: ""
+      assign: true
+  - order:
+      type: number
+      required: true
+      default: 0
+  - flagged:
+      type: boolean
+      default: false
+  - complete:
+      type: boolean
+      default: false
+  - startTS:
+      type: datetime
+      default: ""
+      ignorePayload: true
+  - answerTS:
+      type: datetime
+      default: ""
+      ignorePayload: true
+  - totalTime:
+      type: number
+      default: 0
+  - lastUpdated:
+      type: datetime
+      default: ""
+      ignorePayload: true
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+router:
+  name: sessionQuestion
+  endpoints:
+    - create
+    - update
+refreshViews: true

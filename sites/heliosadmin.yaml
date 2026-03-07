@@ -1,0 +1,49 @@
+name: heliosadmin
+slug: heliosadmin
+template: templates/nuxt-4.3.0
+target: apps/heliosadmin
+nuxtConfig:
+  unocss:
+    nuxtLayers: true
+    preflight: true
+    configFile: ./uno.config.ts
+  devServer:
+    host: 0.0.0.0
+    port: 9286
+  vite:
+    server:
+      allowedHosts:
+        - admin.helios.passmed.local
+      origin: https://admin.helios.passmed.local:4443
+      hmr:
+        protocol: wss
+        host: admin.helios.passmed.local
+        clientPort: 4443
+        path: /__vitews
+  modules:
+    - "@unocss/nuxt"
+deploy:
+  ssl:
+    email: michael@mpiredigital.co.za
+    redirect: true
+  host: pm-mothership
+  domain: ms.passmed.org
+  port: 7576
+  pm2Name: heliosadmin
+  pm2Command: pm2
+  nginxSitesEnabled: /etc/nginx/sites-enabled
+  restartCommand: systemctl reload nginx
+  remoteNginxSudo: true
+  overwriteNginx: true
+  overwriteApp: true
+  startPm2: true
+  remoteName: heliosadmin
+  remoteRoot: $HOME
+  remotePath: heliosadmin
+  setupComplete: true
+layers:
+  - auth
+  - schema-core
+  - helios
+  - helios-ui
+  - helios-admin

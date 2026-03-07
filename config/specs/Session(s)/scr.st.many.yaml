@@ -1,0 +1,76 @@
+version: 1
+kind: table
+name: SessionCategoryRecord
+primary: false
+tableType: submany
+description: Per-category performance in a session
+table:
+  model: scr
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: SessionCategoryRecordId
+  structure: stringID<parent, category>
+fields:
+  - s:
+      type: record<s>
+      required: true
+      default: ""
+      assign: true
+  - category:
+      type: record<qt>
+      required: true
+      default: ""
+      assign: true
+  - attempts:
+      type: number
+      default: 0
+  - noCorrect:
+      type: number
+      default: 0
+  - noIncorrect:
+      type: number
+      default: 0
+  - percCorrect:
+      type: number
+      default: 0
+  - averageTime:
+      type: number
+      default: 0
+  - totalTime:
+      type: number
+      default: 0
+  - order:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: SessionCategoryRecord
+      in: s
+      out: scr
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+router:
+  name: sessionCategoryRecord
+  parent: s
+  endpoints:
+    - create
+    - update
+refreshViews: true

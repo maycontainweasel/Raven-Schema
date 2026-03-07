@@ -1,0 +1,91 @@
+version: 1
+kind: table
+name: SessionPerformanceRecord
+primary: false
+tableType: subsingle
+description: Aggregate session performance
+table:
+  model: spr
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: SessionPerformanceRecordId
+structure:
+  type: parent
+  parentModel: s
+fields:
+  - s:
+      type: record<s>
+      required: true
+      default: ""
+      assign: true
+  - u:
+      type: record<u>
+      required: true
+      default: ""
+      assign: true
+  - qTotal:
+      type: number
+      required: true
+      default: 0
+  - attempts:
+      type: number
+      default: 0
+  - noCorrect:
+      type: number
+      default: 0
+  - noIncorrect:
+      type: number
+      default: 0
+  - noComplete:
+      type: number
+      default: 0
+  - noIncomplete:
+      type: number
+      default: 0
+  - percComplete:
+      type: number
+      default: 0
+  - percCorrect:
+      type: number
+      default: 0
+  - percCorrectAttempted:
+      type: number
+      default: 0
+  - totalSessionTime:
+      type: number
+      default: 0
+  - averageTimePerQ:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: SessionPerformanceRecord
+      in: s
+      out: spr
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+router:
+  name: sessionPerformanceRecord
+  parent: s
+  endpoints:
+    - create
+    - update
+refreshViews: true

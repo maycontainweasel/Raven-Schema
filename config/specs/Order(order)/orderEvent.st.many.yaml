@@ -1,0 +1,83 @@
+version: 1
+kind: table
+name: OrderEvent
+primary: false
+tableType: submany
+description: Timeline event for order journey
+table:
+  model: orderEvent
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: OrderEventId
+fields:
+  - type:
+      type: enum<"system" | "payment" | "fulfilment" | "customer" | "error">
+      required: true
+      default: system
+  - title:
+      type: string
+      required: true
+      default: ""
+  - description:
+      type: string
+      default: ""
+  - occurredAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - actor:
+      type: string
+      default: ""
+  - severity:
+      type: enum<"info" | "warning" | "error">
+      default: info
+  - status:
+      type: string
+      default: ""
+  - code:
+      type: string
+      default: ""
+  - metadata:
+      type: object
+  - order:
+      type: number
+      default: 0
+edges:
+  has: []
+  belongs:
+    - table: OrderEvent
+      in: order
+      out: orderEvent
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: orderEvent
+  parent: order
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true

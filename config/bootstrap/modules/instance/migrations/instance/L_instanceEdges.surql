@@ -1,0 +1,9 @@
+DEFINE TABLE OVERWRITE Instances SCHEMAFULL TYPE RELATION OUT instance;
+DEFINE FIELD OVERWRITE in ON TABLE Instances;
+DEFINE FIELD OVERWRITE out ON TABLE Instances TYPE record<instance>;
+DEFINE INDEX OVERWRITE Instances_unique ON TABLE Instances FIELDS in, out UNIQUE;
+
+DEFINE TABLE OVERWRITE InstanceSettings SCHEMAFULL TYPE RELATION IN instance OUT instanceSettings;
+DEFINE FIELD OVERWRITE in ON TABLE InstanceSettings TYPE record<instance>;
+DEFINE FIELD OVERWRITE out ON TABLE InstanceSettings TYPE record<instanceSettings>;
+DEFINE INDEX OVERWRITE InstanceSettings_unique ON TABLE InstanceSettings FIELDS in, out UNIQUE;

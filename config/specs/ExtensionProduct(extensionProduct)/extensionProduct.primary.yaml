@@ -1,0 +1,101 @@
+version: 1
+kind: table
+name: ExtensionProduct
+primary: true
+tableType: primary
+description: Extension Stripe product per variant
+table:
+  model: extensionProduct
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: ExtensionProductId
+  structure: stringID<productKey, period, currency>
+modelSettings:
+  authority: source
+fields:
+  - productKey:
+      type: string
+      required: true
+      default: ""
+  - examKey:
+      type: string
+      required: true
+      default: ""
+  - product:
+      type: record<product>
+      required: true
+      default: ""
+      assign: true
+  - exam:
+      type: record<exam>
+      required: true
+      default: ""
+      assign: true
+  - productVariant:
+      type: record<productVariant>
+      required: true
+      default: ""
+      assign: true
+  - period:
+      type: int
+      required: true
+      default: 0
+  - currency:
+      type: record<currency>
+      required: true
+      default: ""
+      assign: true
+  - stripePID:
+      type: string
+      default: ""
+subTables:
+  - name: ExtensionVariant
+    model: extensionVariant
+    autoCreate: false
+    tableType: submany
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: extensionProduct
+  endpoints:
+    - create
+    - update
+    - delete
+relations:
+  - edge: ExtensionVariants
+    left: extensionProduct
+    right: extensionVariant
+    cardinality: many
+    storeOnModel: false
+    payloadField: variants
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+refreshViews: true
+admin:
+  authority: source
+  data: source

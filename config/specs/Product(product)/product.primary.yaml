@@ -1,0 +1,165 @@
+version: 1
+kind: table
+name: Product
+primary: true
+tableType: primary
+description: Exam product (local, Stripe-linked)
+table:
+  model: product
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: ProductId
+  structure: key
+modelSettings:
+  authority: source
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - slug:
+      type: string
+      default: ""
+  - title:
+      type: string
+      required: true
+      default: ""
+  - description:
+      type: string
+      default: ""
+  - stripePID:
+      type: string
+      default: ""
+  - instances:
+      type: array<string>
+      required: true
+      default: []
+subTables:
+  - name: ProductVariant
+    model: productVariant
+    autoCreate: false
+    tableType: submany
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: product
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - key
+      - slug
+      - title
+      - description
+      - stripePID
+      - instances
+    as:
+      - exams: (select value ->ProductExams.out from only $this.id)
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - key
+      - slug
+      - title
+      - description
+      - stripePID
+    functionMode: generate
+    function: viewProductTypesense
+    as:
+      - instances: $instances || []
+  schema:
+    collection: product
+    fields:
+      - name: id
+        type: string
+      - name: key
+        type: string
+      - name: slug
+        type: string
+      - name: title
+        type: string
+      - name: description
+        type: string
+      - name: stripePID
+        type: string
+      - name: instances
+        type: string[]
+        facet: true
+    sortableFields:
+      - title
+      - key
+    settings:
+      enable_nested_fields: true
+      default_sorting_field: title
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - title
+        - key
+        - slug
+      queryByWeights:
+        - 3
+        - 2
+        - 1
+relations:
+  - edge: ProductExams
+    left: product
+    right: exam
+    cardinality: many
+    storeOnModel: false
+    payloadField: exams
+    linkOnCreate: true
+    required: true
+    processor: functions
+    hook: right
+  - edge: ProductVariants
+    left: product
+    right: productVariant
+    cardinality: many
+    storeOnModel: false
+    payloadField: variants
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+instance: true
+post: true
+refreshViews: true
+admin:
+  slugPolicy: key
+  authority: source
+  data: source

@@ -1,0 +1,399 @@
+version: 1
+kind: table
+name: Question
+primary: true
+tableType: primary
+description: A basic question table
+table:
+  model: q
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: QuestionId
+  structure: qid
+modelSettings:
+  authority: source
+fields:
+  - qid:
+      type: number
+      required: true
+      default: 0
+  - qCode:
+      type: string
+      default: ""
+  - question:
+      type: string
+      required: true
+      default: ""
+  - explanation:
+      type: string
+      default: ""
+  - explanationRef:
+      type: string
+      default: ""
+  - source:
+      type: string
+      default: ""
+  - instances:
+      type: array<string>
+      required: true
+      default: []
+  - tags:
+      type: array<record<t_q_qtag>>
+subTables:
+  - name: QuestionOption
+    model: qOption
+    autoCreate: false
+    tableType: submany
+    options:
+      createInput:
+        field: options
+        many: true
+        required: false
+  - name: QuestionPerformanceRecord
+    model: qpr
+    autoCreate: true
+    tableType: subsingle
+  - name: UserQuestionPerformanceRecord
+    model: uqpr
+    autoCreate: false
+    tableType: submany
+  - name: QuestionNote
+    model: qnote
+    autoCreate: false
+    tableType: submany
+  - name: UserQuestionNote
+    model: uqnote
+    autoCreate: false
+    tableType: submany
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: question
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - qid
+      - qCode
+      - question
+      - explanation
+      - explanationRef
+      - source
+      - instances
+    functionMode: generate
+    function: viewQuestionAdmin
+    as:
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+      - optionsString: ("")
+      - instances: $instances || []
+      - exams: ([])
+      - categories: ([])
+      - tags: ([])
+      - topics: ([])
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+  - name: Session
+    fields:
+      - id
+      - qid
+      - qCode
+      - question
+      - explanation
+      - explanationRef
+      - source
+      - instances
+    functionMode: generate
+    function: viewQuestionSession
+    as:
+      - options: (select id, label, correct, order from qOption where <-(QuestionOption
+          where in = $parent.id))
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - qid
+      - question
+      - explanation
+      - source
+      - instances
+    functionMode: generate
+    function: viewQuestionTypesense
+    as:
+      - optionsString: ("")
+      - instances: $instances || []
+      - qid: $qid
+      - exams: ([])
+      - categories: ([])
+      - tags: ([])
+      - topics: ([])
+      - post: |-
+          ({
+          status: "",
+          createdAt: "",
+          updatedAt: "",
+          })
+      - id: (<string> record::id($this.id))
+  schema:
+    collection: question
+    fields:
+      - name: id
+        type: string
+      - name: qid
+        type: int32
+      - name: question
+        type: string
+      - name: explanation
+        type: string
+      - name: source
+        type: string
+      - name: instances
+        type: string[]
+        facet: true
+      - name: optionsString
+        type: string
+      - name: exams
+        type: object
+        optional: true
+        fields:
+          - name: id
+            type: string
+          - name: title
+            type: string
+      - name: categories
+        type: object
+        optional: true
+        fields:
+          - name: id
+            type: string
+          - name: title
+            type: string
+      - name: tags
+        type: object
+        optional: true
+        fields:
+          - name: id
+            type: string
+          - name: title
+            type: string
+      - name: topics
+        type: object
+        optional: true
+        fields:
+          - name: id
+            type: string
+          - name: title
+            type: string
+      - name: post
+        type: object
+        fields:
+          - name: id
+            type: string
+          - name: status
+            type: string
+          - name: createdAt
+            type: string
+          - name: updatedAt
+            type: string
+    sortableFields:
+      - qid
+    settings:
+      enable_nested_fields: true
+      default_sorting_field: qid
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - question
+        - explanation
+        - optionsString
+      queryByWeights:
+        - 1
+        - 1
+        - 1
+    fields:
+      qid:
+        sort: true
+      exams:
+        fields: {}
+      categories:
+        fields: {}
+      tags:
+        fields: {}
+      topics:
+        fields: {}
+      post:
+        fields: {}
+taxonomies:
+  - key: qcat
+    labels:
+      singular: Category
+      plural: Categories
+    taxonomy:
+      id: stringID<q, qcat>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - hierarchical:
+            type: boolean
+            required: false
+            default: false
+        - permalink:
+            type: <permalink<<field:key>>>
+            required: false
+            assign: true
+        - description: Question categories
+    term:
+      id: <field:key>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - description:
+            type: string
+            required: false
+        - parent:
+            type: record<term>
+            required: false
+            default: ""
+    hierarchical: true
+    storeOnModel: false
+    payloadField: categories
+    processor: functions
+  - key: qtag
+    labels:
+      singular: Tag
+      plural: Tags
+    taxonomy:
+      id: stringID<q, qtag>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - hierarchical:
+            type: boolean
+            required: false
+            default: false
+        - permalink:
+            type: <permalink<<field:key>>>
+            required: false
+            assign: true
+        - description: Question tags
+    term:
+      id: <field:key>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - description:
+            type: string
+            required: false
+        - parent:
+            type: record<term>
+            required: false
+            default: ""
+    hierarchical: false
+    storeOnModel: true
+    payloadField: tags
+    processor: functions
+  - key: qtopic
+    labels:
+      singular: Topic
+      plural: Topics
+    taxonomy:
+      id: stringID<q, qtopic>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - hierarchical:
+            type: boolean
+            required: false
+            default: false
+        - permalink:
+            type: <permalink<<field:key>>>
+            required: false
+            assign: true
+        - description: Question topics
+    term:
+      id: <field:key>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - description:
+            type: string
+            required: false
+        - parent:
+            type: record<term>
+            required: false
+            default: ""
+    hierarchical: true
+    storeOnModel: false
+    payloadField: topics
+    processor: functions
+relations:
+  - edge: ExamQuestions
+    left: exam
+    right: q
+    cardinality: many
+    storeOnModel: false
+    payloadField: exams
+    linkOnCreate: true
+    required: true
+    processor: functions
+    hook: right
+instance: true
+post: true
+refreshViews: true
+admin:
+  authority: source
+  data: source

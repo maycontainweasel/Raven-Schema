@@ -77,28 +77,28 @@ temp/
 /.deploy/*
 
 # Schema app local config (do not sync across repos)
-config/app.config.yaml
-config/environment.yaml
-config/imports.config.yaml
-config/nginx.yaml
-config/sync.yaml
+# config/app.config.yaml
+# config/environment.yaml
+# config/imports.config.yaml
+# config/nginx.yaml
+# config/sync.yaml
 
-config/bootstrap/functions/utility/initTaxonomies.surql
-config/schema-tenants.paths
-config/schema-tenants.paths.local
+# config/bootstrap/functions/utility/initTaxonomies.surql
+# config/schema-tenants.paths
+# config/schema-tenants.paths.local
 
 # Graph + generated artifacts (per-project or generated)
-config/graph.ts
-config/graph.mmd
-config/specs/
-config/specs_stage/
-config/specs-bak/
-config/migrations/
-config/generated/
-config/types/
-config/typesense/
-config/schema-assets.json
-config/admin/
+# config/graph.ts
+# config/graph.mmd
+# config/specs/
+# config/specs_stage/
+# config/specs-bak/
+# config/migrations/
+# config/generated/
+# config/types/
+# config/typesense/
+# config/schema-assets.json
+# config/admin/
 
 # Schema docs build output
 schema-docs/.nuxt/
@@ -118,28 +118,28 @@ sync-itemize.log
 
 # admin folder
 #***************
-config/admin/bootstrap/*
-config/admin/migrations/*
-config/admin/overrides/*
-config/admin/specs/*
-config/admin/types/*
+# config/admin/bootstrap/*
+# config/admin/migrations/*
+# config/admin/overrides/*
+# config/admin/specs/*
+# config/admin/types/*
 
 #bootstrap folder
 #***************
-config/bootstrap/functions/*
-config/bootstrap/modules/*
-config/bootstrap/modules/post/migrations/post/Z_PostBundle.surql
-config/bootstrap/seed/*
-config/generated/*
-config/migrations/*
-config/overrides/*
-config/specs/*
-config/types/*
-config/typesense/*
-config/ui/*
-config/ui-back/*
-/sites/
-/sites/** 
+# config/bootstrap/functions/*
+# config/bootstrap/modules/*
+# config/bootstrap/modules/post/migrations/post/Z_PostBundle.surql
+# config/bootstrap/seed/*
+# config/generated/*
+# config/migrations/*
+# config/overrides/*
+# config/specs/*
+# config/types/*
+# config/typesense/*
+# config/ui/*
+# config/ui-back/*
+# /sites/
+# /sites/** 
 !/sites/README.md
 !/sites/README.md
 
@@ -149,18 +149,18 @@ config/temp/*
 ## Files
 #***************
 
-config/app.config.yaml
-config/environments.yaml
-config/imports.config.yaml
-config/schema-assets.ts
+# config/app.config.yaml
+# config/environments.yaml
+# config/imports.config.yaml
+# config/schema-assets.ts
 
-config/graph.mpdg
-config/graph.mmd
-config/graph.ts
+# config/graph.mpdg
+# config/graph.mmd
+# config/graph.ts
 
-config/bootstrap/functions/utility/initTaxonomies.surql
-config/bootstrap/seed/global.surql
-config/bootstrap/seed/**
+# config/bootstrap/functions/utility/initTaxonomies.surql
+# config/bootstrap/seed/global.surql
+# config/bootstrap/seed/**
 
 
 
@@ -200,26 +200,5 @@ schema-docs/docs/api/controllers/**/*
 # Generated docs output (schema app)
 docs/generated/
 
-
-
-/layers/pm-za/** 
-/layers/pm-ca/** 
-
-
-
-# --- Cleanup (remove already-tracked generated files) ---
-# Use these commands when you want to untrack generated content:
-# git rm -r --cached config/generated &&
-# git rm -r --cached config/migrations &&
-# git rm -r --cached config/specs &&
-# git rm -r --cached config/specs_stage &&
-# git rm -r --cached config/specs-bak &&
-# git rm -r --cached config/types &&
-# git rm -r --cached config/typesense &&
-# git rm -r --cached config/admin &&
-# git rm -r --cached schema-docs/app/data/router-manifest.json &&
-# git rm -r --cached schema-docs/app/data/docs-manifest.json &&
-# git rm -r --cached schema-docs/app/types/schema/generated &&
-# git rm -r --cached schema-docs/modules/schema-kit/runtime/generated &&
-# git rm -r --cached schema-docs/modules/schema-kit/.schema-kit.hash &&
-# git rm -r --cached docs/generated 
+# /layers/pm-za/** 
+# /layers/pm-ca/** 

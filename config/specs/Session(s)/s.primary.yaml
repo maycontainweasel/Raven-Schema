@@ -1,0 +1,298 @@
+version: 1
+kind: table
+name: Session
+primary: true
+tableType: primary
+description: Core session record (user-specific)
+table:
+  model: s
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: SessionId
+modelSettings:
+  authority: tenant
+fields:
+  - title:
+      type: string
+      required: true
+      default: New Session
+  - mode:
+      type: enum<"learn" | "exam">
+      required: true
+      default: learn
+  - state:
+      type: enum<"untouched" | "in-progress" | "paused" | "complete">
+      required: true
+      default: untouched
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - dateCreated:
+      type: datetime
+      required: true
+      default: ""
+  - dateLastActive:
+      type: datetime
+      default: ""
+      ignorePayload: true
+  - dateLastTouch:
+      type: datetime
+      default: ""
+      ignorePayload: true
+  - dateCompleted:
+      type: datetime
+      default: ""
+      ignorePayload: true
+  - index:
+      type: number
+      default: 0
+  - qTotal:
+      type: number
+      required: true
+      default: 0
+  - familiarity:
+      type: enum<"all" | "new" | "incorrect">
+      required: true
+      default: all
+  - u:
+      type: record<u>
+      required: true
+      default: ""
+      assign: true
+  - exams:
+      type: array<record<exam>>
+      default: []
+  - categories:
+      type: "array<{ id: record<exam>, categories: record<qt>[] }>"
+      default: []
+  - timing:
+      type: object
+  - qids:
+      type: array<record<q>>
+      default: []
+  - qidsInit:
+      type: boolean
+      default: false
+  - qActiveID:
+      type: record<q>
+      default: ""
+      ignorePayload: true
+subTables:
+  - name: SessionPerformanceRecord
+    model: spr
+    autoCreate: true
+    tableType: subsingle
+  - name: SessionCategoryRecord
+    model: scr
+    autoCreate: false
+    tableType: submany
+  - name: SessionEvent
+    model: se
+    autoCreate: true
+    tableType: subsingle
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: session
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+      - title
+      - mode
+      - state
+      - active
+      - dateCreated
+      - dateLastActive
+      - dateLastTouch
+      - dateCompleted
+      - index
+      - qTotal
+      - familiarity
+      - u
+      - exams
+      - categories
+      - timing
+      - qids
+      - qidsInit
+      - qActiveID
+    functionMode: generate
+    function: viewSessionAdmin
+    as:
+      - post: (select status, createdAt, updatedAt from only fn::PID($this.id))
+      - u: $u
+      - exams: $exams
+      - categories: $categories
+      - timing: $timing
+typesense:
+  view:
+    name: Typesense
+    fields:
+      - id
+      - title
+      - mode
+      - state
+      - dateCreated
+      - dateLastActive
+      - qTotal
+    functionMode: generate
+    function: viewSessionTypesense
+    as:
+      - u: $u
+      - exams: $exams
+  schema:
+    collection: session
+    fields:
+      - name: id
+        type: string
+      - name: title
+        type: string
+      - name: mode
+        type: string
+      - name: state
+        type: string
+      - name: dateCreated
+        type: string
+      - name: dateLastActive
+        type: string
+      - name: qTotal
+        type: int32
+      - name: u
+        type: string
+      - name: exams
+        type: string[]
+    sortableFields:
+      - dateCreated
+      - dateLastActive
+      - qTotal
+    settings:
+      enable_nested_fields: true
+      default_sorting_field: dateCreated
+  meta:
+    settings:
+      synonyms: false
+      searchAsYouType: false
+      perDocumentSynonyms: false
+      perDocumentSearchAsYouType: false
+      queryBy:
+        - title
+        - mode
+        - state
+      queryByWeights:
+        - 2
+        - 1
+        - 1
+relations:
+  - edge: SessionQuestions
+    left: s
+    right: q
+    cardinality: many
+    storeOnModel: false
+    payloadField: questions
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: left
+  - edge: SessionAttempts
+    left: s
+    right: qa
+    cardinality: many
+    storeOnModel: false
+    payloadField: attempts
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+  - edge: SessionRecord
+    left: s
+    right: spr
+    cardinality: one
+    storeOnModel: false
+    payloadField: record
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+  - edge: SessionLog
+    left: s
+    right: slog
+    cardinality: one
+    storeOnModel: false
+    payloadField: log
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+  - edge: SessionCategories
+    left: s
+    right: qt
+    cardinality: many
+    storeOnModel: false
+    payloadField: categories
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+  - edge: SessionCategoryRecords
+    left: s
+    right: scr
+    cardinality: many
+    storeOnModel: false
+    payloadField: categoryRecords
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+  - edge: UserSessions
+    left: u
+    right: s
+    cardinality: many
+    storeOnModel: false
+    payloadField: sessions
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+  - edge: ExamSessions
+    left: exam
+    right: s
+    cardinality: many
+    storeOnModel: false
+    payloadField: sessions
+    linkOnCreate: true
+    required: false
+    processor: functions
+    hook: right
+refreshViews: true
+admin:
+  authority: tenant
+  data: tenant

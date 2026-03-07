@@ -1,0 +1,61 @@
+version: 1
+kind: table
+name: Currency
+primary: true
+tableType: primary
+description: Currency entity
+table:
+  model: currency
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: CurrencyId
+  structure: key
+fields:
+  - key:
+      type: string
+      required: true
+      default: ""
+  - label:
+      type: string
+      required: true
+      default: ""
+  - code:
+      type: string
+      required: true
+      default: ""
+  - symbol:
+      type: string
+      required: true
+      default: ""
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: currency
+  endpoints:
+    - create
+    - update
+    - delete
+refreshViews: true
