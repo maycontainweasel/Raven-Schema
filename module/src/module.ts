@@ -340,7 +340,16 @@ export default defineNuxtModule<SchemaKitModuleOptions>({
           errors.push('Redis enabled but dependency "ioredis" is missing.')
           errors.push('Install: pnpm add ioredis')
         }
-        if (!requireRuntimeValue('redis.host') || !requireRuntimeValue('redis.port')) {
+        const hasRedisRuntime = requireRuntimeValue('redis.host') && requireRuntimeValue('redis.port')
+        const hasRedisEnv = hasEnvValue([
+          'NUXT_REDIS_HOST',
+          'NUXT_REDIS_PORT',
+          'NUXT_REDIS__HOST',
+          'NUXT_REDIS__PORT',
+          'REDIS_HOST',
+          'REDIS_PORT',
+        ])
+        if (!hasRedisRuntime && !hasRedisEnv) {
           errors.push('Redis enabled but runtimeConfig.redis.host/port are missing.')
           errors.push(
             'Env: NUXT_REDIS_HOST, NUXT_REDIS_PORT (optional: NUXT_REDIS_PASSWORD, NUXT_REDIS_FILE_LOGGING_ENABLED)',
@@ -857,6 +866,26 @@ export {};
         addServerHandler({
           route: `/api/auth/${handler.name}`,
           handler: overrideHandler ?? resolver.resolve(`runtime/server/api/auth/${handler.name}.${handler.method}`),
+        })
+      }
+    }
+
+    if (redisEnabled) {
+      const redisHandlers = [
+        { name: 'query', method: 'post' },
+        { name: 'pipeline', method: 'post' },
+      ]
+      const extCandidates = ['.ts', '.js', '.mjs']
+
+      for (const handler of redisHandlers) {
+        const basePath = resolve(rootDir, 'server', 'api', 'r', `${handler.name}.${handler.method}`)
+        const hasAppHandler = extCandidates.some((ext) => existsSync(`${basePath}${ext}`))
+        if (hasAppHandler) continue
+
+        const overrideHandler = resolveOverrideFile(`server/api/r/${handler.name}.${handler.method}`)
+        addServerHandler({
+          route: `/api/r/${handler.name}`,
+          handler: overrideHandler ?? resolver.resolve(`runtime/server/api/r/${handler.name}.${handler.method}`),
         })
       }
     }
