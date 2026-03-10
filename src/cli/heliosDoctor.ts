@@ -1,5 +1,5 @@
 import path from 'path';
-import { readFile, stat } from 'fs/promises';
+import { readdir, readFile, stat } from 'fs/promises';
 import { parse as parseYaml } from 'yaml';
 
 export type HeliosDoctorSeverity = 'error' | 'warning' | 'info';
@@ -16,11 +16,14 @@ export type HeliosDoctorItem = {
 export type HeliosDoctorReport = {
   projectName: string;
   appRoot: string;
+  modelScope: HeliosDoctorModelScope;
   items: HeliosDoctorItem[];
   errorCount: number;
   warningCount: number;
   ready: boolean;
 };
+
+export type HeliosDoctorModelScope = 'strict' | 'active' | 'fragments';
 
 const REQUIRED_ARTIFACTS = [
   'app/helios/fragments/setup.json',
@@ -149,6 +152,45 @@ function normalizeRoutePath(value: unknown, fallback: string) {
   return prefixed.replace(/\/{2,}/g, '/').replace(/\/$/, '') || fallback;
 }
 
+function toModelKeyFromFileName(fileName: string, suffix: string) {
+  return fileName.replace(new RegExp(`${suffix}$`, 'i'), '').trim().toLowerCase();
+}
+
+async function listModelKeysFromDirectory(absDir: string, suffix: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  const entries = await readdir(absDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.toLowerCase().endsWith(suffix.toLowerCase())) continue;
+    out.add(toModelKeyFromFileName(entry.name, suffix));
+  }
+  return out;
+}
+
+async function listGeneratedRouteModelKeys(absPagesDir: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  const queue = [absPagesDir];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const absPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(absPath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.vue')) continue;
+      const source = await readTextIfExists(absPath);
+      if (!source || !source.includes(GENERATED_ROUTE_MARKER)) continue;
+      const modelMatch = source.match(/model=([A-Za-z0-9_-]+)/);
+      const key = modelMatch?.[1]?.trim().toLowerCase();
+      if (key) out.add(key);
+    }
+  }
+  return out;
+}
+
 function resolveGeneratedRouteFiles(appRoot: string, routePath: string) {
   const normalized = normalizeRoutePath(routePath, '/admin');
   const clean = normalized.replace(/^\//, '');
@@ -164,6 +206,7 @@ async function appendModelSpecItems(
   items: HeliosDoctorItem[],
   appRoot: string,
   projectName: string,
+  modelScope: HeliosDoctorModelScope,
 ) {
   const manifestPath = path.join(appRoot, ADMIN_MODELS_MANIFEST_PATH);
   const manifestSource = await readTextIfExists(manifestPath);
@@ -201,12 +244,37 @@ async function appendModelSpecItems(
     })
     .filter(Boolean) as Array<{ key: string; table: string; adminEnabled: boolean }>;
 
-  const auditableModels = manifestEntries.filter((entry) => entry.adminEnabled);
+  const adminModels = manifestEntries.filter((entry) => entry.adminEnabled);
+  const fragmentModelKeys = await listModelKeysFromDirectory(path.join(appRoot, MODEL_FRAGMENT_DIR), '.ui.yaml');
+  const generatedModelKeys = await listModelKeysFromDirectory(path.join(appRoot, MODEL_GENERATED_DIR), '.ui.json');
+  const generatedRouteModelKeys = await listGeneratedRouteModelKeys(path.join(appRoot, MODEL_PAGES_DIR));
+
+  const isAuditableModel = (modelKey: string) => {
+    if (modelScope === 'strict') return true;
+    if (modelScope === 'fragments') return fragmentModelKeys.has(modelKey);
+    return fragmentModelKeys.has(modelKey) || generatedModelKeys.has(modelKey);
+  };
+
+  const auditableModels = adminModels.filter((entry) => isAuditableModel(entry.key));
+  const skippedModels = adminModels.length - auditableModels.length;
+
   items.push({
     key: 'models:manifest:count',
-    label: `Model manifest loaded (${auditableModels.length} admin model${auditableModels.length === 1 ? '' : 's'})`,
+    label: `Model manifest loaded (${adminModels.length} admin model${adminModels.length === 1 ? '' : 's'})`,
     ok: true,
     severity: 'info',
+  });
+  items.push({
+    key: 'models:scope',
+    label: `Model audit scope: ${modelScope}`,
+    ok: true,
+    severity: 'info',
+    details: modelScope === 'strict'
+      ? `Auditing all ${adminModels.length} admin model(s).`
+      : `Auditing ${auditableModels.length} active model(s), skipped ${skippedModels} inactive model(s). Generated route-only models detected: ${generatedRouteModelKeys.size}.`,
+    fixHint: modelScope === 'strict'
+      ? undefined
+      : `Use --model-scope strict to audit every admin model in the manifest.`,
   });
 
   const routeOwners = new Map<string, string[]>();
@@ -224,10 +292,22 @@ async function appendModelSpecItems(
     const routeFromFragment = fragmentSpec?.directory?.route;
     const routeFromGenerated = generatedJson?.directoryRoute ?? generatedJson?.spec?.directory?.route;
     const route = normalizeRoutePath(routeFromFragment ?? routeFromGenerated, fallbackRoute);
+    const directoryEnabled = Boolean(
+      fragmentSpec?.directory?.enabled
+      ?? generatedJson?.spec?.directory?.enabled
+      ?? true,
+    );
+    const createDialogEnabled = Boolean(
+      fragmentSpec?.directory?.createDialog?.enabled
+      ?? generatedJson?.spec?.directory?.createDialog?.enabled
+      ?? true,
+    );
     const routeFiles = resolveGeneratedRouteFiles(appRoot, route);
 
-    if (!routeOwners.has(route)) routeOwners.set(route, []);
-    routeOwners.get(route)!.push(model.key);
+    if (directoryEnabled) {
+      if (!routeOwners.has(route)) routeOwners.set(route, []);
+      routeOwners.get(route)!.push(model.key);
+    }
 
     if (!fragmentSource) {
       items.push({
@@ -283,44 +363,46 @@ async function appendModelSpecItems(
     const directoryRouteSource = await readTextIfExists(routeFiles.directory);
     const recordRouteSource = await readTextIfExists(routeFiles.record);
 
-    if (!directoryRouteSource) {
-      items.push({
-        key: `models:${model.key}:directory-route-missing`,
-        label: `Directory route page exists for "${model.key}"`,
-        ok: false,
-        severity: 'warning',
-        details: path.relative(appRoot, routeFiles.directory),
-        fixHint: `Commit model "${model.key}" to regenerate routes.`,
-      });
-    } else if (!directoryRouteSource.includes(GENERATED_ROUTE_MARKER)) {
-      items.push({
-        key: `models:${model.key}:directory-route-unmanaged`,
-        label: `Directory route page is managed for "${model.key}"`,
-        ok: false,
-        severity: 'warning',
-        details: path.relative(appRoot, routeFiles.directory),
-        fixHint: `Remove/rename unmanaged route file and re-commit model "${model.key}".`,
-      });
-    }
+    if (directoryEnabled) {
+      if (!directoryRouteSource) {
+        items.push({
+          key: `models:${model.key}:directory-route-missing`,
+          label: `Directory route page exists for "${model.key}"`,
+          ok: false,
+          severity: 'warning',
+          details: path.relative(appRoot, routeFiles.directory),
+          fixHint: `Commit model "${model.key}" to regenerate routes.`,
+        });
+      } else if (!directoryRouteSource.includes(GENERATED_ROUTE_MARKER)) {
+        items.push({
+          key: `models:${model.key}:directory-route-unmanaged`,
+          label: `Directory route page is managed for "${model.key}"`,
+          ok: false,
+          severity: 'warning',
+          details: path.relative(appRoot, routeFiles.directory),
+          fixHint: `Remove/rename unmanaged route file and re-commit model "${model.key}".`,
+        });
+      }
 
-    if (!recordRouteSource) {
-      items.push({
-        key: `models:${model.key}:record-route-missing`,
-        label: `Record route page exists for "${model.key}"`,
-        ok: false,
-        severity: 'warning',
-        details: path.relative(appRoot, routeFiles.record),
-        fixHint: `Commit model "${model.key}" to regenerate routes.`,
-      });
-    } else if (!recordRouteSource.includes(GENERATED_ROUTE_MARKER)) {
-      items.push({
-        key: `models:${model.key}:record-route-unmanaged`,
-        label: `Record route page is managed for "${model.key}"`,
-        ok: false,
-        severity: 'warning',
-        details: path.relative(appRoot, routeFiles.record),
-        fixHint: `Remove/rename unmanaged route file and re-commit model "${model.key}".`,
-      });
+      if (!recordRouteSource) {
+        items.push({
+          key: `models:${model.key}:record-route-missing`,
+          label: `Record route page exists for "${model.key}"`,
+          ok: false,
+          severity: 'warning',
+          details: path.relative(appRoot, routeFiles.record),
+          fixHint: `Commit model "${model.key}" to regenerate routes.`,
+        });
+      } else if (!recordRouteSource.includes(GENERATED_ROUTE_MARKER)) {
+        items.push({
+          key: `models:${model.key}:record-route-unmanaged`,
+          label: `Record route page is managed for "${model.key}"`,
+          ok: false,
+          severity: 'warning',
+          details: path.relative(appRoot, routeFiles.record),
+          fixHint: `Remove/rename unmanaged route file and re-commit model "${model.key}".`,
+        });
+      }
     }
 
     const createAction = String(
@@ -328,7 +410,7 @@ async function appendModelSpecItems(
       ?? generatedJson?.spec?.directory?.createDialog?.action
       ?? '',
     ).trim();
-    if (!createAction.includes('.')) {
+    if (createDialogEnabled && !createAction.includes('.')) {
       items.push({
         key: `models:${model.key}:create-action-invalid`,
         label: `Create action is valid for "${model.key}"`,
@@ -340,7 +422,7 @@ async function appendModelSpecItems(
     }
 
     const listingActions = fragmentSpec?.directory?.listing?.actions ?? generatedJson?.spec?.directory?.listing?.actions;
-    if (!listingActions || typeof listingActions !== 'object') {
+    if (directoryEnabled && (!listingActions || typeof listingActions !== 'object')) {
       items.push({
         key: `models:${model.key}:listing-actions-missing`,
         label: `Listing actions are configured for "${model.key}"`,
@@ -371,7 +453,7 @@ async function appendModelSpecItems(
     label: `Model spec audit summary: ${modelErrors} error(s), ${modelWarnings} warning(s)`,
     ok: modelErrors === 0,
     severity: modelErrors === 0 ? 'info' : 'error',
-    details: `Audited ${auditableModels.length} admin model spec(s).`,
+    details: `Audited ${auditableModels.length} admin model spec(s) using "${modelScope}" scope.`,
     fixHint: modelErrors > 0 ? `Run: pnpm -C apps/schema run site:helios:doctor ${projectName}` : undefined,
   });
 }
@@ -380,10 +462,12 @@ export async function runHeliosDoctor(options: {
   appRoot: string;
   projectName: string;
   includeModelSpecs?: boolean;
+  modelScope?: HeliosDoctorModelScope;
 }): Promise<HeliosDoctorReport> {
   const items: HeliosDoctorItem[] = [];
   const { appRoot, projectName } = options;
   const includeModelSpecs = options.includeModelSpecs !== false;
+  const modelScope = options.modelScope ?? 'fragments';
 
   for (const relPath of REQUIRED_ARTIFACTS) {
     const absPath = path.join(appRoot, relPath);
@@ -477,7 +561,7 @@ export async function runHeliosDoctor(options: {
   });
 
   if (includeModelSpecs) {
-    await appendModelSpecItems(items, appRoot, projectName);
+    await appendModelSpecItems(items, appRoot, projectName, modelScope);
   }
 
   const errorCount = items.filter((item) => !item.ok && item.severity === 'error').length;
@@ -486,6 +570,7 @@ export async function runHeliosDoctor(options: {
   return {
     projectName,
     appRoot,
+    modelScope,
     items,
     errorCount,
     warningCount,
@@ -496,6 +581,7 @@ export async function runHeliosDoctor(options: {
 export function printHeliosDoctorReport(report: HeliosDoctorReport, repoRoot: string) {
   const relRoot = path.relative(repoRoot, report.appRoot) || '.';
   console.log(`\n🩺 Helios doctor report for ${report.projectName} (${relRoot})`);
+  console.log(`Scope: ${report.modelScope}`);
 
   for (const item of report.items) {
     const prefix = item.ok ? '✅' : (item.severity === 'error' ? '❌' : item.severity === 'warning' ? '⚠️' : 'ℹ️');
