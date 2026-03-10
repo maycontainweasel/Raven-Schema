@@ -57,6 +57,7 @@
     "site:layers:add": "tsx src/cli.ts site:layers:add",
     "site:layers:remove": "tsx src/cli.ts site:layers:remove",
     "site:helios:setup": "tsx src/cli.ts site:helios:setup",
+    "site:helios:doctor": "tsx src/cli.ts site:helios:doctor",
     "layers:status": "tsx src/cli.ts site:layers:status",
     "layers:push": "tsx src/cli.ts site:layers:push",
     "layers:push:heliosadmin": "tsx src/cli.ts site:layers:push --project heliosadmin --layers-sync force",

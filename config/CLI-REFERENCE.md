@@ -241,12 +241,18 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   Examples:
   - `pnpm -C apps/schema run site:helios:doctor heliosadmin`
   - `pnpm -C apps/schema run site:helios:doctor -- --spec sites/heliosadmin.yaml --json`
+  - `pnpm -C apps/schema run site:helios:doctor -- --spec sites/heliosadmin.yaml --no-model-specs`
   Checks:
   - Baseline Helios artifacts under `app/helios/{fragments,generated,scss}`
   - `nuxt.config.additions.ts` Helios css/module/unocss bridge tokens
   - `uno.config.ts` Helios merge bridge tokens
   - Required Helios packages in `package.json`
   - App shell/root page and `layers.lock.json` health hints
+  - Model manager spec health for all admin-enabled models:
+    - `app/helios/fragments/models/*.ui.yaml`
+    - `app/helios/generated/models/*.ui.json`
+    - generated route files under `app/pages/**/index.vue` and `[rid].vue`
+    - route collisions and basic action contract checks
   Exit code:
   - Returns non-zero when required checks fail.
 

@@ -1089,6 +1089,11 @@ const argv = yargs(hideBin(process.argv))
           type: 'boolean',
           default: false,
           describe: 'Output report as JSON',
+        })
+        .option('no-model-specs', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip model UI spec audit checks',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
@@ -1106,6 +1111,7 @@ const argv = yargs(hideBin(process.argv))
       const report = await runHeliosDoctor({
         appRoot,
         projectName: specEntry.spec.slug,
+        includeModelSpecs: args['no-model-specs'] !== true,
       });
 
       if (args.json === true) {
