@@ -114,6 +114,8 @@ function buildAttachFunction(relation: NormalizedRelation): string {
   const fnName = relation.functions.attach;
   const rightParam = `$${relation.rightLabel}ID`;
   const leftParam = `$${relation.leftLabel}ID`;
+  const isSingleton = relation.cardinality === 'one';
+  const syncSingletonField = isSingleton && relation.storeOnModel;
 
   return [
     `DEFINE FUNCTION OVERWRITE fn::${fnName}(${rightParam}: any, ${leftParam}: any) {`,
@@ -132,7 +134,9 @@ function buildAttachFunction(relation: NormalizedRelation): string {
     `\t\tif !record::exists($REL_ID) {`,
     `\t\t\tthrow "${fnName} | related record does not exist";`,
     `\t\t};`,
+    ...(isSingleton ? [`\t\tdelete from ${relation.edge} where in = $REL_ID;`] : []),
     `\t\tfn::createEdge($REL_ID, "${relation.edge}", $RIGHT_ID, { boundId: true, overwrite: false, skipExists: true });`,
+    ...(syncSingletonField ? [`\t\tupdate $REL_ID set ${relation.payloadField} = $RIGHT_ID;`] : []),
     `\t};`,
     '',
     `\treturn $REL_IDS;`,
@@ -145,6 +149,7 @@ function buildDetachFunction(relation: NormalizedRelation): string {
   const fnName = relation.functions.detach;
   const rightParam = `$${relation.rightLabel}ID`;
   const leftParam = `$${relation.leftLabel}ID`;
+  const syncSingletonField = relation.cardinality === 'one' && relation.storeOnModel;
 
   return [
     `DEFINE FUNCTION OVERWRITE fn::${fnName}(${rightParam}: any, ${leftParam}: any) {`,
@@ -161,6 +166,12 @@ function buildDetachFunction(relation: NormalizedRelation): string {
     '',
     `\tfor $REL_ID in $REL_IDS {`,
     `\t\tfn::deleteEdge($REL_ID, "${relation.edge}", $RIGHT_ID, { boundId: true });`,
+    ...(syncSingletonField
+      ? [
+          `\t\tlet $CURRENT_REL = array::first(select value out from ${relation.edge} where in = $REL_ID);`,
+          `\t\tupdate $REL_ID set ${relation.payloadField} = $CURRENT_REL;`,
+        ]
+      : []),
     `\t};`,
     `\treturn $REL_IDS;`,
     `};`,
