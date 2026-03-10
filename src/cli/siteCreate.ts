@@ -201,6 +201,7 @@ export async function runSiteCreate(options: {
     await ensureSchemaKitModule({
       projectRoot,
       project,
+      app: appConfig,
       moduleSourceRoot: path.resolve(projectRoot, moduleSource),
       log: false,
       mode: moduleMode,

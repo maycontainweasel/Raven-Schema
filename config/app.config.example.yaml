@@ -189,6 +189,18 @@ layers:
       sessionCookie: sid
       cookieDomain: ""
 
+fileSync:
+  globalExclude:
+    module: []
+    layers: []
+    docs: []
+  projects:
+    - name: heliosadmin
+      exclude:
+        layers:
+          - layers/helios-admin/app/components/admin/AdminLogo.vue
+          - layers/helios-admin/app/components/admin/AdminLogoIcon.vue
+
 databasesExport:
   # Per-project database export (bundled into each target app)
   projectOutput: modules/schema-kit/runtime/generated/databases.ts

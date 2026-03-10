@@ -184,6 +184,14 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   Build, sync `.output` to the remote `output/` folder, sync `ecosystem.config.cjs`, and reload PM2 (runs setup first if needed).  
   Example:
   - `pnpm -C apps/schema run site:deploy my-site`
+  - `pnpm -C apps/schema run site:deploy -- my-site --target ca`
+
+- `site:deploy:push [name]`
+  Push-only deploy path (no nginx/ssl/init flow): env sync, build, output sync, ecosystem/env sync, PM2 reload.
+  Examples:
+  - `pnpm -C apps/schema run site:deploy:push my-site`
+  - `pnpm -C apps/schema run site:deploy:push -- my-site --target za`
+  - `pnpm -C apps/schema run site:deploy:push -- my-site --no-build --no-sync`
 
 - `site:adopt [name]`  
   Adopt an existing Nuxt app into the site system.  

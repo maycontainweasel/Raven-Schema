@@ -60,6 +60,7 @@ import { runSitePkgAdd } from './cli/sitePkgAdd';
 import { runSiteDeployInit } from './cli/siteDeployInit';
 import { runSiteDeploySsl } from './cli/siteDeploySsl';
 import { runSiteDeploy } from './cli/siteDeploy';
+import { runSiteDeployPush } from './cli/siteDeployPush';
 import { runSitePm2Logs } from './cli/sitePm2Logs';
 import { runSiteAdopt } from './cli/siteAdopt';
 import { runSiteMigrate } from './cli/siteMigrate';
@@ -119,6 +120,11 @@ const argv = yargs(hideBin(process.argv))
         .option('spec', {
           type: 'string',
           describe: 'Path to site spec YAML',
+        })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
         })
         .option('host', {
           type: 'string',
@@ -183,6 +189,7 @@ const argv = yargs(hideBin(process.argv))
         projectRoot,
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
         host: args.host ? String(args.host) : undefined,
         user: args.user ? String(args.user) : undefined,
         domain: args.domain ? String(args.domain) : undefined,
@@ -312,6 +319,11 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Path to site spec YAML',
         })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
+        })
         .option('host', {
           type: 'string',
           describe: 'SSH host (default from deploy.host)',
@@ -347,6 +359,7 @@ const argv = yargs(hideBin(process.argv))
         projectRoot,
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
         host: args.host ? String(args.host) : undefined,
         user: args.user ? String(args.user) : undefined,
         domain: args.domain ? String(args.domain) : undefined,
@@ -1090,10 +1103,16 @@ const argv = yargs(hideBin(process.argv))
           default: false,
           describe: 'Output report as JSON',
         })
-        .option('no-model-specs', {
+        .option('model-specs', {
           type: 'boolean',
-          default: false,
-          describe: 'Skip model UI spec audit checks',
+          default: true,
+          describe: 'Include model UI spec audit checks',
+        })
+        .option('model-scope', {
+          type: 'string',
+          choices: ['strict', 'active', 'fragments'],
+          default: 'fragments',
+          describe: 'Model audit scope: strict=all manifest models, active=models with routes/fragments/generated specs, fragments=models with fragment files only',
         }),
     async (args: any) => {
       const projectRoot = path.resolve(__dirname, '..');
@@ -1111,7 +1130,8 @@ const argv = yargs(hideBin(process.argv))
       const report = await runHeliosDoctor({
         appRoot,
         projectName: specEntry.spec.slug,
-        includeModelSpecs: args['no-model-specs'] !== true,
+        includeModelSpecs: args['model-specs'] !== false,
+        modelScope: (args['model-scope'] || 'fragments') as 'strict' | 'active' | 'fragments',
       });
 
       if (args.json === true) {
@@ -1331,6 +1351,11 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Path to site spec YAML',
         })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
+        })
         .option('host', {
           type: 'string',
           describe: 'SSH host',
@@ -1437,6 +1462,7 @@ const argv = yargs(hideBin(process.argv))
         projectRoot,
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
         host: args.host ? String(args.host) : undefined,
         user: args.user ? String(args.user) : undefined,
         domain: args.domain ? String(args.domain) : undefined,
@@ -1466,6 +1492,118 @@ const argv = yargs(hideBin(process.argv))
     }
   )
   .command(
+    'site:deploy:push [name]',
+    'Push-only deploy (build + sync + pm2), no nginx/ssl/init',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('name', {
+          describe: 'Site name',
+          type: 'string',
+        })
+        .option('name', {
+          alias: 'n',
+          type: 'string',
+          describe: 'Site name (alias for positional)',
+        })
+        .option('spec', {
+          type: 'string',
+          describe: 'Path to site spec YAML',
+        })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
+        })
+        .option('host', {
+          type: 'string',
+          describe: 'SSH host',
+        })
+        .option('user', {
+          type: 'string',
+          describe: 'SSH user',
+        })
+        .option('app-dir', {
+          type: 'string',
+          describe: 'Remote app directory',
+        })
+        .option('remote-root', {
+          type: 'string',
+          describe: 'Remote root directory (parent of appDir)',
+        })
+        .option('remote-base', {
+          type: 'string',
+          describe: 'Base directory for remotePath (default $HOME)',
+        })
+        .option('remote-path', {
+          type: 'string',
+          describe: 'Remote path under base directory (e.g. dmo/public)',
+        })
+        .option('port', {
+          type: 'number',
+          describe: 'PM2/Nitro port',
+        })
+        .option('pm2-name', {
+          type: 'string',
+          describe: 'PM2 process name (default from deploy.pm2Name or deploy.remoteName)',
+        })
+        .option('pm2-command', {
+          type: 'string',
+          describe: 'PM2 command (default from deploy.pm2Command or pm2)',
+        })
+        .option('build-command', {
+          type: 'string',
+          describe: 'Build command (default from deploy.buildCommand or pnpm run build)',
+        })
+        .option('rsync-delete', {
+          type: 'boolean',
+          describe: 'Delete extra files on remote output (default from deploy.rsyncDelete)',
+        })
+        .option('build', {
+          type: 'boolean',
+          default: true,
+          describe: 'Run local build before sync (use --no-build to skip)',
+        })
+        .option('env-sync', {
+          type: 'boolean',
+          default: true,
+          describe: 'Sync env.yaml to env.config.cjs before build (use --no-env-sync to skip)',
+        })
+        .option('sync', {
+          type: 'boolean',
+          default: true,
+          describe: 'Rsync .output/runtime assets to remote (use --no-sync to skip)',
+        })
+        .option('pm2', {
+          type: 'boolean',
+          default: true,
+          describe: 'Run PM2 startOrReload (use --no-pm2 to skip)',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      await runSiteDeployPush({
+        projectRoot,
+        name: String(args.name || args.n || args._?.[1] || ''),
+        specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
+        host: args.host ? String(args.host) : undefined,
+        user: args.user ? String(args.user) : undefined,
+        appDir: args['app-dir'] ? String(args['app-dir']) : undefined,
+        remoteBase: args['remote-base'] ? String(args['remote-base']) : undefined,
+        remoteRoot: args['remote-root'] ? String(args['remote-root']) : undefined,
+        remotePath: args['remote-path'] ? String(args['remote-path']) : undefined,
+        port: typeof args.port === 'number' ? args.port : undefined,
+        pm2Name: args['pm2-name'] ? String(args['pm2-name']) : undefined,
+        pm2Command: args['pm2-command'] ? String(args['pm2-command']) : undefined,
+        buildCommand: args['build-command'] ? String(args['build-command']) : undefined,
+        rsyncDelete: args['rsync-delete'],
+        noBuild: args.build === false,
+        noEnvSync: args['env-sync'] === false,
+        noSync: args.sync === false,
+        noPm2: args.pm2 === false,
+      });
+    }
+  )
+  .command(
     'site:pm2:logs [name]',
     'Download PM2 logs for a site',
     (yargsBuilder: any) =>
@@ -1482,6 +1620,11 @@ const argv = yargs(hideBin(process.argv))
         .option('spec', {
           type: 'string',
           describe: 'Path to site spec YAML',
+        })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
         })
         .option('host', {
           type: 'string',
@@ -1517,6 +1660,7 @@ const argv = yargs(hideBin(process.argv))
         projectRoot,
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
         host: args.host ? String(args.host) : undefined,
         user: args.user ? String(args.user) : undefined,
         pm2Name: args['pm2-name'] ? String(args['pm2-name']) : undefined,
@@ -1545,6 +1689,11 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Path to site spec YAML',
         })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
+        })
         .option('host', {
           type: 'string',
           describe: 'SSH host (default from deploy.host)',
@@ -1572,6 +1721,7 @@ const argv = yargs(hideBin(process.argv))
         projectRoot,
         name,
         specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
         host: args.host ? String(args.host) : undefined,
         user: args.user ? String(args.user) : undefined,
         yes: args.yes === true,
@@ -1661,6 +1811,11 @@ const argv = yargs(hideBin(process.argv))
           type: 'string',
           describe: 'Path to site spec YAML',
         })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
+        })
         .option('yes', {
           type: 'boolean',
           default: false,
@@ -1692,6 +1847,7 @@ const argv = yargs(hideBin(process.argv))
           projectRoot,
           name,
           specPath: args.spec ? String(args.spec) : undefined,
+          target: args.target ? String(args.target) : undefined,
           yes: yes,
           skipAudit: args['skip-audit'] === true,
           resetRemote: true,
@@ -1735,6 +1891,11 @@ const argv = yargs(hideBin(process.argv))
         .option('spec', {
           type: 'string',
           describe: 'Path to site spec YAML',
+        })
+        .option('target', {
+          alias: 't',
+          type: 'string',
+          describe: 'Deploy target key from deploy.targets (for example: za, ca)',
         })
         .option('host', {
           type: 'string',
@@ -1795,6 +1956,7 @@ const argv = yargs(hideBin(process.argv))
         projectRoot,
         name: String(args.name || args.n || args._?.[1] || ''),
         specPath: args.spec ? String(args.spec) : undefined,
+        target: args.target ? String(args.target) : undefined,
         host: args.host ? String(args.host) : undefined,
         user: args.user ? String(args.user) : undefined,
         domain: args.domain ? String(args.domain) : undefined,
@@ -3079,6 +3241,7 @@ export type AppRouter = typeof appRouter
           await ensureSchemaKitModule({
             projectRoot: projectRootDir,
             project,
+            app: bundle.app,
             moduleSourceRoot: path.resolve(projectRootDir, moduleSource),
             log: logModuleUpdates,
             mode: moduleMode,
@@ -3638,6 +3801,7 @@ export type AppRouter = typeof appRouter
         await ensureSchemaKitModule({
           projectRoot,
           project,
+          app: bundle.app,
           moduleSourceRoot: path.resolve(projectRoot, moduleSource),
           log: args.log !== false,
           mode: moduleMode,
@@ -3866,6 +4030,7 @@ export type AppRouter = typeof appRouter
         await ensureSchemaKitModule({
           projectRoot,
           project,
+          app: bundle.app,
           moduleSourceRoot: path.resolve(projectRoot, moduleSource),
           log: logModuleUpdates,
           mode: moduleMode,
@@ -5324,6 +5489,7 @@ async function runSiteSetupFlow(options: {
   await ensureSchemaKitModule({
     projectRoot,
     project,
+    app: bundle.app,
     moduleSourceRoot,
     log: logModuleUpdates,
     mode: moduleMode,

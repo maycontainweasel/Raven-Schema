@@ -10,6 +10,7 @@ import { toKebabCase } from './util';
 import { runSiteEnvYamlSync } from './siteEnvYamlSync';
 import { runSiteDeployInit } from './siteDeployInit';
 import { runSiteDeploySsl } from './siteDeploySsl';
+import { resolveDeployTarget } from './deployTarget';
 
 interface SiteSpec {
   name: string;
@@ -17,6 +18,7 @@ interface SiteSpec {
   template: string;
   target: string;
   deploy?: Record<string, unknown>;
+  deployTarget?: string;
 }
 
 interface DeployAnswers {
@@ -66,6 +68,7 @@ export async function runSiteDeploy(options: {
   projectRoot: string;
   name?: string;
   specPath?: string;
+  target?: string;
   host?: string;
   user?: string;
   domain?: string;
@@ -109,6 +112,7 @@ export async function runSiteDeploy(options: {
       projectRoot,
       name: spec.slug,
       specPath: options.specPath,
+      target: spec.deployTarget ?? options.target,
       host: options.host,
       user: options.user,
       domain: options.domain,
@@ -163,6 +167,9 @@ export async function runSiteDeploy(options: {
   let context = await resolveContext(spec);
 
   console.log('📡 Deploy target:');
+  if (context.spec.deployTarget) {
+    console.log(`   target: ${context.spec.deployTarget}`);
+  }
   console.log(`   ssh: ${context.sshTarget}`);
   console.log(`   appDir: ${context.resolvedAnswers.appDir}`);
   console.log(`   domain: ${context.resolvedAnswers.domain}`);
@@ -202,6 +209,7 @@ export async function runSiteDeploy(options: {
       projectRoot,
       name: context.slug,
       specPath: options.specPath,
+      target: context.spec.deployTarget ?? options.target,
       host: options.host,
       user: options.user,
       domain: options.domain,
@@ -283,6 +291,7 @@ export async function runSiteDeploy(options: {
         projectRoot,
         name: context.slug,
         specPath: options.specPath,
+        target: context.spec.deployTarget ?? options.target,
         host: context.answers.host,
         user: context.answers.user ?? undefined,
         domain: context.answers.domain,
@@ -486,7 +495,7 @@ function buildPathsFromRemotePath(value?: string, baseRoot?: string): {
 }
 
 async function loadSiteSpec(
-  options: { name?: string; specPath?: string },
+  options: { name?: string; specPath?: string; target?: string },
   sitesRoot: string,
   projectRoot: string
 ): Promise<SiteSpec | null> {
@@ -505,12 +514,17 @@ async function loadSiteSpec(
   if (!parsed?.name || !parsed.slug || !parsed.template || !parsed.target) {
     return null;
   }
+  const resolvedDeploy = resolveDeployTarget(
+    parsed.deploy as Record<string, unknown> | undefined,
+    options.target
+  );
   return {
     name: String(parsed.name),
     slug: String(parsed.slug),
     template: String(parsed.template),
     target: String(parsed.target),
-    deploy: parsed.deploy as Record<string, unknown> | undefined,
+    deploy: resolvedDeploy.deploy,
+    deployTarget: resolvedDeploy.selectedTarget,
   };
 }
 

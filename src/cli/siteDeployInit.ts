@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import YAML from 'yaml';
 
 import { toKebabCase } from './util';
+import { resolveDeployTarget } from './deployTarget';
 
 interface SiteSpec extends Record<string, unknown> {
   name: string;
@@ -15,6 +16,7 @@ interface SiteSpec extends Record<string, unknown> {
   target: string;
   env?: Record<string, unknown>;
   deploy?: Record<string, unknown>;
+  deployTarget?: string;
 }
 
 interface SiteSpecEntry {
@@ -71,6 +73,7 @@ export async function runSiteDeployInit(options: {
   projectRoot: string;
   name?: string;
   specPath?: string;
+  target?: string;
   host?: string;
   user?: string;
   domain?: string;
@@ -349,7 +352,7 @@ function buildEcosystemConfig(answers: DeployAnswers, deploy?: Record<string, un
 }
 
 async function loadSiteSpec(
-  options: { name?: string; specPath?: string },
+  options: { name?: string; specPath?: string; target?: string },
   sitesRoot: string,
   projectRoot: string
 ): Promise<SiteSpecEntry | null> {
@@ -371,6 +374,10 @@ async function loadSiteSpec(
   if (!parsed.name || !parsed.slug || !parsed.template || !parsed.target) {
     return null;
   }
+  const resolvedDeploy = resolveDeployTarget(
+    parsed.deploy as Record<string, unknown> | undefined,
+    options.target
+  );
   return {
     path: specPath,
     spec: {
@@ -379,7 +386,8 @@ async function loadSiteSpec(
       slug: String(parsed.slug),
       template: String(parsed.template),
       target: String(parsed.target),
-      deploy: parsed.deploy as Record<string, unknown> | undefined,
+      deploy: resolvedDeploy.deploy,
+      deployTarget: resolvedDeploy.selectedTarget,
       env: parsed.env as Record<string, unknown> | undefined,
     },
   };

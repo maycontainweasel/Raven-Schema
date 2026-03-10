@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import YAML from 'yaml';
 
 import { toKebabCase } from './util';
+import { resolveDeployTarget } from './deployTarget';
 
 interface SiteSpec {
   name: string;
@@ -14,6 +15,7 @@ interface SiteSpec {
   template: string;
   target: string;
   deploy?: Record<string, unknown>;
+  deployTarget?: string;
 }
 
 interface DeploySslAnswers {
@@ -33,6 +35,7 @@ export async function runSiteDeploySsl(options: {
   projectRoot: string;
   name?: string;
   specPath?: string;
+  target?: string;
   host?: string;
   user?: string;
   domain?: string;
@@ -94,7 +97,7 @@ function buildCertbotArgs(domain: string, email: string, redirect: boolean): str
 }
 
 async function loadSiteSpec(
-  options: { name?: string; specPath?: string },
+  options: { name?: string; specPath?: string; target?: string },
   sitesRoot: string,
   projectRoot: string
 ): Promise<SiteSpec | null> {
@@ -113,12 +116,17 @@ async function loadSiteSpec(
   if (!parsed?.name || !parsed.slug || !parsed.template || !parsed.target) {
     return null;
   }
+  const resolvedDeploy = resolveDeployTarget(
+    parsed.deploy as Record<string, unknown> | undefined,
+    options.target
+  );
   return {
     name: String(parsed.name),
     slug: String(parsed.slug),
     template: String(parsed.template),
     target: String(parsed.target),
-    deploy: parsed.deploy as Record<string, unknown> | undefined,
+    deploy: resolvedDeploy.deploy,
+    deployTarget: resolvedDeploy.selectedTarget,
   };
 }
 
