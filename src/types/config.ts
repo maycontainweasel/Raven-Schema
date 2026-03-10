@@ -38,6 +38,7 @@ export interface AppConfig {
   modelsExport?: ModelsExportConfig;
   ui?: UiConfig;
   layers?: LayersConfig;
+  fileSync?: FileSyncConfig;
 }
 
 export interface GraphConfig {
@@ -252,6 +253,31 @@ export interface LayersConfig {
    * Auth layer defaults (written into layers/auth/nuxt.config.ts).
    */
   auth?: AuthLayerConfig;
+}
+
+export interface FileSyncConfig {
+  /**
+   * Global exclusions applied to every target app sync.
+   * Paths are matched relative to the app root, for example:
+   * - modules/schema-kit/runtime/server/auth/handlers.ts
+   * - layers/helios-admin/app/components/admin/AdminLogo.vue
+   */
+  globalExclude?: FileSyncScopeExcludeConfig;
+  /**
+   * Per-project exclusions matched by paths.projects[].name.
+   */
+  projects?: FileSyncProjectExcludeConfig[];
+}
+
+export interface FileSyncScopeExcludeConfig {
+  module?: string[];
+  layers?: string[];
+  docs?: string[];
+}
+
+export interface FileSyncProjectExcludeConfig {
+  name: string;
+  exclude?: FileSyncScopeExcludeConfig;
 }
 
 export interface AuthLayerConfig {

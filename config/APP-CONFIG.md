@@ -135,6 +135,24 @@ Schema‑kit runtime overrides (per app)
 - Any file placed there takes precedence over the generated module runtime file.
 - Useful for custom composables/plugins/handlers without forking schema‑kit.
 
+## fileSync
+
+Exclude files from schema-to-app copy operations.
+
+- `globalExclude.module` (array): paths to skip during `schema-kit` module sync for every app.
+- `globalExclude.layers` (array): paths to skip during layer sync for every app.
+- `globalExclude.docs` (array): paths to skip during schema docs sync for every app.
+- `projects` (array): per-project exclusions matched by `paths.projects[].name`.
+  - `name` (string): target project name.
+  - `exclude.module` (array): skip these `modules/schema-kit/**` files for that app.
+  - `exclude.layers` (array): skip these `layers/**` files for that app.
+  - `exclude.docs` (array): skip these `docs/**` files for that app.
+
+Notes:
+- Paths are matched relative to the target app root.
+- Wildcards are supported with `*` and `**`.
+- `schema-kit` force sync preserves excluded files before deleting `modules/schema-kit`, then restores them after sync.
+
 ## tooling
 
 Project setup helpers.

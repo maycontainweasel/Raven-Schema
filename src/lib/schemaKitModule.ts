@@ -2,7 +2,8 @@ import { mkdir, readFile, readdir, stat, writeFile, rm } from 'fs/promises';
 import path from 'path';
 import { createHash } from 'crypto';
 
-import type { ProjectPathsConfig } from '../types';
+import type { AppConfig, ProjectPathsConfig } from '../types';
+import { resolveFileSyncMatcher } from './fileSyncRules';
 import { loadSiteSpec, writeSiteSpec, ensureNuxtConfigModule, ensureNuxtConfigTranspile } from './siteSpec';
 
 const MODULE_FILE_NAME = 'index.ts';
@@ -11,11 +12,12 @@ const MODULE_REF = '~~/modules/schema-kit';
 export async function ensureSchemaKitModule(options: {
   projectRoot: string;
   project: ProjectPathsConfig;
+  app?: AppConfig;
   moduleSourceRoot: string;
   log?: boolean;
   mode?: 'copy' | 'shared';
   sync?: 'auto' | 'force' | 'off';
-  sharedModulePath?: string;
+  sharedModulePath?: string | undefined;
 }): Promise<void> {
   const { projectRoot, project, moduleSourceRoot, log = true } = options;
   if (!project.nuxtProjectRoot) return;
@@ -32,7 +34,11 @@ export async function ensureSchemaKitModule(options: {
   const configFile = path.join(appRoot, 'schema-kit.config.json');
   const targetGenerated = path.join(targetRuntime, 'generated');
   const preservedGenerated = path.join(appRoot, '.schema-kit.generated');
+  const preservedExcluded = path.join(appRoot, '.schema-kit.preserved');
+  const moduleMatcher = resolveFileSyncMatcher(options.app, project, 'module');
+  const docsMatcher = resolveFileSyncMatcher(options.app, project, 'docs');
   let hasPreservedGenerated = false;
+  let hasPreservedExcluded = false;
 
   if (options.mode !== 'shared') {
     const sourceContent = await readFile(sourceFile, 'utf-8').catch(() => null);
@@ -53,24 +59,47 @@ export async function ensureSchemaKitModule(options: {
           await copyDir(targetGenerated, preservedGenerated);
           hasPreservedGenerated = true;
         }
+        if (moduleMatcher.patterns.length > 0) {
+          await rm(preservedExcluded, { recursive: true, force: true }).catch(() => null);
+          await copyDir(targetDir, preservedExcluded, {
+            filter: ({ sourcePath, type }) => {
+              if (type === 'dir') return true;
+              return moduleMatcher.matches(path.relative(appRoot, sourcePath));
+            },
+          });
+          hasPreservedExcluded = true;
+        }
         await rm(targetDir, { recursive: true, force: true }).catch(() => null);
       }
       await mkdir(targetDir, { recursive: true });
       const currentHash = await computeModuleHash(sourceFile, sourceRuntime, configFile, [
         sourceResources,
         sourceOverrides,
-      ]);
+      ], moduleMatcher);
       const previousHash = await readFile(hashFile, 'utf-8').catch(() => null);
       const needsUpdate = options.sync === 'force' || !previousHash || previousHash.trim() !== currentHash;
       if (needsUpdate) {
-        await writeFile(targetFile, sourceContent, 'utf-8');
-        await copyDir(sourceRuntime, targetRuntime);
-        await copyDir(sourceResources, targetRuntime, { overwrite: true });
-        await copyDir(sourceOverrides, targetRuntime);
+        if (!moduleMatcher.matches(path.relative(appRoot, targetFile))) {
+          await writeFile(targetFile, sourceContent, 'utf-8');
+        }
+        await copyDir(sourceRuntime, targetRuntime, {
+          filter: ({ targetPath }) => !moduleMatcher.matches(path.relative(appRoot, targetPath)),
+        });
+        await copyDir(sourceResources, targetRuntime, {
+          overwrite: true,
+          filter: ({ targetPath }) => !moduleMatcher.matches(path.relative(appRoot, targetPath)),
+        });
+        await copyDir(sourceOverrides, targetRuntime, {
+          filter: ({ targetPath }) => !moduleMatcher.matches(path.relative(appRoot, targetPath)),
+        });
         await writeFile(hashFile, `${currentHash}\n`, 'utf-8');
         if (hasPreservedGenerated) {
           await copyDir(preservedGenerated, targetGenerated, { overwrite: false });
           await rm(preservedGenerated, { recursive: true, force: true }).catch(() => null);
+        }
+        if (hasPreservedExcluded) {
+          await copyDir(preservedExcluded, targetDir, { overwrite: true });
+          await rm(preservedExcluded, { recursive: true, force: true }).catch(() => null);
         }
         if (log) {
           console.log(`🧩 Updated schema-kit module in ${appRoot}`);
@@ -87,11 +116,13 @@ export async function ensureSchemaKitModule(options: {
     appRoot,
     moduleSourceRoot,
     log,
+    matcher: docsMatcher,
   });
   await syncInfraDocs({
     appRoot,
     moduleSourceRoot,
     log,
+    matcher: docsMatcher,
   });
 
   const configPath = await findNuxtConfig(appRoot);
@@ -136,15 +167,18 @@ async function syncControllerDocs(options: {
   appRoot: string;
   moduleSourceRoot: string;
   log?: boolean;
+  matcher?: ReturnType<typeof resolveFileSyncMatcher>;
 }): Promise<void> {
-  const { appRoot, moduleSourceRoot, log = true } = options;
+  const { appRoot, moduleSourceRoot, log = true, matcher } = options;
   const sourceDocs = path.join(moduleSourceRoot, 'docs', 'controllers');
   const targetDocs = path.join(appRoot, 'docs', 'controllers');
   const sourceStat = await stat(sourceDocs).catch(() => null);
   if (!sourceStat?.isDirectory()) {
     return;
   }
-  await copyDir(sourceDocs, targetDocs);
+  await copyDir(sourceDocs, targetDocs, {
+    filter: ({ targetPath }) => !(matcher?.matches(path.relative(appRoot, targetPath)) ?? false),
+  });
   if (log) {
     console.log(`📘 Synced controller docs → ${path.relative(appRoot, targetDocs)}`);
   }
@@ -154,15 +188,18 @@ async function syncInfraDocs(options: {
   appRoot: string;
   moduleSourceRoot: string;
   log?: boolean;
+  matcher?: ReturnType<typeof resolveFileSyncMatcher>;
 }): Promise<void> {
-  const { appRoot, moduleSourceRoot, log = true } = options;
+  const { appRoot, moduleSourceRoot, log = true, matcher } = options;
   const sourceDocs = path.join(moduleSourceRoot, 'docs', 'infra');
   const targetDocs = path.join(appRoot, 'docs', 'infra');
   const sourceStat = await stat(sourceDocs).catch(() => null);
   if (!sourceStat?.isDirectory()) {
     return;
   }
-  await copyDir(sourceDocs, targetDocs);
+  await copyDir(sourceDocs, targetDocs, {
+    filter: ({ targetPath }) => !(matcher?.matches(path.relative(appRoot, targetPath)) ?? false),
+  });
   if (log) {
     console.log(`📦 Synced infra docs → ${path.relative(appRoot, targetDocs)}`);
   }
@@ -275,7 +312,10 @@ function findMatchingBrace(source: string, start: number): number {
 async function copyDir(
   sourceDir: string,
   targetDir: string,
-  options: { overwrite?: boolean } = {}
+  options: {
+    overwrite?: boolean;
+    filter?: (entry: { sourcePath: string; targetPath: string; type: 'dir' | 'file' }) => boolean | Promise<boolean>;
+  } = {}
 ): Promise<void> {
   const sourceStat = await stat(sourceDir).catch(() => null);
   if (!sourceStat?.isDirectory()) {
@@ -287,6 +327,14 @@ async function copyDir(
   for (const entry of entries) {
     const from = path.join(sourceDir, entry.name);
     const to = path.join(targetDir, entry.name);
+    const type = entry.isDirectory() ? 'dir' : entry.isFile() ? 'file' : null;
+    if (!type) {
+      continue;
+    }
+    const allowed = await options.filter?.({ sourcePath: from, targetPath: to, type });
+    if (allowed === false) {
+      continue;
+    }
     if (entry.isDirectory()) {
       await copyDir(from, to, options);
     } else if (entry.isFile()) {
@@ -332,23 +380,44 @@ async function computeModuleHash(
   sourceFile: string,
   sourceRuntimeDir: string,
   configFile: string,
-  extraDirs: string[] = []
+  extraDirs: string[] = [],
+  matcher = resolveFileSyncMatcher(undefined, { name: '', generated: {} }, 'module')
 ): Promise<string> {
   const hash = createHash('sha256');
-  const files = await collectFiles(sourceRuntimeDir);
+  const files: Array<{ file: string; targetRelative: string }> = [];
+  const runtimeFiles = await collectFiles(sourceRuntimeDir);
+  for (const file of runtimeFiles) {
+    const targetRelative = path.posix.join(
+      'modules/schema-kit/runtime',
+      path.relative(sourceRuntimeDir, file).replace(/\\/g, '/')
+    );
+    if (!matcher.matches(targetRelative)) {
+      files.push({ file, targetRelative });
+    }
+  }
   for (const dir of extraDirs) {
     const extraFiles = await collectFiles(dir);
-    files.push(...extraFiles);
+    for (const file of extraFiles) {
+      const targetRelative = path.posix.join(
+        'modules/schema-kit/runtime',
+        path.relative(dir, file).replace(/\\/g, '/')
+      );
+      if (!matcher.matches(targetRelative)) {
+        files.push({ file, targetRelative });
+      }
+    }
   }
-  files.sort();
-  for (const file of files) {
-    hash.update(file);
-    const content = await readFile(file, 'utf-8').catch(() => '');
+  if (!matcher.matches('modules/schema-kit/index.ts')) {
+    const moduleContent = await readFile(sourceFile, 'utf-8').catch(() => '');
+    hash.update('modules/schema-kit/index.ts');
+    hash.update(moduleContent);
+  }
+  files.sort((a, b) => a.targetRelative.localeCompare(b.targetRelative));
+  for (const entry of files) {
+    hash.update(entry.targetRelative);
+    const content = await readFile(entry.file, 'utf-8').catch(() => '');
     hash.update(content);
   }
-  const moduleContent = await readFile(sourceFile, 'utf-8').catch(() => '');
-  hash.update(sourceFile);
-  hash.update(moduleContent);
   const configContent = await readFile(configFile, 'utf-8').catch(() => '');
   hash.update(configFile);
   hash.update(configContent);

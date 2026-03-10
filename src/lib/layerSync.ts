@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile, rm } from 'fs/promises';
 import path from 'path';
 
 import type { AppConfig, ProjectPathsConfig } from '../types';
+import { resolveFileSyncMatcher } from './fileSyncRules';
 import { loadSiteSpec, writeSiteSpec, ensureNuxtConfigExtends } from './siteSpec';
 import { readLayerMeta } from './layerRegistry';
 
@@ -33,6 +34,7 @@ export async function syncProjectLayers(options: {
   const log = options.log ?? app.layers?.log ?? true;
   const managedLayerNames = await listManagedLayers(sourceRoot);
   const desiredLayerNames = new Set(layers);
+  const matcher = resolveFileSyncMatcher(app, project, 'layers');
 
   if (mode === 'off') {
     if (log) {
@@ -59,11 +61,11 @@ export async function syncProjectLayers(options: {
     let needsUpdate = mode === 'force';
 
     if (!needsUpdate) {
-      currentHash = await computeLayerHash(sourceDir);
+      currentHash = await computeLayerHash(sourceDir, layerName, matcher);
       const previousHash = await readFile(hashFile, 'utf-8').catch(() => null);
       needsUpdate = !previousHash || previousHash.trim() !== currentHash;
     } else {
-      currentHash = await computeLayerHash(sourceDir);
+      currentHash = await computeLayerHash(sourceDir, layerName, matcher);
     }
 
     if (!needsUpdate) {
@@ -74,7 +76,9 @@ export async function syncProjectLayers(options: {
       continue;
     }
 
-    await copyDir(sourceDir, targetDir);
+    await copyDir(sourceDir, targetDir, {
+      filter: ({ targetPath }) => !matcher.matches(path.relative(appRoot, targetPath)),
+    });
     if (currentHash) {
       await writeFile(hashFile, `${currentHash}\n`, 'utf-8');
     }
@@ -158,13 +162,27 @@ function resolveLayerList(app: AppConfig, project: ProjectPathsConfig): string[]
   return [];
 }
 
-async function computeLayerHash(sourceDir: string): Promise<string> {
+async function computeLayerHash(
+  sourceDir: string,
+  layerName: string,
+  matcher: ReturnType<typeof resolveFileSyncMatcher>
+): Promise<string> {
   const hash = createHash('sha256');
   const files = await collectFiles(sourceDir);
-  files.sort();
-  for (const file of files) {
-    hash.update(file);
-    const content = await readFile(file, 'utf-8').catch(() => '');
+  const included = files
+    .map((file) => ({
+      file,
+      targetRelative: path.posix.join(
+        'layers',
+        layerName,
+        path.relative(sourceDir, file).replace(/\\/g, '/')
+      ),
+    }))
+    .filter((entry) => !matcher.matches(entry.targetRelative))
+    .sort((a, b) => a.targetRelative.localeCompare(b.targetRelative));
+  for (const entry of included) {
+    hash.update(entry.targetRelative);
+    const content = await readFile(entry.file, 'utf-8').catch(() => '');
     hash.update(content);
   }
   return hash.digest('hex');
@@ -188,7 +206,13 @@ async function collectFiles(root: string): Promise<string[]> {
   return out;
 }
 
-async function copyDir(sourceDir: string, targetDir: string): Promise<void> {
+async function copyDir(
+  sourceDir: string,
+  targetDir: string,
+  options: {
+    filter?: (entry: { sourcePath: string; targetPath: string; type: 'dir' | 'file' }) => boolean | Promise<boolean>;
+  } = {}
+): Promise<void> {
   const sourceStat = await stat(sourceDir).catch(() => null);
   if (!sourceStat?.isDirectory()) {
     return;
@@ -199,8 +223,16 @@ async function copyDir(sourceDir: string, targetDir: string): Promise<void> {
   for (const entry of entries) {
     const from = path.join(sourceDir, entry.name);
     const to = path.join(targetDir, entry.name);
+    const type = entry.isDirectory() ? 'dir' : entry.isFile() ? 'file' : null;
+    if (!type) {
+      continue;
+    }
+    const allowed = await options.filter?.({ sourcePath: from, targetPath: to, type });
+    if (allowed === false) {
+      continue;
+    }
     if (entry.isDirectory()) {
-      await copyDir(from, to);
+      await copyDir(from, to, options);
     } else if (entry.isFile()) {
       if (entry.name === 'layer.override.yaml') {
         const existing = await stat(to).catch(() => null);
@@ -289,7 +321,7 @@ function extractStringArray(source: string): string[] {
   const regex = /(['"])(.*?)\1/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(source))) {
-    values.push(match[2]);
+    values.push(match[2] ?? '');
   }
   return values;
 }

@@ -112,6 +112,10 @@ Site files describe app-level composition and deployment intent. They control:
 - Nuxt generated config defaults (`nuxtConfig`)
 - deployment settings (`deploy`)
 
+For the full site YAML contract (including `deploy.targets`, push-only deploy mode, and deploy key reference), see:
+
+- `apps/schema/sites/README.md`
+
 ## 5.4 `<app>/env.yaml`
 
 `env.yaml` is the source for runtime/env outputs. It is used to generate:
@@ -381,7 +385,7 @@ target: apps/public
 
 layers:
   - schema-core
-  - pm-za
+  - helios
 
 nuxtConfig:
   devServer:
@@ -399,19 +403,28 @@ nuxtConfig:
         path: /__vitews
 
 deploy:
-  host: your-server-host
-  domain: public.example.com
-  port: 8301
-  remoteName: public
-  remoteRoot: $HOME
-  remotePath: public
-  remoteNginxSudo: true
-  overwriteNginx: true
-  overwriteApp: true
-  startPm2: true
   ssl:
-    email: devops@example.com
+    email: ""
     redirect: true
+  targets:
+    za:
+      host: pmza-public
+      appDir: /home/mpire/passmed-public
+      remoteName: passmed-public
+      pm2Name: pm-public
+      pm2Command: pm2
+      port: 3123
+      buildCommand: pnpm run build
+      rsyncDelete: true
+    ca:
+      host: pmca-public
+      appDir: /home/mpire/passmed-public
+      remoteName: passmed-public
+      pm2Name: pm-public
+      pm2Command: pm2
+      port: 3123
+      buildCommand: pnpm run build
+      rsyncDelete: true
 ```
 
 ## 14.3 Example `apps/public/env.yaml`
