@@ -1,4 +1,0 @@
-DEFINE TABLE OVERWRITE UserQuestionNote SCHEMAFULL TYPE RELATION IN q OUT uqnote;
-DEFINE FIELD OVERWRITE in ON TABLE UserQuestionNote TYPE record<q>;
-DEFINE FIELD OVERWRITE out ON TABLE UserQuestionNote TYPE record<uqnote>;
-DEFINE INDEX OVERWRITE UserQuestionNote_unique ON TABLE UserQuestionNote FIELDS in, out UNIQUE;

@@ -1,4 +1,0 @@
-DEFINE TABLE OVERWRITE QuestionAttempts SCHEMAFULL TYPE RELATION IN q OUT qa;
-DEFINE FIELD OVERWRITE in ON TABLE QuestionAttempts TYPE record<q>;
-DEFINE FIELD OVERWRITE out ON TABLE QuestionAttempts TYPE record<qa>;
-DEFINE INDEX OVERWRITE QuestionAttempts_unique ON TABLE QuestionAttempts FIELDS in, out UNIQUE;
