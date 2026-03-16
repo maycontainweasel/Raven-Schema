@@ -3052,7 +3052,7 @@ function buildTaxonomies(
     };
 
     if (entry.settings && typeof entry.settings === 'object') {
-      const { taxonomy, term, ...rest } = entry.settings as Record<string, any>;
+      const { taxonomy, term, edgeName, taxonomyEdgeName, ...rest } = entry.settings as Record<string, any>;
       if (taxonomy && typeof taxonomy === 'object') {
         out.taxonomy = {
           ...(out.taxonomy ?? {}),
@@ -3063,6 +3063,19 @@ function buildTaxonomies(
         out.term = {
           ...(out.term ?? {}),
           ...term,
+        };
+      }
+      const edgeOverrides: Record<string, any> = {};
+      if (typeof edgeName === 'string' && edgeName.trim()) {
+        edgeOverrides.recordToTerm = edgeName.trim();
+      }
+      if (typeof taxonomyEdgeName === 'string' && taxonomyEdgeName.trim()) {
+        edgeOverrides.taxonomyToTerms = taxonomyEdgeName.trim();
+      }
+      if (Object.keys(edgeOverrides).length > 0) {
+        out.edges = {
+          ...(out.edges ?? {}),
+          ...edgeOverrides,
         };
       }
       Object.assign(out, rest);
@@ -3424,6 +3437,8 @@ function parseTaxonomyEntries(
       'payloadField',
       'payloadAlias',
       'payloadAliases',
+      'edgeName',
+      'taxonomyEdgeName',
       'storeOnModel',
       'createOnAttach',
       'generateNamedFunctions',
@@ -3503,7 +3518,7 @@ function extractTrailingTaxonomySettingsLoose(raw: string): Record<string, any> 
   if (!info) return undefined;
   const block = raw.slice(info.start, info.end + 1);
   if (
-    !/(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|createOnAttach|generateNamedFunctions|functions|processor|required|hierarchical)\s*:/i.test(block)
+    !/(cardinality|payloadField|payloadAlias|payloadAliases|edgeName|taxonomyEdgeName|storeOnModel|createOnAttach|generateNamedFunctions|functions|processor|required|hierarchical)\s*:/i.test(block)
   ) {
     return undefined;
   }
@@ -3523,7 +3538,7 @@ function extractAnyTaxonomySettings(raw: string): Record<string, any> | undefine
   if (!info) return undefined;
   const block = raw.slice(info.start, info.end + 1);
   if (
-    !/(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|createOnAttach|generateNamedFunctions|functions|processor|required|hierarchical)\s*:/i.test(block)
+    !/(cardinality|payloadField|payloadAlias|payloadAliases|edgeName|taxonomyEdgeName|storeOnModel|createOnAttach|generateNamedFunctions|functions|processor|required|hierarchical)\s*:/i.test(block)
   ) {
     return undefined;
   }
@@ -3543,7 +3558,7 @@ function extractInlineTaxonomySettings(raw: string): Record<string, any> | undef
     const cleaned = stripInlineComment(line).trim();
     if (!cleaned) continue;
     const match = cleaned.match(
-      /^(cardinality|payloadField|payloadAlias|payloadAliases|storeOnModel|createOnAttach|generateNamedFunctions|functions|required|processor|hierarchical)\s*:\s*(.+)$/i
+      /^(cardinality|payloadField|payloadAlias|payloadAliases|edgeName|taxonomyEdgeName|storeOnModel|createOnAttach|generateNamedFunctions|functions|required|processor|hierarchical)\s*:\s*(.+)$/i
     );
     if (!match || !match[1] || !match[2]) continue;
     const key = match[1].trim();

@@ -272,11 +272,16 @@ function normalizeTaxonomyConfig(
     getTableTerms: functionOverrides?.getTableTerms ?? `get${prefix}s`,
   };
 
+  const defaultEdgeBase = resolveDefaultTaxonomyEdgeBase(labelSingular, labelPlural);
   const edges = {
     taxonomyToTerms:
-      taxonomy.edges?.taxonomyToTerms ?? `${tableLabel}${toPascalCase(key)}Terms`,
+      taxonomy.edges?.taxonomyToTerms ??
+      taxonomy.taxonomyEdgeName ??
+      `${tableLabel}${defaultEdgeBase}Terms`,
     recordToTerm:
-      taxonomy.edges?.recordToTerm ?? `${tableLabel}${toPascalCase(key)}s`,
+      taxonomy.edges?.recordToTerm ??
+      taxonomy.edgeName ??
+      `${tableLabel}${defaultEdgeBase}`,
   };
 
   return {
@@ -681,6 +686,15 @@ function buildDefaultTermModel(tableModel: string, taxonomyKey: string): string 
   const safeKey = sanitizeIdentifier(taxonomyKey);
   const parts = ['t', safeTable, safeKey].filter(Boolean);
   return parts.length > 0 ? parts.join('_') : 'term';
+}
+
+function resolveDefaultTaxonomyEdgeBase(labelSingular: string, labelPlural: string): string {
+  const singular = toPascalCase(labelSingular || '');
+  const plural = toPascalCase(labelPlural || '');
+  if (plural && singular && plural !== singular) {
+    return plural;
+  }
+  return singular || plural || 'Term';
 }
 
 function sanitizeIdentifier(value: string): string {

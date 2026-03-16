@@ -631,6 +631,16 @@ export interface TableTaxonomyConfig {
   cardinality?: 'one' | 'many';
   storeOnModel?: boolean;
   /**
+   * Override the record->term edge name.
+   * Alias for `edges.recordToTerm`.
+   */
+  edgeName?: string;
+  /**
+   * Override the taxonomy->term edge name.
+   * Alias for `edges.taxonomyToTerms`.
+   */
+  taxonomyEdgeName?: string;
+  /**
    * When true (default), attach operations auto-create missing terms.
    * Set false to require terms to exist before attach.
    */

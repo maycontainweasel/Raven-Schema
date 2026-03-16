@@ -103,6 +103,7 @@ This is a working reference for the “program-like” tags used in `config/grap
 - Multiline `<{ ... }>` tags are supported (they are collapsed into a single tag block).
 - `<infix>` / `<infix: always|fallback|off>` → stored in `collectionsMeta` for query defaults.
 - `<sort>` / `<sort: asc|desc>` → stored in `collectionsMeta` for query defaults.
+  - This does not make the field Typesense-sortable. Use `sortableFields: [...]` in the Typesense settings block for that.
 - `<highlight>` / `<highlight: full|snippet>` → stored in `collectionsMeta` for query defaults.
 
 ## Relations (record-backed links)

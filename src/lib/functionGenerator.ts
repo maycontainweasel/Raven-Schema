@@ -931,7 +931,12 @@ function groupTaxonomyHooks(
 
     for (const taxonomy of taxonomies) {
       const key = taxonomy.key;
-      const keyLabel = sanitizePascal(key);
+      const labelSingular = sanitizePascal(taxonomy.labels?.singular ?? key);
+      const labelPlural = sanitizePascal(taxonomy.labels?.plural ?? labelSingular);
+      const defaultEdgeBase =
+        labelPlural && labelSingular && labelPlural !== labelSingular
+          ? labelPlural
+          : (labelSingular || labelPlural || 'Term');
       const termModel =
         taxonomy.term?.model ?? buildDefaultTermModel(tableModel, key);
       const termId = normalizeTermId(
@@ -968,7 +973,7 @@ function groupTaxonomyHooks(
         payloadField
       );
 
-      const prefix = `${tableLabel}${keyLabel}`;
+      const prefix = `${tableLabel}${labelSingular || sanitizePascal(key)}`;
       const functions = {
         attach: functionOverrides?.attachTerm ?? `attach${prefix}Term`,
         detach: functionOverrides?.detachTerm ?? `detach${prefix}Term`,
@@ -978,7 +983,9 @@ function groupTaxonomyHooks(
 
       const edges = {
         recordToTerm:
-          taxonomy.edges?.recordToTerm ?? `${tableLabel}${keyLabel}s`,
+          taxonomy.edges?.recordToTerm ??
+          taxonomy.edgeName ??
+          `${tableLabel}${defaultEdgeBase}`,
       };
 
       list.push({
@@ -1096,6 +1103,7 @@ interface ResolvedSubtableCreatePlan {
   createFunctionName: string;
   scalarField: string | null;
   hasOrderField: boolean;
+  injectedRecordFields: Array<{ field: string; expr: string }>;
 }
 
 function buildSubtableCreatePlans(
@@ -1137,6 +1145,7 @@ function buildSubtableCreatePlans(
     const scalarField = resolveSubtablePayloadScalarField(childTable);
     const hasOrderField = normalizeFields(childTable.fields).some((field) => field.name === 'order');
     const autoCreate = entry.autoCreate !== false;
+    const injectedRecordFields = resolveSubtableInjectedRecordFields(table, childTable, tablesByModel);
 
     plans.push({
       model,
@@ -1146,10 +1155,43 @@ function buildSubtableCreatePlans(
       createFunctionName,
       scalarField,
       hasOrderField,
+      injectedRecordFields,
     });
   }
 
   return plans;
+}
+
+function resolveSubtableInjectedRecordFields(
+  parentTable: TableMigrationConfig,
+  childTable: TableMigrationConfig,
+  tablesByModel: Map<string, TableMigrationConfig>
+): Array<{ field: string; expr: string }> {
+  const currentModel = parentTable.table?.model?.trim().toLowerCase();
+  const currentParentModel = getParentInfo(parentTable, tablesByModel)?.parentModel?.trim().toLowerCase();
+
+  if (!currentModel && !currentParentModel) {
+    return [];
+  }
+
+  const injected: Array<{ field: string; expr: string }> = [];
+  for (const field of normalizeFields(childTable.fields)) {
+    if (field.meta.assign !== true) continue;
+
+    const recordModel = extractRecordModel(field.meta.type)?.trim().toLowerCase();
+    if (!recordModel) continue;
+
+    if (currentModel && recordModel === currentModel) {
+      injected.push({ field: field.name, expr: '$recordID' });
+      continue;
+    }
+
+    if (currentParentModel && recordModel === currentParentModel) {
+      injected.push({ field: field.name, expr: '$PARENT_ID' });
+    }
+  }
+
+  return injected;
 }
 
 function normalizeSubtableCreateInput(
@@ -1319,7 +1361,7 @@ function buildSubtableCreateLines(
         );
       }
       lines.push(
-        `\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+        `\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, ${buildSubtableCreatePayloadExpr(plan, payloadVar)});`
       );
       lines.push(`\t\t\tlet ${indexVar} = ${indexVar} + 1;`);
       lines.push(`\t\t};`);
@@ -1335,7 +1377,7 @@ function buildSubtableCreateLines(
         );
       }
       lines.push(
-        `\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+        `\t\tfn::${plan.createFunctionName}(${parentRecordVar}, ${buildSubtableCreatePayloadExpr(plan, payloadVar)});`
       );
       lines.push(`\t};`);
       lines.push('');
@@ -1347,23 +1389,50 @@ function buildSubtableCreateLines(
     lines.push(`\t\t\tlet ${itemVar} = array::first(${inputVar});`);
     lines.push(`\t\t\tlet ${payloadVar} = ${scalarPayloadExpr};`);
     lines.push(
-      `\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+      `\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, ${buildSubtableCreatePayloadExpr(plan, payloadVar)});`
     );
     lines.push(`\t\t} else if ${plan.autoCreate ? 'true' : 'false'} {`);
-    lines.push(`\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, { skipExists: true });`);
+    lines.push(`\t\t\tfn::${plan.createFunctionName}(${parentRecordVar}, ${buildSubtableAutoCreatePayloadExpr(plan)});`);
     lines.push(`\t\t};`);
     lines.push(`\t} else if type::is_object(${inputVar}) || ${inputVar} {`);
     lines.push(`\t\tlet ${payloadVar} = ${singlePayloadExpr};`);
     lines.push(
-      `\t\tfn::${plan.createFunctionName}(${parentRecordVar}, fn::objectAssign(${payloadVar}, { skipExists: true }));`
+      `\t\tfn::${plan.createFunctionName}(${parentRecordVar}, ${buildSubtableCreatePayloadExpr(plan, payloadVar)});`
     );
     lines.push(`\t} else if ${plan.autoCreate ? 'true' : 'false'} {`);
-    lines.push(`\t\tfn::${plan.createFunctionName}(${parentRecordVar}, { skipExists: true });`);
+    lines.push(`\t\tfn::${plan.createFunctionName}(${parentRecordVar}, ${buildSubtableAutoCreatePayloadExpr(plan)});`);
     lines.push(`\t};`);
     lines.push('');
   }
 
   return lines;
+}
+
+function buildSubtableCreatePayloadExpr(
+  plan: ResolvedSubtableCreatePlan,
+  payloadVar: string
+): string {
+  const baseExpr = `fn::objectAssign(${payloadVar}, { skipExists: true })`;
+  return applyInjectedSubtableFields(plan, baseExpr);
+}
+
+function buildSubtableAutoCreatePayloadExpr(plan: ResolvedSubtableCreatePlan): string {
+  return applyInjectedSubtableFields(plan, `{ skipExists: true }`);
+}
+
+function applyInjectedSubtableFields(
+  plan: ResolvedSubtableCreatePlan,
+  baseExpr: string
+): string {
+  if (!plan.injectedRecordFields.length) {
+    return baseExpr;
+  }
+
+  const assignments = plan.injectedRecordFields
+    .map(({ field, expr }) => `${formatObjectKey(field)}: ${expr}`)
+    .join(', ');
+
+  return `fn::objectAssign(${baseExpr}, { ${assignments} })`;
 }
 
 function buildSubtablePayloadExpression(rawVar: string, scalarField: string | null): string {

@@ -280,10 +280,16 @@ Rules:
 - Collection names must be at least 3 chars; shorter names are skipped with a warning.
 - Fields in the `[]` list are also used to build the Typesense schema.
 - Lines in `( ... )` become view `as:` entries; tags on these lines are used for Typesense schema metadata.
-- `{ ... }` is a settings block and is copied into the Typesense collection schema output.
+- `{ ... }` is a settings block, but it is **split** between Typesense schema settings and generator metadata:
+  - schema-side: `collection`, `fields`, `sortableFields`, `defaultSortingField`, `nestedFields`, `symbolsToIndex`, `tokenSeparators`
+  - meta-side: `queryBy`, `queryByWeights`, `filters`, and any unrecognized keys
 - Lines inside `( ... )` are **always treated as part of the as‑block**, even if they start with
   capability keywords like `post:` or `instance:`. This allows program lines such as
   `post: PID, [status, createdAt, updatedAt], <{...}>` inside Typesense/view blocks.
+- The graph block defines the **document shape** and generated collection schema. It does **not**
+  automatically invent relationship payloads. If you declare `categories`, `tags`, `topics`, or
+  `exams` as `object[]` fields, the generated or overridden `view...Typesense` function must return
+  objects that match that declared shape.
 
 Generated TRPC endpoints
 - When `typesense` is present, a nested router is emitted:
@@ -304,6 +310,8 @@ Typesense tags (initial):
 - Multiline `<{ ... }>` tags are supported (they are collapsed into a single tag block).
 - `<infix>` / `<infix: always|fallback|off>` → stored in `collectionsMeta` for query defaults.
 - `<sort>` / `<sort: asc|desc>` → stored in `collectionsMeta` for query defaults.
+  - This is **not** the same thing as making a field sortable in the Typesense collection.
+  - Collection sortability comes from `sortableFields: [...]` in the settings block.
 - `<highlight>` / `<highlight: full|snippet>` → stored in `collectionsMeta` for query defaults.
 - Legacy short form still works: `views: admin, public` (defaults to id‑only; no implicit `post` injection).
 
@@ -320,6 +328,30 @@ Typesense settings (block)
   - `queryBy` must be an array of strings
   - `queryByWeights` must be an array of numbers
   - mismatches throw during graph → spec generation
+- `filters` is stored in `collectionsMeta` and is also used by the Typesense bundle generator to mark
+  matching schema fields as `facet: true`.
+- `sortableFields` must list actual schema field names. The bundle generator applies `sort: true`
+  to those fields in the emitted collection schema.
+- If you need a fully custom collection schema, `fields: [...]` in the settings block overrides the
+  schema field inference from the view.
+
+Question Typesense pattern
+--------------------------
+For relationship-heavy models like `Question`, use two layers:
+
+1. Graph DSL defines the durable collection contract:
+   - searchable strings like `question`, `explanation`, `optionsString`
+   - facetable string arrays like `examTitles`, `categoryLabels`, `tagLabels`, `topicLabels`
+   - optional nested `object[]` fields for richer payloads such as `exams`, `categories`, `tags`, `topics`
+
+2. `fn::viewQuestionTypesense(...)` returns the actual values for those fields:
+   - joins option labels into `optionsString`
+   - resolves `ExamQuestions`
+   - resolves taxonomy edges into both nested objects and flat facet arrays
+
+This separation is intentional:
+- the graph controls what the collection should look like after regeneration
+- the SURQL function controls how to compute the document from live relational data
 
 Relations capability (record-to-record)
 --------------------------------------

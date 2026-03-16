@@ -334,6 +334,12 @@ function buildFallbackBootstrapTables(tables: TableMigrationConfig[]): Bootstrap
       const termModel = sanitizeIdentifier(
         taxonomy.term?.model ?? `t_${sanitizeIdentifier(tableModel).toLowerCase()}_${taxonomyKey.toLowerCase()}`
       );
+      const labelSingular = toPascalCase(taxonomy.labels?.singular ?? taxonomyKey);
+      const labelPlural = toPascalCase(taxonomy.labels?.plural ?? labelSingular);
+      const defaultEdgeBase =
+        labelPlural && labelSingular && labelPlural !== labelSingular
+          ? labelPlural
+          : (labelSingular || labelPlural || 'Term');
 
       if (taxonomyModel) {
         definitions.push({
@@ -353,13 +359,13 @@ function buildFallbackBootstrapTables(tables: TableMigrationConfig[]): Bootstrap
         });
       }
 
-      const defaultTaxonomyToTerms = sanitizeIdentifier(`${tableLabel}${toPascalCase(taxonomyKey)}Terms`);
-      const defaultRecordToTerm = sanitizeIdentifier(`${tableLabel}${toPascalCase(taxonomyKey)}s`);
+      const defaultTaxonomyToTerms = sanitizeIdentifier(`${tableLabel}${defaultEdgeBase}Terms`);
+      const defaultRecordToTerm = sanitizeIdentifier(`${tableLabel}${defaultEdgeBase}`);
       const edgeTaxonomyToTerm = sanitizeIdentifier(
-        taxonomy.edges?.taxonomyToTerms ?? defaultTaxonomyToTerms
+        taxonomy.edges?.taxonomyToTerms ?? taxonomy.taxonomyEdgeName ?? defaultTaxonomyToTerms
       );
       const edgeRecordToTerm = sanitizeIdentifier(
-        taxonomy.edges?.recordToTerm ?? defaultRecordToTerm
+        taxonomy.edges?.recordToTerm ?? taxonomy.edgeName ?? defaultRecordToTerm
       );
 
       if (edgeTaxonomyToTerm && taxonomyModel && termModel) {
