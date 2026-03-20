@@ -1,3 +1,7 @@
+# Engine branch ignore rules for the shared schema toolkit repo.
+# When using this repo as an app-owned branch that should keep config and
+# generated schema assets in git, start from `.gitignore.app.example` instead.
+
 # Dependencies
 node_modules/
 npm-debug.log*
