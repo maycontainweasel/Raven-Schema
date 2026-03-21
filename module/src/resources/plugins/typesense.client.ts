@@ -1,58 +1,25 @@
-import Typesense from 'typesense'
+const DIRECT_TYPESENSE_MESSAGE =
+  'Direct browser Typesense access is disabled. Use the server-backed useTypesense() composable instead.'
 
-export default defineNuxtPlugin(() => {
-  const config = useRuntimeConfig()
-  const publicConfig = config.public as any
-  const typesense = publicConfig?.typesense ?? config.typesense ?? {}
-
-  const rawHost = String(typesense.host || '')
-  let host = rawHost.replace(/^https?:\/\//, '')
-  let protocol = rawHost.startsWith('https') ? 'https' : 'http'
-  let port = Number(typesense.port || 8108)
-
-  try {
-    if (rawHost.startsWith('http')) {
-      const url = new URL(rawHost)
-      host = url.hostname
-      protocol = url.protocol.replace(':', '') || protocol
-      if (url.port) port = Number(url.port)
-    } else if (host.includes(':')) {
-      const [nextHost, nextPort] = host.split(':')
-      host = nextHost
-      if (nextPort) port = Number(nextPort)
-    }
-  } catch {
-    // fallback to defaults above
+const createDisabledClient = (): any => {
+  const callable = () => {
+    throw new Error(DIRECT_TYPESENSE_MESSAGE)
   }
 
-  host = host || 'localhost'
-  const apiKey = String(typesense.apiKey || '')
-  const timeoutRaw = Number(typesense.connectionTimeoutSeconds ?? typesense.timeoutSeconds ?? 8)
-  const connectionTimeoutSeconds =
-    Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : 8
-  const retriesRaw = Number(typesense.numRetries ?? 0)
-  const numRetries = Number.isFinite(retriesRaw) && retriesRaw >= 0 ? Math.floor(retriesRaw) : 0
-  const retryIntervalRaw = Number(typesense.retryIntervalSeconds ?? 0.25)
-  const retryIntervalSeconds =
-    Number.isFinite(retryIntervalRaw) && retryIntervalRaw >= 0 ? retryIntervalRaw : 0.25
-
-  const client = new Typesense.Client({
-    nodes: [
-      {
-        host,
-        port,
-        protocol,
-      },
-    ],
-    apiKey,
-    connectionTimeoutSeconds,
-    numRetries,
-    retryIntervalSeconds,
+  return new Proxy(callable, {
+    get() {
+      return createDisabledClient()
+    },
+    apply() {
+      throw new Error(DIRECT_TYPESENSE_MESSAGE)
+    },
   })
+}
 
+export default defineNuxtPlugin(() => {
   return {
     provide: {
-      typesense: client,
+      typesense: createDisabledClient(),
     },
   }
 })

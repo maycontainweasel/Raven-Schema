@@ -24,15 +24,13 @@ const extractFacetFields = (schema: any): string[] => {
 
 export function useTypesenseSearch() {
   const typesense = useTypesense()
-  const { $typesense } = useNuxtApp()
 
   const resolveCollectionName = (key: string) => typesense.getCollectionName(key)
 
   const getLocalSchema = (key: string) => typesense.getCollectionSchema(key)
 
   const getRemoteSchema = async (key: string) => {
-    const collectionName = resolveCollectionName(key)
-    return await $typesense.collections(collectionName).retrieve()
+    return await typesense.getRemoteSchema(key)
   }
 
   const getAvailableFacetFields = async (key: string, fallback: string[] = []) => {
@@ -40,15 +38,15 @@ export function useTypesenseSearch() {
       const remoteSchema = await getRemoteSchema(key)
       const facets = extractFacetFields(remoteSchema)
       return facets.length ? facets : fallback
-    } catch (error) {
+    }
+    catch (error) {
       console.warn('Unable to retrieve remote Typesense schema, defaulting facets.', error)
       return fallback
     }
   }
 
   const searchCollection = async (key: string, params: SearchParams) => {
-    const collectionName = resolveCollectionName(key)
-    return await $typesense.collections(collectionName).documents().search(params)
+    return await typesense.search(key, params)
   }
 
   const getQueryByFields = (key: string, preferred: string[] = []) => {

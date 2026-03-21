@@ -1894,3 +1894,7 @@ export function useCRUD() {
     resolveRecordSubId,
   }
 }
+
+export function useApiProcess() {
+  return useCRUD()
+}
