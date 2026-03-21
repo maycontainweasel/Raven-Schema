@@ -98,6 +98,33 @@ Schema defaults used when not explicitly set.
 - `postRecordEnabled` (boolean)
 - `bundlesEnabled` (boolean)
 
+## instance
+
+Controls whether the app behaves as a multi-instance app and, if so, which database is treated as the source authority.
+
+- `active` (boolean): enable or disable instance-aware behavior for generated assets and runtime consumers.
+  - `true`: apps receive instance topology and multi-instance routing remains active.
+  - `false`: the app should behave like a single-database app; the default database is used and instance tagging/routing becomes inert.
+- `source` (string): database key used as the source authority for source-owned models.
+- `tenants` (`auto` | string[]): tenant database keys.
+  - `auto`: all database keys except `instance.source`.
+  - `string[]`: explicit tenant list.
+- `fields` (object): auto-injected instance-related field defaults, usually the `instances` array field.
+
+Runtime export:
+- `@schema/db` now exports:
+  - `instancesEnabled`
+  - `sourceDbInstance`
+  - `tenantDbInstances`
+  - `defaultDbInstance`
+  - `instanceTopology`
+
+Recommended rule:
+- if `instance.active: true`, models should set explicit authority via MPDG model settings:
+  - `& { authority: "source" }`
+  - `& { authority: "tenant" }`
+- if omitted, generation currently defaults authority to `source` and emits a warning.
+
 ## events
 
 Controls how generated event files are written.

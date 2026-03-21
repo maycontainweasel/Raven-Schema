@@ -221,7 +221,7 @@ export async function generateModelsManifest(
         : path.resolve(projectRoot, cfg.output)
       : defaultOutput);
 
-  const entries = buildEntries(tables);
+  const entries = buildEntries(tables, app);
   const baseModelsTs = buildModelsFile(entries);
   const canonicalManifest = buildCanonicalManifest(entries);
   const adminManifest = buildAdminManifest(entries);
@@ -244,7 +244,8 @@ export async function generateModelsManifest(
   console.log(`🧩 Generated admin model manifest: ${path.relative(projectRoot, adminJsonPath)}`);
 }
 
-function buildEntries(tables: TableMigrationConfig[]): GeneratedModelEntry[] {
+function buildEntries(tables: TableMigrationConfig[], app: AppConfig): GeneratedModelEntry[] {
+  const instancesEnabled = app.instance?.active !== false;
   return tables
     .filter((table) => table.tableType !== 'subsingle' && table.tableType !== 'submany')
     .filter((table) => table.table?.model)
@@ -258,11 +259,14 @@ function buildEntries(tables: TableMigrationConfig[]): GeneratedModelEntry[] {
 
       const admin = (table as any).admin ?? {};
       const modelSettings = normalizeModelSettings((table as any).modelSettings);
+      const explicitAdminAuthority = normalizeAuthority((admin as any).authority ?? admin.data);
+      const hasExplicitAuthority =
+        typeof modelSettings.authority === 'string' || typeof explicitAdminAuthority === 'string';
 
       const schemaType = modelSettings.schemaType ?? resolveSchemaType(table);
       const authority =
         modelSettings.authority ??
-        normalizeAuthority((admin as any).authority ?? admin.data) ??
+        explicitAdminAuthority ??
         'source';
       const data = toLegacyDataMode(authority);
       const slugPolicy = sanitizeOptionalString(admin.slugPolicy);
@@ -326,6 +330,18 @@ function buildEntries(tables: TableMigrationConfig[]): GeneratedModelEntry[] {
       }));
 
       const warnings = [...modelSettings.warnings];
+      if (instancesEnabled && !hasExplicitAuthority) {
+        warnings.push(
+          `No explicit authority configured for model "${tableModel}". Defaulting to "source". ` +
+          `Prefer model settings (& { authority: "source" | "tenant" }) for clarity.`
+        );
+      }
+      if (!instancesEnabled && (table.instance || fields.includes('instances'))) {
+        warnings.push(
+          `App instance.active=false, so instance-aware behavior is disabled for "${tableModel}". ` +
+          `The default database will be used and instance tagging/routing will be inert.`
+        );
+      }
       if (requestedTypesenseEnabled === true && !hasTypesenseSchema) {
         warnings.push(
           `typesense.enabled=true but no typesense schema was generated for model "${tableModel}".`,

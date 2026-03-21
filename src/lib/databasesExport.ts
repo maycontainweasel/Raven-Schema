@@ -33,6 +33,7 @@ export async function generateDatabasesExport(
 
 function buildDatabasesFile(app: AppConfig): string {
   const entries = Object.entries(app.databases ?? {});
+  const instancesEnabled = app.instance?.active !== false;
   const dbLiteral = entries
     .map(([key, db]) => `  ${JSON.stringify(key)}: ${serializeDb(db)}`)
     .join(',\n');
@@ -61,7 +62,9 @@ function buildDatabasesFile(app: AppConfig): string {
   const allDatabaseKeys = entries.map(([key]) => key);
   const tenantsSetting = app.instance?.tenants;
   const tenantKeys =
-    tenantsSetting === 'auto' || typeof tenantsSetting === 'undefined'
+    !instancesEnabled
+      ? []
+      : tenantsSetting === 'auto' || typeof tenantsSetting === 'undefined'
       ? allDatabaseKeys.filter((key) => key !== resolvedSource)
       : Array.isArray(tenantsSetting)
         ? Array.from(
@@ -110,11 +113,14 @@ function buildDatabasesFile(app: AppConfig): string {
     ``,
     `export type DbInstanceKey = keyof typeof dbInstances;`,
     ``,
+    `export const instancesEnabled = ${instancesEnabled ? 'true' : 'false'} as const;`,
+    ``,
     hasResolvedSource
       ? `export const sourceDbInstance: DbInstanceKey = ${JSON.stringify(resolvedSource)} as DbInstanceKey;`
       : `export const sourceDbInstance: DbInstanceKey | null = null;`,
     `export const tenantDbInstances: DbInstanceKey[] = [${tenantLiteral}] as DbInstanceKey[];`,
     `export const instanceTopology = {`,
+    `  enabled: instancesEnabled,`,
     `  source: sourceDbInstance,`,
     `  tenants: tenantDbInstances,`,
     `} as const;`,

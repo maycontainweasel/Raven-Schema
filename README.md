@@ -169,6 +169,66 @@ We ship a simple **rsync-based** sync tool to copy selected files to one or more
   - use `payloadField: page`
   - keep `linkOnCreate: true` to auto-link after create.
 
+### Model settings and authority
+
+- The model settings block comes **after** the fields block and uses `& { ... }`, not `| { ... }`.
+- Use it to declare model-level runtime behavior such as authority.
+
+Example:
+
+```mpdg
+Exam, exam | Primary exam entity {
+  key!: ""
+  title!: ""
+} & {
+  authority: "source"
+} [
+  crud<key>
+  router
+  instance
+]
+```
+
+Canonical authority values:
+- `source`
+- `tenant`
+
+Legacy aliases still normalize:
+- `local` -> `source`
+- `remote` -> `tenant`
+
+Recommended rule:
+- if `instance.active: true` in `config/app.config.yaml`, set authority explicitly for every model
+- if omitted, generation currently defaults to `source` and emits a warning
+
+### App-level instance contract
+
+The app-level multi-database contract lives in `config/app.config.yaml`:
+
+```yaml
+instance:
+  active: true
+  source: pm
+  tenants: auto
+```
+
+Generated apps receive this via `@schema/db`:
+- `instancesEnabled`
+- `sourceDbInstance`
+- `tenantDbInstances`
+- `defaultDbInstance`
+- `instanceTopology`
+
+Runtime behavior:
+- `instancesEnabled === true`
+  - `useApiProcess` / `useCRUD` respect model authority
+  - source-authority models write to source DB first
+  - tenant-authority models target tenant DBs directly
+- `instancesEnabled === false`
+  - the app behaves as single-database
+  - `defaultDbInstance` is used
+  - instance tagging/routing becomes inert
+
 ### Relation import/debug tip
 
 If runtime behavior looks stale after DSL changes, import functions explicitly to the intended DB:

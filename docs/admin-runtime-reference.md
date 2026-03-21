@@ -57,6 +57,41 @@ For `exam`, this supplies:
 
 This comes from the schema graph and should become the canonical runtime source for model behavior.
 
+Model authority should be expressed in MPDG model settings:
+
+```mpdg
+Exam, exam | Primary exam entity {
+  ...
+} & {
+  authority: "source"
+} [
+  ...
+]
+```
+
+Canonical values:
+- `source`
+- `tenant`
+
+Legacy aliases:
+- `local` -> `source`
+- `remote` -> `tenant`
+
+### 2.5. Generated app database topology
+Generated into:
+- `apps/heliosadmin/modules/schema-kit/runtime/generated/databases.ts`
+
+This supplies app-level execution capability:
+- `instancesEnabled`
+- `sourceDbInstance`
+- `tenantDbInstances`
+- `defaultDbInstance`
+- `instanceTopology`
+
+Runtime rule:
+- if `instancesEnabled === false`, apps should behave like single-database apps and use `defaultDbInstance`
+- if `instancesEnabled === true`, model authority becomes operationally relevant
+
 ### 3. Generated TypeSense schema
 Generated into:
 - `apps/heliosadmin/modules/schema-kit/runtime/generated/typesense/collections.ts`

@@ -191,6 +191,7 @@ export interface ApiConfig<D = any> extends ApiOptions {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const dbInstances = ((dbBundle as any).dbInstances ?? {}) as Record<string, any>
+const instancesEnabled = ((dbBundle as any).instancesEnabled ?? true) as boolean
 const defaultDbInstance = ((dbBundle as any).defaultDbInstance ?? null) as string | null
 const sourceDbInstance = ((dbBundle as any).sourceDbInstance ?? null) as string | null
 const tenantDbInstances = ((dbBundle as any).tenantDbInstances ?? null) as string[] | null
@@ -216,6 +217,10 @@ export function useCRUD() {
   }
 
   const defaultSourceInstance: InstanceCode = resolveSourceInstance()
+  const defaultExecutionInstance: InstanceCode =
+    defaultDbInstance && (dbInstances as any)[defaultDbInstance]
+      ? (defaultDbInstance as InstanceCode)
+      : defaultSourceInstance
 
   const createRequestId = () => {
     const cryptoRef: any = (globalThis as any)?.crypto
@@ -352,6 +357,7 @@ export function useCRUD() {
   }
 
   const resolveDefaultTenantInstances = (sourceInstance: InstanceCode): InstanceCode[] => {
+    if (!instancesEnabled) return []
     const explicit = normalizeInstances(tenantDbInstances ?? [])
       .filter((instance) => instance !== sourceInstance)
     if (explicit.length > 0) return explicit
@@ -605,19 +611,21 @@ export function useCRUD() {
     if (data === undefined || data === null) throw new Error('data is required')
 
     const options = {
-      sourceInstance: requestOptions.sourceInstance ?? requestOptions.rootInstance ?? defaultSourceInstance,
-      bypassMothership: false,
+      sourceInstance: requestOptions.sourceInstance ?? requestOptions.rootInstance ?? defaultExecutionInstance,
       retryAttempts: 3,
       retryDelay: 1000,
       strategy: 'continue-on-error' as Strategy,
       consoleLogging: false,
       logFailures: true,
       toast: undefined,
-      ...requestOptions
+      ...requestOptions,
+      bypassMothership: instancesEnabled ? Boolean(requestOptions.bypassMothership) : false,
     }
 
-    const sourceInstance = options.sourceInstance ?? defaultSourceInstance
-    const targetInstances = instances.filter(inst => inst !== sourceInstance)
+    const sourceInstance = options.sourceInstance ?? defaultExecutionInstance
+    const targetInstances = instancesEnabled
+      ? instances.filter(inst => inst !== sourceInstance)
+      : []
     const results = { success: [] as InstanceCode[], failed: [] as { instance: InstanceCode; error: any }[] }
     let primaryRecord: R | null = null
 
@@ -750,8 +758,8 @@ export function useCRUD() {
 
     const isMutate = method === 'mutate'
     const options = {
-      sourceInstance: requestOptions.sourceInstance ?? requestOptions.rootInstance ?? defaultSourceInstance,
-      bypassMothership: requestOptions.bypassMothership ?? false,
+      sourceInstance: requestOptions.sourceInstance ?? requestOptions.rootInstance ?? defaultExecutionInstance,
+      bypassMothership: instancesEnabled ? (requestOptions.bypassMothership ?? false) : false,
       authority: normalizeAuthority(requestOptions.authority ?? requestOptions.dataLocation),
       retryAttempts: requestOptions.retryAttempts ?? 3,
       retryDelay: requestOptions.retryDelay ?? 1000,
@@ -768,9 +776,11 @@ export function useCRUD() {
       throwOnFailure: requestOptions.throwOnFailure ?? isMutate,
     }
 
-    const sourceInstance = options.sourceInstance ?? defaultSourceInstance
+    const sourceInstance = options.sourceInstance ?? defaultExecutionInstance
     const requireMothership = options.bypassMothership ? false : true
-    const targetInstances = normalizeInstances(instances).filter((inst) => inst !== sourceInstance)
+    const targetInstances = instancesEnabled
+      ? normalizeInstances(instances).filter((inst) => inst !== sourceInstance)
+      : []
     const startedAtMs = Date.now()
     const instanceResults: Record<InstanceCode, InstanceExecution<R>> = {}
     let primaryRecord: R | null = null
@@ -827,7 +837,9 @@ export function useCRUD() {
     }
 
     const authority: DataAuthority =
-      options.bypassMothership === true
+      !instancesEnabled
+        ? 'source'
+        : options.bypassMothership === true
         ? 'tenant'
         : (options.authority ?? inferAuthorityFromEndpoint(endpoint) ?? 'source')
     const attemptInstances = options.bypassMothership
@@ -1189,7 +1201,9 @@ export function useCRUD() {
     const inferredAuthority = inferAuthorityFromEndpoint(endpoint)
     const explicitAuthority = normalizeAuthority(mergedOptions.authority ?? mergedOptions.dataLocation)
     const derivedBypass =
-      mergedOptions.bypassMothership !== undefined
+      !instancesEnabled
+        ? false
+        : mergedOptions.bypassMothership !== undefined
         ? mergedOptions.bypassMothership
         : explicitAuthority
           ? explicitAuthority === 'tenant'
@@ -1200,20 +1214,22 @@ export function useCRUD() {
 
     mergedOptions.sourceInstance = mergedOptions.sourceInstance ?? mergedOptions.rootInstance
 
-    if (!mergedOptions.sourceInstance && targetInstances.length === 1 && bypassMothership) {
+    if (instancesEnabled && !mergedOptions.sourceInstance && targetInstances.length === 1 && bypassMothership) {
       mergedOptions.sourceInstance = targetInstances[0]
     }
 
-    const sourceInstance = mergedOptions.sourceInstance ?? defaultSourceInstance
+    const sourceInstance = mergedOptions.sourceInstance ?? defaultExecutionInstance
     const resolvedAuthority: DataAuthority =
-      explicitAuthority ?? inferredAuthority ?? (bypassMothership ? 'tenant' : 'source')
-    if (resolvedAuthority === 'tenant' && targetInstances.length === 0) {
+      instancesEnabled
+        ? (explicitAuthority ?? inferredAuthority ?? (bypassMothership ? 'tenant' : 'source'))
+        : 'source'
+    if (instancesEnabled && resolvedAuthority === 'tenant' && targetInstances.length === 0) {
       targetInstances = resolveDefaultTenantInstances(sourceInstance)
     }
 
     const sanitizedPayload = stripRootInstanceFromPayload(payload, sourceInstance)
 
-    if (bypassMothership && targetInstances.length === 0) {
+    if (instancesEnabled && bypassMothership && targetInstances.length === 0) {
       throw new Error(`Instances are required for tenant authority operations on ${endpoint}`)
     }
 
@@ -1257,12 +1273,16 @@ export function useCRUD() {
 
   const runWithTracking = async <D = any, R = any>(request: ProcessRequest<D>, options: ApiOptions) => {
     const startedAt = new Date().toISOString()
-    const sourceInstance = request.options?.sourceInstance ?? request.options?.rootInstance ?? defaultSourceInstance
+    const sourceInstance = request.options?.sourceInstance ?? request.options?.rootInstance ?? defaultExecutionInstance
     const authority: DataAuthority =
-      request.options?.bypassMothership === true
+      !instancesEnabled
+        ? 'source'
+        : request.options?.bypassMothership === true
         ? 'tenant'
         : (normalizeAuthority(request.options?.authority ?? request.options?.dataLocation) ?? inferAuthorityFromEndpoint(request.endpoint) ?? 'source')
-    const attemptInstances = request.options?.bypassMothership
+    const attemptInstances = !instancesEnabled
+      ? [sourceInstance]
+      : request.options?.bypassMothership
       ? request.instances
       : Array.from(new Set([sourceInstance, ...request.instances]))
     const requestId = createRequestId()

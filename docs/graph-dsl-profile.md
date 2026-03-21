@@ -92,12 +92,33 @@ Exam(exam) [crud<key> { delete: { options: { allowMissing: false } } }, router] 
 - Subtables: default `autoCreate: true` if nested unless tagged otherwise.
 - Router: `router` with no params uses the table label in camelCase for `router.name` (falls back to model if missing); if inside a subtable and `parent` missing, parent table’s router name is used.
 - Views: keyword maps to view generation; canned presets can be expanded later.
-- `instance<remote>` sets admin data source to remote (default is `local`).
+- `instance<remote>` sets admin data source to remote (legacy shorthand; prefer explicit model settings authority).
 - When `instance` is enabled and no `instances` is provided, the generator defaults to `fn::defaultInstance({ returnArray: true })`.
 
 Local vs remote data (instance flag)
 ------------------------------------
-The `instance<local|remote>` capability controls **where writes happen** when using the generated admin UI and the `useCRUD` composable.
+The older `instance<local|remote>` capability controls **where writes happen** when using the generated admin UI and the `useCRUD` composable.
+The preferred modern form is an explicit model settings block after the fields block:
+
+```mpdg
+Exam, exam | Primary exam entity {
+  key!: ""
+} & {
+  authority: "source"
+} [
+  crud<key>
+  router
+  instance
+]
+```
+
+Canonical authority values:
+- `source`
+- `tenant`
+
+Legacy aliases still normalize:
+- `local` -> `source`
+- `remote` -> `tenant`
 
 **Local (default)**
 - Source of truth is the **mothership** (root instance, usually `pm`).
@@ -114,7 +135,8 @@ The `instance<local|remote>` capability controls **where writes happen** when us
 
 **Where the value comes from**
 - The generator writes this to the **models manifest** (`@schema/models`).
-- `useCRUD` reads the manifest to determine whether a model is `local` or `remote`.
+- `useCRUD` / `useApiProcess` read the manifest to determine whether a model is `source` or `tenant`.
+- If the app has `instance.active: false`, the runtime treats the app as single-database and uses `defaultDbInstance`.
 
 **Instances used**
 - The instances list comes from:
@@ -134,7 +156,8 @@ export const models = {
 ```
 Source mapping:
 - `crud<slug>` → `slugPolicy`
-- `instance<remote|local>` → `data`
+- `& { authority: "source" | "tenant" }` → `authority`
+- `instance<remote|local>` still maps through legacy normalization
 
 Tags cheat‑sheet (fields)
 - `index` → DEFINE INDEX (non‑unique).
