@@ -229,6 +229,44 @@ Runtime behavior:
   - `defaultDbInstance` is used
   - instance tagging/routing becomes inert
 
+### Record IDs, sub-IDs, and admin post status
+
+SurrealDB record ids are record objects at runtime, for example:
+
+```ts
+{ tb: 'exam', id: 'dip-hiv-man' }
+```
+
+In schema docs and runtime contracts:
+- `record id` means the full Surreal record id object
+- `sub-id` means the value after the table prefix, for example `dip-hiv-man`
+
+Frontend rule:
+- prefer passing the sub-id to TRPC endpoints
+- let the server reconstruct the full RID with `fn::ridParam(...)`
+
+The generated global admin post-status endpoint follows that rule:
+
+```ts
+$api.admin.updatePostStatus.mutate({
+  instance: 'pm',
+  data: {
+    table: 'exam',
+    id: 'dip-hiv-man',
+    status: 'publish',
+  },
+})
+```
+
+Server behavior:
+- reconstructs the RID with `fn::ridParam($tb, $id)`
+- resolves the associated post with `fn::PID($RECORD_ID)`
+- updates the post status via `fn::updateAdminPostStatus(...)`
+
+Legacy compatibility:
+- `admin.updatePostStatus` still accepts `recordId: { tb, id }` during migration
+- new callers should use `table + id + status`
+
 ### Relation import/debug tip
 
 If runtime behavior looks stale after DSL changes, import functions explicitly to the intended DB:

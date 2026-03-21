@@ -172,6 +172,46 @@ This:
 
 This should be treated as the standard generated refresh endpoint pattern for TypeSense-enabled models.
 
+## The Global Admin Post Status Contract
+
+The admin runtime also has a generated global post-status endpoint:
+- `admin.updatePostStatus`
+
+Purpose:
+- update the associated post record for any model-backed record
+- keep post metadata off the primary record
+- support shared admin actions such as `draft` / `publish`
+
+Canonical frontend input:
+
+```ts
+$api.admin.updatePostStatus.mutate({
+  instance: 'pm',
+  data: {
+    table: 'exam',
+    id: 'dip-hiv-man',
+    status: 'publish',
+  },
+})
+```
+
+Important rule:
+- pass the model table and the record sub-id
+- do not require the page to pass a raw Surreal `{ tb, id }` object
+
+Server behavior:
+1. reconstruct the RID with `fn::ridParam($tb, $id)`
+2. call `fn::updateAdminPostStatus($rid, $status)`
+3. inside that function, resolve the associated post with `fn::PID($RECORD_ID)`
+4. update the post status and refresh record views
+
+Underlying function:
+- `apps/schema/config/bootstrap/modules/post/functions/updateAdminPostStatus.surql`
+
+Compatibility note:
+- the generated endpoint still accepts the older `recordId: { tb, id }` shape during migration
+- new page code should use `table + id + status`
+
 ## What `useTypesense()` Does
 
 Public composable:
