@@ -258,6 +258,19 @@ $api.admin.updatePostStatus.mutate({
 })
 ```
 
+### Product + Stripe admin prerequisite
+
+The `product` admin flow can be generated and wired correctly while Stripe actions still fail at runtime if the consuming app has not been given Stripe keys.
+
+Required app runtime env for server-side Stripe admin actions:
+- `NUXT_STRIPE_SECRET_KEY`
+- `NUXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- optional: `STRIPE_API_VERSION`
+
+Recommended rule:
+- treat `stripeAdmin.envStatus` as the preflight check
+- require `hasStripeSecret === true` before attempting product creation, Stripe product sync, or Stripe price creation
+
 Server behavior:
 - reconstructs the RID with `fn::ridParam($tb, $id)`
 - resolves the associated post with `fn::PID($RECORD_ID)`

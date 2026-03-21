@@ -41,6 +41,10 @@ interface GenerateFunctionsOptions {
 }
 
 type SubtableCreateMode = 'function' | 'event';
+type DeleteRelationCleanup = {
+  edge: string;
+  field: 'in' | 'out';
+};
 
 interface NormalizedHooks {
   preValidate: string[];
@@ -66,6 +70,7 @@ export async function generateTableFunctions(options: GenerateFunctionsOptions):
 
   const relationHooksByModel = groupRelationHooks(tables);
   const taxonomyHooksByModel = groupTaxonomyHooks(tables);
+  const deleteRelationCleanupsByModel = groupDeleteRelationCleanups(tables);
 
   // Process parent tables before subtables so a parent directory reset doesn't remove newly written child assets.
   const tablesInOrder = [...tables].sort((a, b) => {
@@ -147,7 +152,7 @@ export async function generateTableFunctions(options: GenerateFunctionsOptions):
         table,
         deleteOperation,
         deleteName,
-        relationHooksByModel.get(table.table?.model ?? ''),
+        deleteRelationCleanupsByModel.get(table.table?.model ?? sanitizeCamel(table.name)),
         taxonomyHooksByModel.get(table.table?.model ?? '')
       );
       const prev = previousFilesByDir.get(tableDir)?.get(deletePath);
@@ -779,7 +784,7 @@ function buildDeleteFunctionContent(
   table: TableMigrationConfig,
   operation: CrudOperationDefinition,
   functionName: string,
-  relationHooks?: NormalizedRelation[],
+  relationCleanups?: DeleteRelationCleanup[],
   taxonomyHooks?: NormalizedTaxonomy[]
 ): string {
   const tableNamePascal = sanitizePascal(table.name);
@@ -788,19 +793,22 @@ function buildDeleteFunctionContent(
   const cleanupFns = operation.options?.cleanup ?? [];
   const returnMode = operation.options?.return ?? 'id';
   const hooks = normalizeHooks(operation);
-  const relationPost = buildRelationPostProcessLines(
-    relationHooks,
-    '$rid',
-    '',
-    'delete'
-  );
   const taxonomyPost = buildTaxonomyPostProcessLines(
     taxonomyHooks,
     '$rid',
     '',
     'delete'
   );
-  const postProcessHooks = [...hooks.postProcess, ...relationPost, ...taxonomyPost];
+  const instanceCleanup = buildInstanceDeleteCleanupLines(table, '$rid');
+  const relationPost = buildDeleteRelationCleanupLines(relationCleanups, '$rid');
+  const postCleanup = buildPostDeleteCleanupLines(table, '$rid');
+  const postProcessHooks = [
+    ...hooks.postProcess,
+    ...instanceCleanup,
+    ...relationPost,
+    ...postCleanup,
+    ...taxonomyPost,
+  ];
   const allowMissing = operation.options?.allowMissing ?? true;
   const isPostTable =
     table.table?.model === 'p' ||
@@ -880,7 +888,7 @@ function groupRelationHooks(
         `${item.edge}:${item.leftModel}:${item.rightModel}` === relKey
     );
     if (existingIndex >= 0) {
-      const existing = list[existingIndex];
+      const existing = list[existingIndex]!;
       const preferNew =
         existing.sourceModel !== hookModel && relation.sourceModel === hookModel;
       if (preferNew) {
@@ -891,6 +899,31 @@ function groupRelationHooks(
     }
     map.set(hookModel, list);
   }
+  return map;
+}
+
+function groupDeleteRelationCleanups(
+  tables: TableMigrationConfig[]
+): Map<string, DeleteRelationCleanup[]> {
+  const relations = collectRelations(tables);
+  const map = new Map<string, DeleteRelationCleanup[]>();
+
+  const addCleanup = (model: string, cleanup: DeleteRelationCleanup) => {
+    const list = map.get(model) ?? [];
+    const exists = list.some(
+      (entry) => entry.edge === cleanup.edge && entry.field === cleanup.field
+    );
+    if (!exists) {
+      list.push(cleanup);
+      map.set(model, list);
+    }
+  };
+
+  for (const relation of relations) {
+    addCleanup(relation.leftModel, { edge: relation.edge, field: 'in' });
+    addCleanup(relation.rightModel, { edge: relation.edge, field: 'out' });
+  }
+
   return map;
 }
 
@@ -1609,6 +1642,36 @@ function buildRelationPostProcessLines(
   }
 
   return lines;
+}
+
+function buildDeleteRelationCleanupLines(
+  cleanups: DeleteRelationCleanup[] | undefined,
+  recordVar: string
+): string[] {
+  if (!cleanups || cleanups.length === 0) return [];
+  return cleanups.map((cleanup) => `\tdelete from ${cleanup.edge} where ${cleanup.field} = ${recordVar};`);
+}
+
+function buildInstanceDeleteCleanupLines(
+  table: TableMigrationConfig,
+  recordVar: string
+): string[] {
+  if (!isInstanceEnabled(table)) return [];
+  return [`\tdelete from Instances where in = ${recordVar};`];
+}
+
+function buildPostDeleteCleanupLines(
+  table: TableMigrationConfig,
+  recordVar: string
+): string[] {
+  if (!isPostEnabled(table)) return [];
+  return [
+    `\tdelete from Post where out = ${recordVar};`,
+    `\tlet $PID = fn::PID(${recordVar});`,
+    `\tif type::is_record($PID) && record::exists($PID) {`,
+    `\t\tfn::deletePost($PID);`,
+    `\t};`,
+  ];
 }
 
 function relationSingleRelationErrorLabel(relation: NormalizedRelation): string {
@@ -2789,6 +2852,15 @@ function isInstanceEnabled(table: TableMigrationConfig): boolean {
   if (typeof instanceFlag === 'object' && instanceFlag.enabled === false) return false;
   const tableModel = table.table?.model ?? sanitizeCamel(table.name);
   if (tableModel === 'instance') return false;
+  return true;
+}
+
+function isPostEnabled(table: TableMigrationConfig): boolean {
+  const postFlag = table.post;
+  if (postFlag === false || postFlag === null || postFlag === undefined) return false;
+  if (typeof postFlag === 'object' && postFlag.enabled === false) return false;
+  const tableModel = table.table?.model ?? sanitizeCamel(table.name);
+  if (tableModel === 'p') return false;
   return true;
 }
 

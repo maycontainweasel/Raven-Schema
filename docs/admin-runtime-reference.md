@@ -249,6 +249,37 @@ It uses:
 - `useTypesense()`
 - `useTypesenseSearch()`
 
+## Product + Stripe Contract
+
+The `product` model follows the same directory/runtime pattern as `exam`, with one additional server-side dependency:
+- Stripe admin actions require Stripe keys in the consuming app runtime
+
+Current `heliosadmin` product flow:
+- directory page: `apps/heliosadmin/app/pages/products/index.vue`
+- record page: `apps/heliosadmin/app/pages/products/[slug].vue`
+- server router: `apps/heliosadmin/server/trpc/routers/stripeAdmin.ts`
+- Stripe service: `apps/heliosadmin/server/services/stripe.ts`
+
+What the product flow already proves:
+- product directory search is TypeSense-backed
+- create/delete uses the shared API process contract
+- create links a product to an exam
+- record management syncs TypeSense explicitly
+- pricing rows create or rotate Stripe prices through server TRPC endpoints
+
+What Stripe admin actions require:
+- `NUXT_STRIPE_SECRET_KEY`
+- `NUXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- optional: `STRIPE_API_VERSION`
+
+Important rule:
+- missing Stripe env is an app runtime/config problem, not a schema graph problem
+- product creation may be structurally correct and still fail until the app runtime has the required Stripe keys
+
+Recommended preflight:
+- call `stripeAdmin.envStatus`
+- require `hasStripeSecret === true` before attempting server-side Stripe mutations
+
 ## What The Refresh Modal Does
 
 Helper:

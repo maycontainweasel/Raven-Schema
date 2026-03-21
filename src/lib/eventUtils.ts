@@ -579,8 +579,8 @@ if !type::is_record($RID) { throw "${eventName} | invalid record id"; };
 fn::createPost({
 ${payloadLines.join('\n')}
 });
+fn::attachRecordToPost($RID, { skipExists: true });
 let $PID = fn::PID($RID);
-fn::createEdge($PID, "Post", $RID, { boundId: true, overwrite: false, skipExists: true });
 
 if($after.status == 'publish') {
   fn::updatePost($PID, {
