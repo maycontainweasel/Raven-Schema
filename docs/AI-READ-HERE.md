@@ -4,6 +4,16 @@ This repo is the schema/tooling workspace that turns a human‑readable “napki
 
 Start here if you’re a new AI working in this repo.
 
+## Read next for schema runtime work
+
+The canonical schema-owned AI guidance now lives in:
+- `docs/ai/README.md`
+- `docs/ai/architecture.md`
+- `docs/ai/runtime/authority-routing.md`
+- `docs/ai/runtime/typesense.md`
+
+Use those docs for runtime contracts and agent workflow. Use this file for the schema generator workflow and file map.
+
 ## What this tool does
 
 - **Source of truth**: `config/graph.mpdg` (MPDG DSL).
@@ -27,6 +37,10 @@ Start here if you’re a new AI working in this repo.
 
 - MPDG format + blocks:
   - `docs/graph-dsl-profile.md`
+- Schema runtime/authority canon:
+  - `docs/ai/runtime/authority-routing.md`
+- Schema Typesense canon:
+  - `docs/ai/runtime/typesense.md`
 - Tag/program glossary:
   - `docs/mpdg-tag-glossary.md`
 - CRUD hooks plan:

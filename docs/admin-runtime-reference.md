@@ -1,5 +1,7 @@
 # Admin Runtime Reference
 
+> This document is a reference implementation anchored in a consumer-app example. The schema-owned canonical runtime contract now lives in `docs/ai/runtime/authority-routing.md` and `docs/ai/runtime/typesense.md`.
+
 ## Purpose
 This document explains the live runtime contract for a schema-driven admin directory, using the working PassMed `exam` directory in `heliosadmin` as the reference implementation.
 

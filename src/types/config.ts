@@ -230,6 +230,17 @@ export interface UiConfig {
    * Default project target(s) for UI generation when CLI is run without --project.
    */
   projects?: string[];
+  /**
+   * Optional per-project UI generation settings. Use this to make the expected
+   * delivery mode explicit for agents and for CLI helpers.
+   */
+  projectSettings?: Record<string, UiProjectSettingsConfig>;
+}
+
+export interface UiProjectSettingsConfig {
+  enabled?: boolean;
+  mode?: 'generated' | 'custom-pages';
+  notes?: string;
 }
 
 export interface LayersConfig {

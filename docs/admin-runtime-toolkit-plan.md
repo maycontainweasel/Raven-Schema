@@ -1,5 +1,7 @@
 # Schema-Kit Admin Runtime and Directory Toolkit
 
+> This is a working framework plan. Use `docs/ai/runtime/authority-routing.md` and `docs/ai/runtime/typesense.md` for the canonical abstract runtime contract.
+
 ## Intent
 Build a reusable schema-driven admin runtime that lets any consumer app create robust management directories and record workspaces using generated schema metadata, `useTypesense`, and `useApiProcess`.
 

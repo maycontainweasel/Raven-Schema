@@ -124,6 +124,12 @@ export async function ensureSchemaKitModule(options: {
     log,
     matcher: docsMatcher,
   });
+  await syncAiBundle({
+    appRoot,
+    moduleSourceRoot,
+    log,
+    matcher: docsMatcher,
+  });
 
   const configPath = await findNuxtConfig(appRoot);
   if (!configPath) {
@@ -161,6 +167,26 @@ export async function ensureSchemaKitModule(options: {
   if (withTranspile !== configContent) {
     await writeFile(configPath, withTranspile, 'utf-8');
   }
+}
+
+export async function syncSchemaAiBundleForProject(options: {
+  projectRoot: string;
+  project: ProjectPathsConfig;
+  app?: AppConfig;
+  moduleSourceRoot: string;
+  log?: boolean;
+}): Promise<void> {
+  const { projectRoot, project, app, moduleSourceRoot, log = true } = options;
+  if (!project.nuxtProjectRoot) return;
+
+  const appRoot = path.resolve(projectRoot, project.nuxtProjectRoot);
+  const matcher = resolveFileSyncMatcher(app, project, 'docs');
+  await syncAiBundle({
+    appRoot,
+    moduleSourceRoot,
+    log,
+    matcher,
+  });
 }
 
 async function syncControllerDocs(options: {
@@ -202,6 +228,52 @@ async function syncInfraDocs(options: {
   });
   if (log) {
     console.log(`📦 Synced infra docs → ${path.relative(appRoot, targetDocs)}`);
+  }
+}
+
+async function syncAiBundle(options: {
+  appRoot: string;
+  moduleSourceRoot: string;
+  log?: boolean;
+  matcher?: ReturnType<typeof resolveFileSyncMatcher>;
+}): Promise<void> {
+  const { appRoot, moduleSourceRoot, log = true, matcher } = options;
+  const sourceRoot = path.join(moduleSourceRoot, 'ai-bundle');
+  const sourceStat = await stat(sourceRoot).catch(() => null);
+  if (!sourceStat?.isDirectory()) {
+    return;
+  }
+
+  const hashFile = path.join(appRoot, '.schema-ai-bundle.hash');
+  const currentHash = await computeBundleHash(sourceRoot, appRoot, matcher);
+  const previousHash = await readFile(hashFile, 'utf-8').catch(() => null);
+  const needsUpdate = !previousHash || previousHash.trim() !== currentHash;
+
+  if (!needsUpdate) {
+    if (log) {
+      console.log(`✅ Schema AI bundle unchanged for ${appRoot}`);
+    }
+    return;
+  }
+
+  await removeManagedAiBundleTargets(appRoot, matcher).catch(() => null);
+  await copyDir(sourceRoot, appRoot, {
+    overwrite: true,
+    filter: ({ targetPath }) => !(matcher?.matches(path.relative(appRoot, targetPath)) ?? false),
+  });
+
+  const markerPath = path.join(appRoot, 'schema-ai-bundle.json');
+  const marker = {
+    version: 1,
+    source: 'schema-kit/ai-bundle',
+    hash: currentHash,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`, 'utf-8');
+  await writeFile(hashFile, `${currentHash}\n`, 'utf-8');
+
+  if (log) {
+    console.log(`🧠 Synced schema AI bundle → ${appRoot}`);
   }
 }
 
@@ -422,6 +494,69 @@ async function computeModuleHash(
   hash.update(configFile);
   hash.update(configContent);
   return hash.digest('hex');
+}
+
+async function computeBundleHash(
+  sourceRoot: string,
+  appRoot: string,
+  matcher?: ReturnType<typeof resolveFileSyncMatcher>
+): Promise<string> {
+  const hash = createHash('sha256');
+  const files = await collectFiles(sourceRoot);
+  const included = files
+    .map((file) => ({
+      file,
+      targetRelative: path.relative(sourceRoot, file).replace(/\\/g, '/'),
+    }))
+    .filter((entry) => !(matcher?.matches(entry.targetRelative) ?? false))
+    .sort((a, b) => a.targetRelative.localeCompare(b.targetRelative));
+
+  for (const entry of included) {
+    hash.update(entry.targetRelative);
+    const content = await readFile(entry.file, 'utf-8').catch(() => '');
+    hash.update(content);
+  }
+
+  hash.update(appRoot);
+  return hash.digest('hex');
+}
+
+async function removeManagedAiBundleTargets(
+  appRoot: string,
+  matcher?: ReturnType<typeof resolveFileSyncMatcher>
+): Promise<void> {
+  const managedTargets = [
+    'AGENTS.md',
+    'app/pages/AGENTS.md',
+    'server/AGENTS.md',
+    'docs/AGENTS.md',
+    'docs/ai',
+    'schema-ai-bundle.json',
+  ];
+
+  for (const relativeTarget of managedTargets) {
+    if (matcher?.matches(relativeTarget)) {
+      continue;
+    }
+    await rm(path.join(appRoot, relativeTarget), { recursive: true, force: true }).catch(() => null);
+  }
+
+  const skillsRoot = path.join(appRoot, '.agents', 'skills');
+  const skillPrefixes = [
+    'schema-model-primer',
+    'schema-source-directory',
+    'schema-instance-directory',
+    'schema-create-dialog',
+    'schema-record-workspace',
+    'schema-resource-selection',
+  ];
+  for (const name of skillPrefixes) {
+    const relativeTarget = `.agents/skills/${name}`;
+    if (matcher?.matches(relativeTarget)) {
+      continue;
+    }
+    await rm(path.join(skillsRoot, name), { recursive: true, force: true }).catch(() => null);
+  }
 }
 
 async function collectFiles(root: string): Promise<string[]> {

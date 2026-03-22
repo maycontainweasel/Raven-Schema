@@ -18,6 +18,7 @@
     "schema:refresh": "tsx src/cli.ts refresh",
     "schema:full": "tsx src/cli.ts full",
     "schema:module:sync": "tsx src/cli.ts schema-kit:sync",
+    "schema:ai:sync": "tsx src/cli.ts schema-ai:sync",
     "schema:layers:sync": "tsx src/cli.ts layers:sync",
     "schema:module:clear": "tsx src/cli.ts schema-kit:clear",
     "schema:generate:modules": "tsx src/cli.ts generate:modules",

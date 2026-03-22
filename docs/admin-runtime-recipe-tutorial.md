@@ -1,5 +1,7 @@
 # Tutorial: Build a Recipe Directory and Management Flow
 
+> This is a worked tutorial. Use `docs/ai/runtime/authority-routing.md` for the canonical source-authority vs instance-authority contract.
+
 ## Purpose
 This tutorial explains how to build a schema-driven admin directory for a new model called `recipe`.
 

@@ -69,7 +69,7 @@ import { printHeliosDoctorReport, runHeliosDoctor } from './cli/heliosDoctor';
 import { loadSiteSpec, writeSiteSpec, ensureRuntimeConfigBlocks } from './lib/siteSpec';
 import { importSeeds } from './lib/seedImporter';
 import { writeSchemaKitConfig, resolveSchemaKitFeatures, applySchemaKitDefaults } from './lib/schemaKitConfig';
-import { ensureSchemaKitModule } from './lib/schemaKitModule';
+import { ensureSchemaKitModule, syncSchemaAiBundleForProject } from './lib/schemaKitModule';
 import { syncProjectLayers } from './lib/layerSync';
 import { writeAuthLayerConfig } from './lib/layerConfigWriter';
 import { readLayerMeta, listLayerMetas } from './lib/layerRegistry';
@@ -2785,11 +2785,12 @@ export type AppRouter = typeof appRouter
           })
         : specs;
 
-      const targetProjects = projectFilter
+      const requestedProjects = projectFilter
         ? bundle.app.paths.projects.filter((project) =>
             projectFilter.has(project.name)
           )
         : bundle.app.paths.projects;
+      const targetProjects = filterUiGenerationProjects(bundle.app, requestedProjects);
 
       if (filteredSpecs.length === 0) {
         console.log('⚠️  No UI specs matched the filter.');
@@ -2887,9 +2888,10 @@ export type AppRouter = typeof appRouter
       const projectRoot = path.resolve(__dirname, '..');
       const bundle = await loadConfigBundle(projectRoot);
       const projectFilter = parseList(args.project) ?? (bundle.app.ui?.projects ? new Set(bundle.app.ui.projects) : null);
-      const targetProjects = projectFilter
+      const requestedProjects = projectFilter
         ? bundle.app.paths.projects.filter((project) => projectFilter.has(project.name))
         : bundle.app.paths.projects;
+      const targetProjects = filterUiGenerationProjects(bundle.app, requestedProjects);
 
       await generateCreateDialogOverrides({
         projectRoot,
@@ -2932,9 +2934,10 @@ export type AppRouter = typeof appRouter
       const projectRoot = path.resolve(__dirname, '..');
       const bundle = await loadConfigBundle(projectRoot);
       const projectFilter = parseList(args.project) ?? (bundle.app.ui?.projects ? new Set(bundle.app.ui.projects) : null);
-      const targetProjects = projectFilter
+      const requestedProjects = projectFilter
         ? bundle.app.paths.projects.filter((project) => projectFilter.has(project.name))
         : bundle.app.paths.projects;
+      const targetProjects = filterUiGenerationProjects(bundle.app, requestedProjects);
 
       await generateLayoutOverrides({
         projectRoot,
@@ -3807,6 +3810,56 @@ export type AppRouter = typeof appRouter
           mode: moduleMode,
           sync: (args['module-sync'] as 'auto' | 'force' | 'off' | undefined) ?? moduleSync,
           sharedModulePath,
+        });
+      }
+    }
+  )
+  .command(
+    'schema-ai:sync [project]',
+    'Sync only the schema AI bundle into Nuxt target project(s)',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('project', {
+          describe: 'Optional project name to target (e.g. public)',
+          type: 'string',
+        })
+        .option('project', {
+          alias: 'p',
+          type: 'string',
+          describe: 'Comma-separated list of project names to sync',
+        })
+        .option('log', {
+          type: 'boolean',
+          default: true,
+          describe: 'Log AI bundle sync status',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      const schemaKitConfig = bundle.app.schemaKit?.module ?? {};
+      const moduleSource = schemaKitConfig.source ?? 'module';
+      const projectNames = String(args.project || args.p || '')
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
+
+      const projects = bundle.app.paths.projects || [];
+      const targets = projectNames.length
+        ? projects.filter((project) => projectNames.includes(project.name))
+        : projects;
+
+      if (targets.length === 0) {
+        console.warn('⚠️  No matching projects found to sync schema AI bundle.');
+        return;
+      }
+
+      for (const project of targets) {
+        await syncSchemaAiBundleForProject({
+          projectRoot,
+          project,
+          app: bundle.app,
+          moduleSourceRoot: path.resolve(projectRoot, moduleSource),
+          log: args.log !== false,
         });
       }
     }
@@ -6361,6 +6414,33 @@ function parseList(value?: string): Set<string> | null {
     .map((part) => part.trim())
     .filter(Boolean);
   return parts.length > 0 ? new Set(parts) : null;
+}
+
+function isUiGenerationEnabled(app: AppConfig, projectName: string): boolean {
+  const settings = app.ui?.projectSettings?.[projectName];
+  return settings?.enabled !== false;
+}
+
+function filterUiGenerationProjects(
+  app: AppConfig,
+  projects: ProjectPathsConfig[],
+): ProjectPathsConfig[] {
+  const enabled: ProjectPathsConfig[] = [];
+  const skipped: string[] = [];
+
+  for (const project of projects) {
+    if (isUiGenerationEnabled(app, project.name)) {
+      enabled.push(project);
+      continue;
+    }
+    skipped.push(project.name);
+  }
+
+  if (skipped.length) {
+    console.log(`⚠️  Skipping UI generation for disabled project(s): ${skipped.join(', ')}`);
+  }
+
+  return enabled;
 }
 
 function applyTableFilters(
