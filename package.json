@@ -81,6 +81,8 @@
     "schema:spec:mpdg:live": "tsx scripts/mpdg-to-spec.ts --mode live --force",
     "graph:spec": "pnpm run schema:spec:mpdg",
     "graph:spec:live": "pnpm run schema:spec:mpdg:live",
+    "graph:validate": "tsx scripts/validate-graph-mpdg.ts",
+    "graph:validate:strict": "tsx scripts/validate-graph-mpdg.ts --strict",
     "graph:mermaid": "tsx scripts/gen-graph-mpdg.ts",
     "graph:ids": "tsx scripts/gen-ids-mpdg.ts",
     "spec": "pnpm run graph:spec && pnpm run graph:mermaid",

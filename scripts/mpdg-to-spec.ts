@@ -18,7 +18,7 @@ import * as path from 'path';
 import * as YAML from 'yaml';
 import { fileURLToPath } from 'url';
 
-type CapFlag = {
+export type CapFlag = {
   crud?: string; // letters
   crudSlug?: string;
   crudOptions?: Record<string, any>;
@@ -146,10 +146,6 @@ const MODULES_ROOT = appConfig?.paths?.modules
   : path.resolve(process.cwd(), 'config/bootstrap/modules');
 const MODULE_SPECS_OVERRIDE_DIR = 'specs_overrides';
 
-console.log(
-  `🧭 mpdg-to-spec mode=${resolvedMode}, out=${path.relative(process.cwd(), OUT)}, conflict=${conflictPolicy}`
-);
-
 const generatedTaxonomyTermTables = new Set<string>();
 
 function normalizeModelName(raw: string): string {
@@ -173,6 +169,9 @@ function normalizeRecordType(raw: string): string {
 }
 
 async function main(): Promise<void> {
+  console.log(
+    `🧭 mpdg-to-spec mode=${resolvedMode}, out=${path.relative(process.cwd(), OUT)}, conflict=${conflictPolicy}`
+  );
   const text = await fs.readFile(INPUT, 'utf8');
   const tables = parseFile(text);
   const audit = auditTables(tables);
@@ -351,7 +350,7 @@ export function parseFile(text: string): TableAst[] {
   return chunks.map(parseTableChunk);
 }
 
-type AuditIssue = {
+export type AuditIssue = {
   level: 'error' | 'warning';
   table?: string;
   field?: string;
@@ -359,12 +358,12 @@ type AuditIssue = {
   hint?: string;
 };
 
-type AuditReport = {
+export type AuditReport = {
   errors: AuditIssue[];
   warnings: AuditIssue[];
 };
 
-function auditTables(tables: TableAst[]): AuditReport {
+export function auditTables(tables: TableAst[]): AuditReport {
   const errors: AuditIssue[] = [];
   const warnings: AuditIssue[] = [];
 
@@ -2736,7 +2735,7 @@ function normalizeAuthoritySetting(value: unknown): 'source' | 'tenant' | undefi
   return undefined;
 }
 
-function buildSpec(t: TableAst): any {
+export function buildSpec(t: TableAst): any {
   const idField = t.fields.find((f) => f.isId);
   const dataFields = t.fields.filter((f) => !f.isId);
   const defaultIdConfig = {

@@ -14,6 +14,18 @@ The canonical schema-owned AI guidance now lives in:
 
 Use those docs for runtime contracts and agent workflow. Use this file for the schema generator workflow and file map.
 
+## Read next for graph authoring work
+
+The canonical MPDG authoring guidance now lives in:
+- `docs/ai/mpdg/README.md`
+- `docs/ai/mpdg/stanza-authoring.md`
+- `docs/ai/mpdg/views-and-resources.md`
+- `docs/ai/mpdg/typesense-authoring.md`
+- `docs/ai/mpdg/relations-taxonomies-subtables.md`
+- `docs/ai/mpdg/validation-workflow.md`
+
+Use those docs when the task is about editing `config/graph.mpdg`, adding a stanza, changing a view, adding Typesense, or defining relations/taxonomies/subtables.
+
 ## What this tool does
 
 - **Source of truth**: `config/graph.mpdg` (MPDG DSL).
@@ -24,19 +36,23 @@ Use those docs for runtime contracts and agent workflow. Use this file for the s
 ## Workflow (typical)
 
 1. Edit `config/graph.mpdg`.
-2. Generate specs:
+2. Validate the graph change:
+   - `pnpm run graph:validate`
+3. Generate specs:
    - Staging: `pnpm run graph:spec --force`
    - Live: `pnpm run graph:spec:live`
-3. Generate assets:
+4. Generate assets:
    - Full: `pnpm run schema:generate`
    - Modules: `pnpm run schema:generate:modules`
-4. Import into DBs:
+5. Import into DBs:
    - `pnpm run schema:import` or `pnpm run schema:bootstrap --db <key>`
 
 ## Key docs
 
 - MPDG format + blocks:
   - `docs/graph-dsl-profile.md`
+- MPDG authoring canon:
+  - `docs/ai/mpdg/README.md`
 - Schema runtime/authority canon:
   - `docs/ai/runtime/authority-routing.md`
 - Schema Typesense canon:
