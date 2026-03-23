@@ -18,4 +18,4 @@ Use this file to track schema-framework commits that should later be promoted in
 
 | Commit | Title | Scope | Needs App Follow-up | Promoted To origin/main |
 | --- | --- | --- | --- | --- |
-| `TBD` | Initialise MPDG authoring canon and validation | MPDG docs, skills, validation workflow, promotion ledger | yes | no |
+| `a8ca52d` | Add MPDG authoring canon and graph validator | MPDG docs, skills, validation workflow, promotion ledger | yes | no |
