@@ -1,5 +1,7 @@
 # AI Guide Generation Project (Passmed Schema)
 
+> This is a project/design document for emitted AI guides. The current schema-owned runtime canon lives in `docs/ai/**`, and the bundle-emission design lives in `docs/ai/schema-ai-bundle.md`.
+
 This document defines the project to generate AI-ready, per-model admin guides from the MPDG graph and generated specs. It is the starting point for building a repeatable, zero-briefing workflow where an AI can reliably build or maintain admin UIs without re-learning local conventions.
 
 ## Vision

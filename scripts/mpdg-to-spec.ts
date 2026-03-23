@@ -18,7 +18,7 @@ import * as path from 'path';
 import * as YAML from 'yaml';
 import { fileURLToPath } from 'url';
 
-export type CapFlag = {
+type CapFlag = {
   crud?: string; // letters
   crudSlug?: string;
   crudOptions?: Record<string, any>;
@@ -146,6 +146,10 @@ const MODULES_ROOT = appConfig?.paths?.modules
   : path.resolve(process.cwd(), 'config/bootstrap/modules');
 const MODULE_SPECS_OVERRIDE_DIR = 'specs_overrides';
 
+console.log(
+  `🧭 mpdg-to-spec mode=${resolvedMode}, out=${path.relative(process.cwd(), OUT)}, conflict=${conflictPolicy}`
+);
+
 const generatedTaxonomyTermTables = new Set<string>();
 
 function normalizeModelName(raw: string): string {
@@ -169,9 +173,6 @@ function normalizeRecordType(raw: string): string {
 }
 
 async function main(): Promise<void> {
-  console.log(
-    `🧭 mpdg-to-spec mode=${resolvedMode}, out=${path.relative(process.cwd(), OUT)}, conflict=${conflictPolicy}`
-  );
   const text = await fs.readFile(INPUT, 'utf8');
   const tables = parseFile(text);
   const audit = auditTables(tables);
@@ -350,7 +351,7 @@ export function parseFile(text: string): TableAst[] {
   return chunks.map(parseTableChunk);
 }
 
-export type AuditIssue = {
+type AuditIssue = {
   level: 'error' | 'warning';
   table?: string;
   field?: string;
@@ -358,12 +359,12 @@ export type AuditIssue = {
   hint?: string;
 };
 
-export type AuditReport = {
+type AuditReport = {
   errors: AuditIssue[];
   warnings: AuditIssue[];
 };
 
-export function auditTables(tables: TableAst[]): AuditReport {
+function auditTables(tables: TableAst[]): AuditReport {
   const errors: AuditIssue[] = [];
   const warnings: AuditIssue[] = [];
 
@@ -2735,7 +2736,7 @@ function normalizeAuthoritySetting(value: unknown): 'source' | 'tenant' | undefi
   return undefined;
 }
 
-export function buildSpec(t: TableAst): any {
+function buildSpec(t: TableAst): any {
   const idField = t.fields.find((f) => f.isId);
   const dataFields = t.fields.filter((f) => !f.isId);
   const defaultIdConfig = {
@@ -4490,6 +4491,7 @@ function extractTypesenseFieldMeta(tags: string[]): Record<string, any> {
 
 function parseTypesenseObjectTag(tag: string): { type: string; fields: Array<Record<string, any>>; meta: Record<string, any> } | null {
   const cleaned = tag.trim();
+  const cleanedLower = cleaned.toLowerCase();
   const braceIndex = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
   if (braceIndex === -1 || lastBrace === -1 || lastBrace <= braceIndex) {
@@ -4499,11 +4501,13 @@ function parseTypesenseObjectTag(tag: string): { type: string; fields: Array<Rec
   const typePart = cleaned.slice(0, braceIndex).trim().toLowerCase();
   const suffix = cleaned.slice(lastBrace + 1).trim();
   const isArray =
-    typePart.includes('object[]') ||
+    cleanedLower.includes('object[]') ||
+    cleanedLower.startsWith('array<object') ||
+    cleanedLower.startsWith('array< object') ||
+    cleanedLower.startsWith('array<{') ||
+    cleanedLower.startsWith('array< {') ||
     typePart.startsWith('array<object') ||
     typePart.startsWith('array< object') ||
-    typePart.startsWith('array<{') ||
-    typePart.startsWith('array< {') ||
     suffix.startsWith('[]');
   const type = isArray ? 'object[]' : 'object';
   const inner = cleaned.slice(braceIndex + 1, lastBrace).trim();
@@ -4925,6 +4929,16 @@ function extractRawViewExpression(token: string): string | null {
   const trimmed = token.trim();
   if (!trimmed) return null;
   if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+    return trimmed;
+  }
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    /^-?\d+(?:\.\d+)?$/.test(trimmed) ||
+    /^(?:true|false|null)$/i.test(trimmed)
+  ) {
     return trimmed;
   }
   const lower = trimmed.toLowerCase();

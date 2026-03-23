@@ -15,6 +15,7 @@ This document defines the reusable Typesense contract for a schema-consuming app
 - Browser code must not instantiate a raw Typesense client.
 - Use server-backed runtime helpers and server endpoints only.
 - Treat collection schema, collection name, and searchable/sortable fields as generated truth.
+- The generated Typesense document contract must match the generated collection schema exactly. Do not add schema fields without confirming the generated Typesense view or function emits them.
 - For Typesense-enabled models, make post-mutation sync explicit through the runtime contract.
 
 ## Directory flow
@@ -23,3 +24,8 @@ This document defines the reusable Typesense contract for a schema-consuming app
 3. Use `useTypesenseDirectory()` for search state, sorting, pagination, and filters.
 4. Keep page-local config limited to UI defaults.
 5. Treat search reload and index refresh as separate actions.
+6. When Typesense fails, inspect these generated artefacts together:
+   - `modules/schema-kit/runtime/generated/typesense/collections.ts`
+   - `docs/controllers/<model>.md`
+   - the generated Typesense view or function for the model in schema
+   The collection schema and emitted document shape must reconcile field-for-field.

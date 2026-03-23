@@ -12,6 +12,9 @@
 ## Page rules
 - Keep page-local config limited to UI defaults such as sort, filters, labels, and route shape.
 - Do not decide model authority in page code by guesswork; read generated metadata and controller docs first.
+- On source-authority single-record pages, resolve the record's target instances before mutating and route writes through `useCRUD()` / `useApiProcess()` orchestration helpers instead of direct `$api.*.mutate` calls.
+- Do not let page-local writes silently collapse to one database when the record belongs to multiple instances. If a write is intentionally single-instance, make that exception explicit in code.
+- Acceptable exceptions are dedicated external-service actions or source-only platform administration flows, but those exceptions must stay narrow and obvious in code.
 - If a page mutates a Typesense-enabled model, make the post-mutation sync explicit.
 - If a page exposes TypeSense refresh or rebuild, treat partial imports as failures instead of successful refreshes.
 - TypeSense-enabled pages must keep document output schema-safe for nullable strings and arrays.

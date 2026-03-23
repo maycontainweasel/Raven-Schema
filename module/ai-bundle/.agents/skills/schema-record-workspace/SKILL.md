@@ -27,6 +27,7 @@ Build a single-record management flow that loads, updates, and syncs a schema-dr
 - Load records through generated resource/read contracts where available.
 - Route updates and deletes through `useApiProcess()` / `useCRUD()`.
 - Keep authority behavior explicit; a record page still needs to know where writes belong.
+- For source-authority record pages, derive the target instances from the record state before mutating and pass them into the orchestration helper. Do not call model TRPC mutation endpoints directly from page code unless the write is intentionally single-instance.
 - If the model is Typesense-enabled, explicitly upsert, refresh, or delete the indexed document after mutation.
 
 ## Definition of done

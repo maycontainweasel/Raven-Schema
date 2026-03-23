@@ -37,6 +37,7 @@ Responsibilities:
 - Browser code must not create a raw Typesense client.
 - Browser code must go through server-backed endpoints and composables only.
 - Collection identity and field schema come from generated metadata, not page-local invention.
+- The generated Typesense document contract must match the generated collection schema exactly. Do not add schema fields without confirming the generated Typesense view or function emits them.
 - For Typesense-enabled models, post-mutation sync must be explicit: refresh, upsert, or delete through the server-backed runtime contract.
 
 ## Directory flow
@@ -46,6 +47,11 @@ For a Typesense-backed directory page:
 3. use `useTypesenseDirectory()` for query, sort, filter, and pagination state
 4. keep page-local config limited to UI defaults such as `queryBy`, `sortableFields`, or filter defaults
 5. use generated model-specific refresh/resource endpoints when the task requires reindexing or record-shape fetches
+6. when Typesense fails, inspect all three generated artefacts together:
+   - `config/specs/<Model>(<table>)/<table>.primary.yaml`
+   - `config/migrations/<table>/F_view<Model>Typesense.surql`
+   - `config/typesense/collections.ts`
+   The collection schema and emitted document shape must reconcile field-for-field.
 
 ## Mutation flow
 - Create/update/delete still flows through `useApiProcess()` / `useCRUD()`.
