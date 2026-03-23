@@ -14,6 +14,14 @@
 - `../docs/ai/mpdg/validation-workflow.md`
 
 ## Non-negotiable rules
+- Choose the closest MPDG skill proactively before editing:
+  - stanza shape -> `schema-stanza-authoring`
+  - `views:` / resources -> `schema-resource-view-authoring`
+  - `typesense:` -> `schema-typesense-authoring`
+  - `relations:` -> `schema-relation-authoring`
+  - `taxonomies:` -> `schema-taxonomy-authoring`
+  - subtables -> `schema-subtable-authoring`
+  - after any graph change -> `schema-graph-validation`
 - Do not invent MPDG syntax from nearby examples alone. Check the MPDG canon and parser behaviour first.
 - Treat one top-level table definition as a stanza, including fields, model settings, caps, and connections.
 - When instance mode is active, declare model authority explicitly in the stanza model settings block.

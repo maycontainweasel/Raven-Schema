@@ -20,6 +20,7 @@
 - Current runtime metadata may still encode the non-source class as `tenant`, `remote`, or `instance`; normalize all three to instance authority before reasoning about behavior.
 - Do not turn consumer-app examples into schema canon. Keep schema guidance abstract and reusable.
 - For `config/graph.mpdg` work, treat the MPDG canon in `docs/ai/mpdg/**` as the authoring guidance and `scripts/mpdg-to-spec.ts` as the reference implementation.
+- For `config/graph.mpdg` work, choose the closest MPDG skill proactively before editing.
 - Before using fragment-based model UI or `/admin/[model]` runtime pages in a consumer app, check `config/app.config.yaml -> ui.projectSettings.<project>.enabled`. If it is `false`, treat committed custom pages as the authority for that app.
 - If framework behavior changes, edit `module/src/resources/**` and the matching schema docs/skills, not only emitted app copies.
 - Browser Typesense access must stay server-backed.

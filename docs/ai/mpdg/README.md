@@ -32,6 +32,8 @@ Use it when the task is about:
 - `schema-subtable-authoring`
 - `schema-graph-validation`
 
+Choose the closest matching skill proactively before editing. If more than one applies, use the narrowest authoring skill first and end with `schema-graph-validation`.
+
 If the broad docs and the parser disagree, the parser wins.
 
 ## Vocabulary
