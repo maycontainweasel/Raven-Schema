@@ -1,0 +1,10 @@
+[
+  {
+    "key": "post",
+    "typeName": "PostController"
+  },
+  {
+    "key": "user",
+    "typeName": "UserController"
+  }
+]

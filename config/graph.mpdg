@@ -1,0 +1,24 @@
+User, u | Minimal user profile {
+  id: $email,
+  email!: "",
+  uniqueId: "", <md5<$email>> <assign>
+  firstName!: "",
+  surname!: ""
+} [
+  crud,
+  router,
+  views: admin,
+  typesense,
+  post,
+
+  taxonomies:
+    Role/Roles, role | User roles {} {
+      hierarchical: false
+      cardinality: one
+      storeOnModel: true
+      payloadField: role
+      payloadAliases: [roles]
+      required: true
+      processor: functions
+    }
+] () {}

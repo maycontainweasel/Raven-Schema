@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-03T14:06:54.445Z",
+  "assets": {
+    "config/migrations/user/F_createUser.surql": {
+      "version": 1,
+      "hash": "150c9271a200993a1b8dcb45db3d3b00183724c31a94136d4a4cb1098dbbfb8e",
+      "updatedAt": "2026-04-03T14:06:54.428Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "u"
+    },
+    "config/migrations/user/F_updateUser.surql": {
+      "version": 1,
+      "hash": "9c7e3f740424b6dc0f752a7185d9b9c373153124c87d9d785f8a36c01a67b62d",
+      "updatedAt": "2026-04-03T14:06:54.429Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "u"
+    },
+    "config/migrations/user/F_deleteUser.surql": {
+      "version": 1,
+      "hash": "b873ead5e4b6b417224063707c47d082dc123a82f8b2a13dec59474a9cca8efe",
+      "updatedAt": "2026-04-03T14:06:54.429Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "u"
+    },
+    "config/migrations/user/E_UserPostCreate.surql": {
+      "version": 1,
+      "hash": "0cceaacb54c2e4492718779fbf9e3a09db6e83146168ab9cf167a0e856d2b483",
+      "updatedAt": "2026-04-03T14:06:54.430Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "u"
+    },
+    "config/migrations/user/E_UserPostUpdate.surql": {
+      "version": 1,
+      "hash": "31afdf3ad78ffbd49d24991af722349c9aa540639ee6919730e4d26e34ea6d8b",
+      "updatedAt": "2026-04-03T14:06:54.431Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "u"
+    },
+    "config/migrations/user/E_UserPostDelete.surql": {
+      "version": 1,
+      "hash": "5aa91cee40ad269889a59c54bac5acefb9ced93b7a6d9d4690ea881e5575e243",
+      "updatedAt": "2026-04-03T14:06:54.431Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "u"
+    },
+    "config/migrations/user/L_uTaxonomyEdges.surql": {
+      "version": 1,
+      "hash": "af6f1fd4e022cb17e1c659115b691c2212ac79f0119b479672ad412d43c99760",
+      "updatedAt": "2026-04-03T14:06:54.433Z",
+      "source": "generated",
+      "layer": "edges",
+      "table": "u"
+    },
+    "config/migrations/user/F_uTaxonomies.surql": {
+      "version": 1,
+      "hash": "d3561308911116ab4b66edcdcd54e1e8c8207a4ffa66956c6bb12a2f3800a5e0",
+      "updatedAt": "2026-04-03T14:06:54.434Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "u"
+    },
+    "config/migrations/user/T_uTaxonomyTables.surql": {
+      "version": 1,
+      "hash": "78c4b4d76aa129f91d080cd78d272059ac281538055aaae1a2d04fd8872fb87c",
+      "updatedAt": "2026-04-03T14:06:54.434Z",
+      "source": "generated",
+      "layer": "tables",
+      "table": "u"
+    },
+    "config/bootstrap/functions/utility/initTaxonomies.surql": {
+      "version": 1,
+      "hash": "e11ce37c2374a0ad7d02a3c4816bfd1a1aad35849d5eeb3d96732e9da4bbf315",
+      "updatedAt": "2026-04-03T14:06:54.435Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "bootstrap"
+    },
+    "config/migrations/user/V_UserAdmin.surql": {
+      "version": 1,
+      "hash": "b54129f0b2f4ceb8b73562b0ddf571e579f55869902cae69a6c2f95d5e899499",
+      "updatedAt": "2026-04-03T14:06:54.437Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "u"
+    },
+    "config/bootstrap/functions/utility/refreshSchemaIndexes.surql": {
+      "version": 1,
+      "hash": "37c8ac6c17fa49b488c5386b31659f5696c759e0dc47270f33639b07860d705a",
+      "updatedAt": "2026-04-03T14:06:54.445Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "bootstrap"
+    }
+  }
+}

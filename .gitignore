@@ -1,6 +1,6 @@
-# Engine branch ignore rules for the shared schema toolkit repo.
-# When using this repo as an app-owned branch that should keep config and
-# generated schema assets in git, start from `.gitignore.app.example` instead.
+# App-branch gitignore template for the schema repo.
+# Use this when the repo is acting as an application-owned schema branch and
+# should keep config files plus generated schema assets in git.
 
 # Dependencies
 node_modules/
@@ -19,13 +19,14 @@ pids
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
+# Coverage
 coverage/
 *.lcov
 
 # Logs
 logs
 *.log
+sync-itemize.log
 
 # Environment variables
 .env
@@ -54,6 +55,8 @@ Thumbs.db
 tmp/
 temp/
 .tmp/
+config/temp/
+config/temp/*
 
 # Optional npm cache directory
 .npm
@@ -70,39 +73,14 @@ temp/
 # Optional REPL history
 .node_repl_history
 
-# Output of 'npm pack'
+# Output of `npm pack`
 *.tgz
 
 # Yarn Integrity file
 .yarn-integrity
 
-
-#deploy cache
+# Deploy cache
 /.deploy/*
-
-# Schema app local config (do not sync across repos)
-# config/app.config.yaml
-# config/environment.yaml
-# config/imports.config.yaml
-# config/nginx.yaml
-# config/sync.yaml
-
-# config/bootstrap/functions/utility/initTaxonomies.surql
-# config/schema-tenants.paths
-# config/schema-tenants.paths.local
-
-# Graph + generated artifacts (per-project or generated)
-# config/graph.ts
-# config/graph.mmd
-# config/specs/
-# config/specs_stage/
-# config/specs-bak/
-# config/migrations/
-# config/generated/
-# config/types/
-# config/typesense/
-# config/schema-assets.json
-# config/admin/
 
 # Schema docs build output
 schema-docs/.nuxt/
@@ -111,98 +89,3 @@ schema-docs/dist/
 schema-docs/.nitro/
 schema-docs/.cache/
 schema-docs/test/capabilities/reports/
-
-# Local logs
-sync-itemize.log
-
-# 
-# Disable when we want to keep these in the repo  FROM HERE DOWN WHEN YOU're pushing to "schema"
-# 
-
-
-# admin folder
-#***************
-# config/admin/bootstrap/*
-# config/admin/migrations/*
-# config/admin/overrides/*
-# config/admin/specs/*
-# config/admin/types/*
-
-#bootstrap folder
-#***************
-# config/bootstrap/functions/*
-# config/bootstrap/modules/*
-# config/bootstrap/modules/post/migrations/post/Z_PostBundle.surql
-# config/bootstrap/seed/*
-# config/generated/*
-# config/migrations/*
-# config/overrides/*
-# config/specs/*
-# config/types/*
-# config/typesense/*
-# config/ui/*
-# config/ui-back/*
-# /sites/
-# /sites/** 
-!/sites/README.md
-!/sites/README.md
-
-config/temp/
-config/temp/*
-
-## Files
-#***************
-
-# config/app.config.yaml
-# config/environments.yaml
-# config/imports.config.yaml
-# config/schema-assets.ts
-
-# config/graph.mpdg
-# config/graph.mmd
-# config/graph.ts
-
-# config/bootstrap/functions/utility/initTaxonomies.surql
-# config/bootstrap/seed/global.surql
-# config/bootstrap/seed/**
-
-
-
-# Module
-
-module/src/runtime/generated/
-module/src/runtime/controllers/
-module/src/runtime/index.ts
-module/src/runtime/controllers/generated/
-module/src/runtime/controllers/controller-manifest.json
-
-module/docs/controllers/**/*
-module/src/runtime/generated/**/*
-
-# schema docs
-
-schema-docs/.nuxt/
-schema-docs/.output/
-schema-docs/dist/
-schema-docs/.nitro/
-schema-docs/.cache/
-schema-docs/test/capabilities/reports/
-
-# Schema docs generated assets
-schema-docs/app/data/router-manifest.json
-schema-docs/app/data/docs-manifest.json
-schema-docs/app/types/schema/generated/
-schema-docs/docs/controllers/
-schema-docs/modules/schema-kit/
-schema-docs/server/trpc/routers/
-schema-docs/modules/schema-kit/runtime/generated/
-schema-docs/modules/schema-kit/.schema-kit.hash
-
-schema-docs/docs/api/models/**/*
-schema-docs/docs/api/controllers/**/*
-
-# Generated docs output (schema app)
-docs/generated/
-
-# /layers/pm-za/** 
-# /layers/pm-ca/** 

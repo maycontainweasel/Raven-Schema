@@ -1,0 +1,116 @@
+version: 1
+kind: table
+name: User
+primary: true
+tableType: primary
+description: Minimal user profile
+table:
+  model: u
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: UserId
+  structure: email
+fields:
+  - email:
+      type: string
+      required: true
+      default: ""
+  - uniqueId:
+      type: md5<$email>
+      assign: true
+  - firstName:
+      type: string
+      required: true
+      default: ""
+  - surname:
+      type: string
+      required: true
+      default: ""
+  - role:
+      type: record<t_u_role>
+      required: true
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: user
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+taxonomies:
+  - key: role
+    labels:
+      singular: Role
+      plural: Roles
+    taxonomy:
+      id: stringID<u, role>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - hierarchical:
+            type: boolean
+            required: false
+            default: false
+        - permalink:
+            type: <permalink<<field:key>>>
+            required: false
+            assign: true
+        - description: User roles
+    term:
+      id: <field:key>
+      fields:
+        - key:
+            type: string
+            required: true
+        - label:
+            type: string
+            required: true
+        - description:
+            type: string
+            required: false
+        - parent:
+            type: record<term>
+            required: false
+            default: ""
+    hierarchical: false
+    cardinality: one
+    storeOnModel: true
+    payloadField: role
+    payloadAliases:
+      - roles
+    required: true
+    processor: functions
+post: true
+refreshViews: true

@@ -1,0 +1,29 @@
+name: raven
+slug: raven
+template: templates/nuxt-4.3.0
+target: apps/raven
+deploy:
+  ssl:
+    email: ""
+    redirect: true
+nuxtConfig:
+  devServer:
+    port: 9274
+    host: 0.0.0.0
+  vite:
+    server:
+      allowedHosts:
+        - raven.local
+      origin: https://raven.local:4443
+      hmr:
+        protocol: wss
+        host: raven.local
+        clientPort: 4443
+        path: /__vitews
+        port: 45017
+  extends:
+    - ./layers/schema-core
+layers:
+  - schema-core
+schemaKit:
+  capabilities: {}

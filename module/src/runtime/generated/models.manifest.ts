@@ -1,0 +1,154 @@
+// AUTO-GENERATED — canonical models manifest
+export const modelsManifest = {
+  "manifestVersion": "1.0.0",
+  "generatedAt": "2026-04-03T14:06:54.266Z",
+  "source": "schema.modelsManifest",
+  "warnings": [],
+  "models": {
+    "post": {
+      "key": "post",
+      "table": "p",
+      "label": "Post",
+      "description": "A Post is the content connected to a record for use in content management systems.",
+      "authority": "source",
+      "data": "local",
+      "schemaType": "schemaless",
+      "capabilities": [],
+      "fields": [
+        "contenttable",
+        "contentid",
+        "createdat",
+        "updatedat",
+        "publishedat",
+        "title",
+        "permalink",
+        "status"
+      ],
+      "requiredFields": [],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": false,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "router": {
+        "enabled": false,
+        "key": "post",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": []
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "p",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": false
+      },
+      "settingsRaw": {},
+      "warnings": []
+    },
+    "user": {
+      "key": "user",
+      "table": "u",
+      "label": "User",
+      "description": "Minimal user profile",
+      "authority": "source",
+      "data": "local",
+      "schemaType": "schemaless",
+      "capabilities": [
+        "router",
+        "crud",
+        "taxonomies"
+      ],
+      "fields": [
+        "email",
+        "uniqueid",
+        "firstname",
+        "surname",
+        "role"
+      ],
+      "requiredFields": [
+        "email",
+        "firstname",
+        "surname",
+        "role"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [
+        "role"
+      ],
+      "subtableKeys": [],
+      "taxonomies": [
+        {
+          "key": "role",
+          "actions": {
+            "getTerms": "user.role.getTerms",
+            "getRecordTerms": "user.role.getRecordTerms",
+            "attach": "user.role.attach",
+            "detach": "user.role.detach",
+            "addTerm": "user.role.addTerm"
+          }
+        }
+      ],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "user.create__NAME__",
+        "update": "user.update__NAME__",
+        "delete": "user.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "user",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "user.create__NAME__",
+          "user.delete__NAME__",
+          "user.update__NAME__",
+          "user.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "u",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {},
+      "warnings": []
+    }
+  }
+} as const;
+
+export type ModelsManifest = typeof modelsManifest;
+export type ModelsManifestModel = ModelsManifest['models'][keyof ModelsManifest['models']];
