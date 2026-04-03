@@ -1,26 +1,39 @@
 // AUTO-GENERATED — rich admin model manifest for Helios model manager
 export const adminManifest = {
   "version": 1,
-  "generatedAt": "2026-04-03T14:06:54.266Z",
+  "generatedAt": "2026-04-03T19:27:29.483Z",
   "source": "schema.modelsManifest",
   "models": {
-    "post": {
-      "key": "post",
-      "table": "p",
+    "account": {
+      "key": "account",
+      "table": "account",
       "authority": "source",
       "data": "local",
-      "capabilities": [],
-      "fields": [
-        "contenttable",
-        "contentid",
-        "createdat",
-        "updatedat",
-        "publishedat",
-        "title",
-        "permalink",
-        "status"
+      "capabilities": [
+        "router",
+        "crud"
       ],
-      "requiredFields": [],
+      "fields": [
+        "space",
+        "key",
+        "name",
+        "bankname",
+        "accounttype",
+        "currency",
+        "accountnumberlast4",
+        "openingbalance",
+        "active",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "key",
+        "name",
+        "bankname",
+        "accounttype",
+        "currency",
+        "active"
+      ],
       "typesense": {
         "enabled": false,
         "collection": null,
@@ -33,31 +46,733 @@ export const adminManifest = {
       "subtables": [],
       "relations": [],
       "crud": {
-        "enabled": false,
-        "create": null,
-        "update": null,
-        "delete": null
+        "enabled": true,
+        "create": "account.create__NAME__",
+        "update": "account.update__NAME__",
+        "delete": "account.delete__NAME__"
       },
       "router": {
-        "enabled": false,
-        "key": "post",
+        "enabled": true,
+        "key": "account",
         "parent": null,
         "embedInParent": false,
-        "procedures": []
+        "procedures": [
+          "account.create__NAME__",
+          "account.delete__NAME__",
+          "account.update__NAME__",
+          "account.views"
+        ]
       },
       "bootstrap": {
         "ensureTable": true,
         "tableDefinition": {
-          "model": "p",
+          "model": "account",
           "type": "NORMAL",
           "schemaType": "schemaless",
           "permissions": "full"
         }
       },
       "admin": {
-        "enabled": false
+        "enabled": true
       },
-      "settingsRaw": {},
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "category": {
+      "key": "category",
+      "table": "category",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "key",
+        "name",
+        "categorykind",
+        "parentcategory",
+        "active",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "key",
+        "name",
+        "categorykind",
+        "active"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "category.create__NAME__",
+        "update": "category.update__NAME__",
+        "delete": "category.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "category",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "category.create__NAME__",
+          "category.delete__NAME__",
+          "category.update__NAME__",
+          "category.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "category",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "clarificationTask": {
+      "key": "clarificationTask",
+      "table": "clarificationtask",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "key",
+        "transaction",
+        "status",
+        "question",
+        "reason",
+        "suggestedspace",
+        "suggestedmerchant",
+        "suggestedcategory",
+        "resolvedat",
+        "resolutionnotes",
+        "confidence",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "key",
+        "transaction",
+        "status",
+        "question"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "clarificationTask.create__NAME__",
+        "update": "clarificationTask.update__NAME__",
+        "delete": "clarificationTask.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "clarificationTask",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "clarificationTask.create__NAME__",
+          "clarificationTask.delete__NAME__",
+          "clarificationTask.update__NAME__",
+          "clarificationTask.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "clarificationtask",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "classificationRule": {
+      "key": "classificationRule",
+      "table": "classificationrule",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "key",
+        "name",
+        "matcher",
+        "scope",
+        "targetmerchant",
+        "targetcategory",
+        "priority",
+        "active",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "key",
+        "name",
+        "matcher",
+        "scope",
+        "active"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "classificationRule.create__NAME__",
+        "update": "classificationRule.update__NAME__",
+        "delete": "classificationRule.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "classificationRule",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "classificationRule.create__NAME__",
+          "classificationRule.delete__NAME__",
+          "classificationRule.update__NAME__",
+          "classificationRule.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "classificationrule",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "financialSpace": {
+      "key": "financialSpace",
+      "table": "financialspace",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "key",
+        "name",
+        "spacetype",
+        "currency",
+        "description",
+        "active",
+        "archivedat"
+      ],
+      "requiredFields": [
+        "key",
+        "name",
+        "spacetype",
+        "currency",
+        "active"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "financialSpace.create__NAME__",
+        "update": "financialSpace.update__NAME__",
+        "delete": "financialSpace.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "financialSpace",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "financialSpace.create__NAME__",
+          "financialSpace.delete__NAME__",
+          "financialSpace.update__NAME__",
+          "financialSpace.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "financialspace",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "merchant": {
+      "key": "merchant",
+      "table": "merchant",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "key",
+        "name",
+        "normalizedname",
+        "active",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "key",
+        "name",
+        "active"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "merchant.create__NAME__",
+        "update": "merchant.update__NAME__",
+        "delete": "merchant.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "merchant",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "merchant.create__NAME__",
+          "merchant.delete__NAME__",
+          "merchant.update__NAME__",
+          "merchant.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "merchant",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "monthlySnapshot": {
+      "key": "monthlySnapshot",
+      "table": "monthlysnapshot",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "month",
+        "currency",
+        "incometotal",
+        "outflowtotal",
+        "nettotal",
+        "transfertotal",
+        "cashavailable",
+        "recurringtotal",
+        "businessspendtotal",
+        "personalspendtotal",
+        "generatedat",
+        "status",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "month",
+        "currency",
+        "incometotal",
+        "outflowtotal",
+        "nettotal",
+        "generatedat",
+        "status"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "monthlySnapshot.create__NAME__",
+        "update": "monthlySnapshot.update__NAME__",
+        "delete": "monthlySnapshot.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "monthlySnapshot",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "monthlySnapshot.create__NAME__",
+          "monthlySnapshot.delete__NAME__",
+          "monthlySnapshot.update__NAME__",
+          "monthlySnapshot.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "monthlysnapshot",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "statementImport": {
+      "key": "statementImport",
+      "table": "statementimport",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "account",
+        "key",
+        "sourcefilename",
+        "sourceformat",
+        "importedat",
+        "statementdate",
+        "status",
+        "rowcount",
+        "normalizedcount",
+        "clarificationcount",
+        "sourcechecksum",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "account",
+        "key",
+        "sourcefilename",
+        "sourceformat",
+        "importedat",
+        "status"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "statementImport.create__NAME__",
+        "update": "statementImport.update__NAME__",
+        "delete": "statementImport.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "statementImport",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "statementImport.create__NAME__",
+          "statementImport.delete__NAME__",
+          "statementImport.update__NAME__",
+          "statementImport.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "statementimport",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "statementRow": {
+      "key": "statementRow",
+      "table": "statementrow",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "account",
+        "statementimport",
+        "rownumber",
+        "postedat",
+        "description",
+        "normalizeddescription",
+        "amount",
+        "balance",
+        "currency",
+        "direction",
+        "status",
+        "confidence",
+        "rawdata",
+        "transaction",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "account",
+        "statementimport",
+        "rownumber",
+        "description",
+        "amount",
+        "currency",
+        "direction",
+        "status"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "statementRow.create__NAME__",
+        "update": "statementRow.update__NAME__",
+        "delete": "statementRow.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "statementRow",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "statementRow.create__NAME__",
+          "statementRow.delete__NAME__",
+          "statementRow.update__NAME__",
+          "statementRow.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "statementrow",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
+      "warnings": []
+    },
+    "transaction": {
+      "key": "transaction",
+      "table": "transaction",
+      "authority": "source",
+      "data": "local",
+      "capabilities": [
+        "router",
+        "crud"
+      ],
+      "fields": [
+        "space",
+        "account",
+        "key",
+        "sourcerow",
+        "postedat",
+        "effectiveat",
+        "description",
+        "normalizeddescription",
+        "amount",
+        "balance",
+        "currency",
+        "direction",
+        "status",
+        "confidence",
+        "merchantname",
+        "merchant",
+        "category",
+        "istransfer",
+        "manualoverride",
+        "notes"
+      ],
+      "requiredFields": [
+        "space",
+        "account",
+        "key",
+        "postedat",
+        "description",
+        "amount",
+        "currency",
+        "direction",
+        "status"
+      ],
+      "typesense": {
+        "enabled": false,
+        "collection": null,
+        "fields": [],
+        "sortableFields": []
+      },
+      "taxonomyKeys": [],
+      "subtableKeys": [],
+      "taxonomies": [],
+      "subtables": [],
+      "relations": [],
+      "crud": {
+        "enabled": true,
+        "create": "transaction.create__NAME__",
+        "update": "transaction.update__NAME__",
+        "delete": "transaction.delete__NAME__"
+      },
+      "router": {
+        "enabled": true,
+        "key": "transaction",
+        "parent": null,
+        "embedInParent": false,
+        "procedures": [
+          "transaction.create__NAME__",
+          "transaction.delete__NAME__",
+          "transaction.update__NAME__",
+          "transaction.views"
+        ]
+      },
+      "bootstrap": {
+        "ensureTable": true,
+        "tableDefinition": {
+          "model": "transaction",
+          "type": "NORMAL",
+          "schemaType": "schemaless",
+          "permissions": "full"
+        }
+      },
+      "admin": {
+        "enabled": true
+      },
+      "settingsRaw": {
+        "authority": "source"
+      },
       "warnings": []
     },
     "user": {

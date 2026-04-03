@@ -8,7 +8,16 @@ export type ModelEntry = {
 };
 
 export const models = {
-  "post": { table: "p", authority: "source", data: "local", schemaType: "schemaless" },
+  "account": { table: "account", authority: "source", data: "local", schemaType: "schemaless" },
+  "category": { table: "category", authority: "source", data: "local", schemaType: "schemaless" },
+  "clarificationTask": { table: "clarificationtask", authority: "source", data: "local", schemaType: "schemaless" },
+  "classificationRule": { table: "classificationrule", authority: "source", data: "local", schemaType: "schemaless" },
+  "financialSpace": { table: "financialspace", authority: "source", data: "local", schemaType: "schemaless" },
+  "merchant": { table: "merchant", authority: "source", data: "local", schemaType: "schemaless" },
+  "monthlySnapshot": { table: "monthlysnapshot", authority: "source", data: "local", schemaType: "schemaless" },
+  "statementImport": { table: "statementimport", authority: "source", data: "local", schemaType: "schemaless" },
+  "statementRow": { table: "statementrow", authority: "source", data: "local", schemaType: "schemaless" },
+  "transaction": { table: "transaction", authority: "source", data: "local", schemaType: "schemaless" },
   "user": { table: "u", authority: "source", data: "local", schemaType: "schemaless" }
 } as const;
 
