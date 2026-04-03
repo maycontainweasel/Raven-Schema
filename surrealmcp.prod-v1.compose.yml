@@ -1,15 +1,15 @@
 services:
-  surrealmcp_prod_v1:
+  surrealmcp_raven_local:
     image: surrealdb/surrealmcp:latest
-    container_name: surrealmcp_prod_v1
+    container_name: surrealmcp_raven_local
     restart: unless-stopped
     command: >
       start
       --bind-address 0.0.0.0:10911
       --server-url http://localhost:10911
-      --endpoint wss://api.luckyisibaya.co.za/rpc
-      --ns appns
-      --db app_v1
+      --endpoint ws://host.docker.internal:2993/rpc
+      --ns raven
+      --db raven1
       --user mpire
       --pass BurntMyMoustacheIn1986
       --auth-disabled
