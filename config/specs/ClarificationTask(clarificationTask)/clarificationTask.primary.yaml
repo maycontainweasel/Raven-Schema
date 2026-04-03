@@ -1,0 +1,101 @@
+version: 1
+kind: table
+name: ClarificationTask
+primary: true
+tableType: primary
+description: Review task for uncertain transactions
+table:
+  model: clarificationTask
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: ClarificationTaskId
+  structure: stringID<space, key>
+modelSettings:
+  authority: source
+fields:
+  - space:
+      type: record<financialSpace>
+      required: true
+      default: ""
+      assign: true
+  - key:
+      type: string
+      required: true
+      default: ""
+  - transaction:
+      type: record<transaction>
+      required: true
+      default: ""
+      assign: true
+  - status:
+      type: enum<"open" | "suggested" | "resolved" | "dismissed">
+      required: true
+      default: open
+  - question:
+      type: string
+      required: true
+      default: ""
+  - reason:
+      type: string
+      default: ""
+  - suggestedSpace:
+      type: record<financialSpace>
+      default: ""
+  - suggestedMerchant:
+      type: record<merchant>
+      default: ""
+  - suggestedCategory:
+      type: record<category>
+      default: ""
+  - resolvedAt:
+      type: datetime
+      default: null
+  - resolutionNotes:
+      type: string
+      default: ""
+  - confidence:
+      type: number
+      default: 0
+  - notes:
+      type: string
+      default: ""
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: clarificationTask
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+refreshViews: true
+admin:
+  authority: source
+  data: source

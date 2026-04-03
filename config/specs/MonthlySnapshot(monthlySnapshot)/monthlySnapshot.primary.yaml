@@ -1,0 +1,106 @@
+version: 1
+kind: table
+name: MonthlySnapshot
+primary: true
+tableType: primary
+description: Monthly truth snapshot
+table:
+  model: monthlySnapshot
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: MonthlySnapshotId
+  structure: stringID<space, month>
+modelSettings:
+  authority: source
+fields:
+  - space:
+      type: record<financialSpace>
+      required: true
+      default: ""
+      assign: true
+  - month:
+      type: string
+      required: true
+      default: ""
+  - currency:
+      type: string
+      required: true
+      default: ZAR
+  - incomeTotal:
+      type: number
+      required: true
+      default: 0
+  - outflowTotal:
+      type: number
+      required: true
+      default: 0
+  - netTotal:
+      type: number
+      required: true
+      default: 0
+  - transferTotal:
+      type: number
+      default: 0
+  - cashAvailable:
+      type: number
+      default: 0
+  - recurringTotal:
+      type: number
+      default: 0
+  - businessSpendTotal:
+      type: number
+      default: 0
+  - personalSpendTotal:
+      type: number
+      default: 0
+  - generatedAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - status:
+      type: enum<"draft" | "final">
+      required: true
+      default: draft
+  - notes:
+      type: string
+      default: ""
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: monthlySnapshot
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+refreshViews: true
+admin:
+  authority: source
+  data: source

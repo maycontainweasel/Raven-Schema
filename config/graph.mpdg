@@ -22,3 +22,235 @@ User, u | Minimal user profile {
       processor: functions
     }
 ] () {}
+
+// Raven phase 1: truth layer
+// Keep observed facts, import provenance, and account ownership explicit.
+
+FinancialSpace, financialSpace | Personal or business money context {
+  id: $key,
+  key!: "", <slug> <unique>
+  name!: "",
+  spaceType!: "personal", <"personal" | "business" | "trading" | "family" | "other">
+  currency!: "ZAR",
+  description: "",
+  active!: true,
+  archivedAt: null, <datetime>
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+] (
+  ->FinancialSpaceAccounts->account
+)
+
+Account, account | Real-world bank account within a financial space {
+  id: S($space, $key),
+  space!: "", <record<financialSpace>> <assign>
+  key!: "",
+  name!: "",
+  bankName!: "",
+  accountType!: "current", <"current" | "credit_card" | "savings" | "loan" | "debt" | "investment" | "cash" | "other">
+  currency!: "ZAR",
+  accountNumberLast4: "",
+  openingBalance: 0,
+  active!: true,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+] (
+  ->AccountStatementImports->statementImport
+  ->AccountTransactions->transaction
+)
+
+StatementImport, statementImport | Raw statement import batch {
+  id: S($account, $key),
+  space!: "", <record<financialSpace>> <assign>
+  account!: "", <record<account>> <assign>
+  key!: "",
+  sourceFileName!: "",
+  sourceFormat!: "csv", <"csv" | "ofx" | "qif" | "pdf" | "manual">
+  importedAt!: time::now(), <datetime>
+  statementDate: null, <datetime>
+  status!: "raw", <"raw" | "parsed" | "matched" | "reviewed" | "error">
+  rowCount: 0,
+  normalizedCount: 0,
+  clarificationCount: 0,
+  sourceChecksum: "",
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+] (
+  ->StatementImportRows->statementRow
+)
+
+StatementRow, statementRow | Immutable raw statement row {
+  id: S($statementImport, $rowNumber),
+  space!: "", <record<financialSpace>> <assign>
+  account!: "", <record<account>> <assign>
+  statementImport!: "", <record<statementImport>> <assign>
+  rowNumber!: 0,
+  postedAt: null, <datetime>
+  description!: "",
+  normalizedDescription: "",
+  amount!: 0,
+  balance: 0,
+  currency!: "ZAR",
+  direction!: "debit", <"debit" | "credit" | "transfer">
+  status!: "raw", <"raw" | "normalized" | "matched" | "clarified" | "ignored">
+  confidence: 0,
+  rawData: {},
+  transaction: "", <record<transaction>>
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+] (
+  ->StatementRowTransactions->transaction
+)
+
+Transaction, transaction | Normalized transaction candidate {
+  id: S($account, $key),
+  space!: "", <record<financialSpace>> <assign>
+  account!: "", <record<account>> <assign>
+  key!: "",
+  sourceRow: "", <record<statementRow>>
+  postedAt!: "", <datetime>
+  effectiveAt: null, <datetime>
+  description!: "",
+  normalizedDescription: "",
+  amount!: 0,
+  balance: 0,
+  currency!: "ZAR",
+  direction!: "debit", <"debit" | "credit" | "transfer">
+  status!: "normalized", <"imported" | "normalized" | "matched" | "classified" | "clarified" | "ignored">
+  confidence: 0,
+  merchantName: "",
+  merchant: "", <record<merchant>>
+  category: "", <record<category>>
+  isTransfer: false,
+  manualOverride: false,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+] (
+  ->TransactionMerchant->merchant
+  ->TransactionCategory->category
+  ->TransactionClarificationTasks->clarificationTask
+)
+
+Merchant, merchant | Merchant memory record {
+  id: S($space, $key),
+  space!: "", <record<financialSpace>> <assign>
+  key!: "",
+  name!: "",
+  normalizedName: "",
+  active!: true,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+]
+
+Category, category | Transaction category {
+  id: S($space, $key),
+  space!: "", <record<financialSpace>> <assign>
+  key!: "",
+  name!: "",
+  categoryKind!: "expense", <"income" | "expense" | "transfer" | "tax" | "savings" | "other">
+  parentCategory: "", <record<category>>
+  active!: true,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+]
+
+ClassificationRule, classificationRule | Rule for automatic transaction matching {
+  id: S($space, $key),
+  space!: "", <record<financialSpace>> <assign>
+  key!: "",
+  name!: "",
+  matcher!: "",
+  scope!: "description", <"description" | "merchant" | "reference" | "amount">
+  targetMerchant: "", <record<merchant>>
+  targetCategory: "", <record<category>>
+  priority: 0,
+  active!: true,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+]
+
+ClarificationTask, clarificationTask | Review task for uncertain transactions {
+  id: S($space, $key),
+  space!: "", <record<financialSpace>> <assign>
+  key!: "",
+  transaction!: "", <record<transaction>> <assign>
+  status!: "open", <"open" | "suggested" | "resolved" | "dismissed">
+  question!: "",
+  reason: "",
+  suggestedSpace: "", <record<financialSpace>>
+  suggestedMerchant: "", <record<merchant>>
+  suggestedCategory: "", <record<category>>
+  resolvedAt: null, <datetime>
+  resolutionNotes: "",
+  confidence: 0,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+]
+
+MonthlySnapshot, monthlySnapshot | Monthly truth snapshot {
+  id: S($space, $month),
+  space!: "", <record<financialSpace>> <assign>
+  month!: "",
+  currency!: "ZAR",
+  incomeTotal!: 0,
+  outflowTotal!: 0,
+  netTotal!: 0,
+  transferTotal: 0,
+  cashAvailable: 0,
+  recurringTotal: 0,
+  businessSpendTotal: 0,
+  personalSpendTotal: 0,
+  generatedAt!: time::now(), <datetime>
+  status!: "draft", <"draft" | "final">
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views: admin,
+]

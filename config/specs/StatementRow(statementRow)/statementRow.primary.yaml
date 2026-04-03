@@ -1,0 +1,121 @@
+version: 1
+kind: table
+name: StatementRow
+primary: true
+tableType: primary
+description: Immutable raw statement row
+table:
+  model: statementRow
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: StatementRowId
+  structure: stringID<statementImport, rowNumber>
+modelSettings:
+  authority: source
+fields:
+  - space:
+      type: record<financialSpace>
+      required: true
+      default: ""
+      assign: true
+  - account:
+      type: record<account>
+      required: true
+      default: ""
+      assign: true
+  - statementImport:
+      type: record<statementImport>
+      required: true
+      default: ""
+      assign: true
+  - rowNumber:
+      type: number
+      required: true
+      default: 0
+  - postedAt:
+      type: datetime
+      default: null
+  - description:
+      type: string
+      required: true
+      default: ""
+  - normalizedDescription:
+      type: string
+      default: ""
+  - amount:
+      type: number
+      required: true
+      default: 0
+  - balance:
+      type: number
+      default: 0
+  - currency:
+      type: string
+      required: true
+      default: ZAR
+  - direction:
+      type: enum<"debit" | "credit" | "transfer">
+      required: true
+      default: debit
+  - status:
+      type: enum<"raw" | "normalized" | "matched" | "clarified" | "ignored">
+      required: true
+      default: raw
+  - confidence:
+      type: number
+      default: 0
+  - rawData:
+      type: object
+  - transaction:
+      type: record<transaction>
+      default: ""
+  - notes:
+      type: string
+      default: ""
+edges:
+  has:
+    - table: StatementRowTransactions
+      in: statementRow
+      out: transaction
+      unique: true
+  belongs: []
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: statementRow
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+refreshViews: true
+admin:
+  authority: source
+  data: source

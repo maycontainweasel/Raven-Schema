@@ -364,7 +364,7 @@ type AuditReport = {
   warnings: AuditIssue[];
 };
 
-function auditTables(tables: TableAst[]): AuditReport {
+export function auditTables(tables: TableAst[]): AuditReport {
   const errors: AuditIssue[] = [];
   const warnings: AuditIssue[] = [];
 
@@ -2736,7 +2736,7 @@ function normalizeAuthoritySetting(value: unknown): 'source' | 'tenant' | undefi
   return undefined;
 }
 
-function buildSpec(t: TableAst): any {
+export function buildSpec(t: TableAst): any {
   const idField = t.fields.find((f) => f.isId);
   const dataFields = t.fields.filter((f) => !f.isId);
   const defaultIdConfig = {

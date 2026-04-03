@@ -1,0 +1,82 @@
+version: 1
+kind: table
+name: Category
+primary: true
+tableType: primary
+description: Transaction category
+table:
+  model: category
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: CategoryId
+  structure: stringID<space, key>
+modelSettings:
+  authority: source
+fields:
+  - space:
+      type: record<financialSpace>
+      required: true
+      default: ""
+      assign: true
+  - key:
+      type: string
+      required: true
+      default: ""
+  - name:
+      type: string
+      required: true
+      default: ""
+  - categoryKind:
+      type: enum<"income" | "expense" | "transfer" | "tax" | "savings" | "other">
+      required: true
+      default: expense
+  - parentCategory:
+      type: record<category>
+      default: ""
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - notes:
+      type: string
+      default: ""
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: category
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+refreshViews: true
+admin:
+  authority: source
+  data: source

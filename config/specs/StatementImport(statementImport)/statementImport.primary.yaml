@@ -1,0 +1,110 @@
+version: 1
+kind: table
+name: StatementImport
+primary: true
+tableType: primary
+description: Raw statement import batch
+table:
+  model: statementImport
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: StatementImportId
+  structure: stringID<account, key>
+modelSettings:
+  authority: source
+fields:
+  - space:
+      type: record<financialSpace>
+      required: true
+      default: ""
+      assign: true
+  - account:
+      type: record<account>
+      required: true
+      default: ""
+      assign: true
+  - key:
+      type: string
+      required: true
+      default: ""
+  - sourceFileName:
+      type: string
+      required: true
+      default: ""
+  - sourceFormat:
+      type: enum<"csv" | "ofx" | "qif" | "pdf" | "manual">
+      required: true
+      default: csv
+  - importedAt:
+      type: datetime
+      required: true
+      default: time::now()
+  - statementDate:
+      type: datetime
+      default: null
+  - status:
+      type: enum<"raw" | "parsed" | "matched" | "reviewed" | "error">
+      required: true
+      default: raw
+  - rowCount:
+      type: number
+      default: 0
+  - normalizedCount:
+      type: number
+      default: 0
+  - clarificationCount:
+      type: number
+      default: 0
+  - sourceChecksum:
+      type: string
+      default: ""
+  - notes:
+      type: string
+      default: ""
+edges:
+  has:
+    - table: StatementImportRows
+      in: statementImport
+      out: statementRow
+      unique: true
+  belongs: []
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: statementImport
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+refreshViews: true
+admin:
+  authority: source
+  data: source

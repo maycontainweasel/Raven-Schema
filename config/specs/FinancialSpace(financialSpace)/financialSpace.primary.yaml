@@ -1,0 +1,88 @@
+version: 1
+kind: table
+name: FinancialSpace
+primary: true
+tableType: primary
+description: Personal or business money context
+table:
+  model: financialSpace
+  type: NORMAL
+  schemaMode: schemaless
+  permissions: full
+id:
+  type: string
+  exportType: true
+  exportName: FinancialSpaceId
+  structure: key
+modelSettings:
+  authority: source
+fields:
+  - key:
+      type: slug
+      required: true
+      default: ""
+  - name:
+      type: string
+      required: true
+      default: ""
+  - spaceType:
+      type: enum<"personal" | "business" | "trading" | "family" | "other">
+      required: true
+      default: personal
+  - currency:
+      type: string
+      required: true
+      default: ZAR
+  - description:
+      type: string
+      default: ""
+  - active:
+      type: boolean
+      required: true
+      default: true
+  - archivedAt:
+      type: datetime
+      default: null
+edges:
+  has:
+    - table: FinancialSpaceAccounts
+      in: financialSpace
+      out: account
+      unique: true
+  belongs: []
+crud:
+  create:
+    enabled: true
+    name: create__NAME__
+    params:
+      - name: payload
+        type: object
+  update:
+    enabled: true
+    name: update__NAME__
+    params:
+      - name: rid
+        type: record
+      - name: payload
+        type: object
+  delete:
+    enabled: true
+    name: delete__NAME__
+    params:
+      - name: rid
+        type: record
+router:
+  name: financialSpace
+  endpoints:
+    - create
+    - update
+    - delete
+    - views: "*"
+views:
+  - name: Admin
+    fields:
+      - id
+refreshViews: true
+admin:
+  authority: source
+  data: source
