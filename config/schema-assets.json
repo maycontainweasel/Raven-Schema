@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-04-03T14:06:54.445Z",
+  "updatedAt": "2026-04-04T12:05:20.564Z",
   "assets": {
     "config/migrations/user/F_createUser.surql": {
       "version": 1,
@@ -97,6 +97,366 @@
       "source": "generated",
       "layer": "functions",
       "table": "bootstrap"
+    },
+    "config/migrations/account/F_createAccount.surql": {
+      "version": 1,
+      "hash": "5fab3ec25e5611241d4c30f8523efdbd95bc41cbd2c7bcc2c373ee51616e20de",
+      "updatedAt": "2026-04-04T12:05:20.514Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "account"
+    },
+    "config/migrations/account/F_updateAccount.surql": {
+      "version": 1,
+      "hash": "f0024ce49bc3bd1bb277cc8dce4dbde22c7b3887e6177946ca702fd4df3e656a",
+      "updatedAt": "2026-04-04T12:05:20.515Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "account"
+    },
+    "config/migrations/account/F_deleteAccount.surql": {
+      "version": 1,
+      "hash": "84b17659e56999e7eb9011cc5e9e8b8953b5fa8ae662dac2ae55efc201c11a79",
+      "updatedAt": "2026-04-04T12:05:20.516Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "account"
+    },
+    "config/migrations/category/F_createCategory.surql": {
+      "version": 1,
+      "hash": "5265e01758a49246c663e36de5235d5f07a5b0d82c9f98370284f0aa80b9bceb",
+      "updatedAt": "2026-04-04T12:05:20.517Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "category"
+    },
+    "config/migrations/category/F_updateCategory.surql": {
+      "version": 1,
+      "hash": "c82a493f2897ff118afb06d0dbd70ea07ed8b9a42dfb6e706c8d1a96e8893d42",
+      "updatedAt": "2026-04-04T12:05:20.518Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "category"
+    },
+    "config/migrations/category/F_deleteCategory.surql": {
+      "version": 1,
+      "hash": "88d676f84288ee5802efc0ef7ecc52a1743243c4dc301c53b406f00c0f15ee9f",
+      "updatedAt": "2026-04-04T12:05:20.519Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "category"
+    },
+    "config/migrations/clarificationtask/F_createClarificationTask.surql": {
+      "version": 1,
+      "hash": "13dfaddceb9930499e302d08d0330ebf94f1ba4a7976178e32104c2cd35d4923",
+      "updatedAt": "2026-04-04T12:05:20.520Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "clarificationTask"
+    },
+    "config/migrations/clarificationtask/F_updateClarificationTask.surql": {
+      "version": 1,
+      "hash": "04fdd56c65a1bb81dd43f4f7adce74134ca545a17ac787199c51011041884111",
+      "updatedAt": "2026-04-04T12:05:20.521Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "clarificationTask"
+    },
+    "config/migrations/clarificationtask/F_deleteClarificationTask.surql": {
+      "version": 1,
+      "hash": "19ed37798a1d25380ba41a97627c379d712154b8701d166c35e301609fd33b4a",
+      "updatedAt": "2026-04-04T12:05:20.522Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "clarificationTask"
+    },
+    "config/migrations/classificationrule/F_createClassificationRule.surql": {
+      "version": 1,
+      "hash": "3d4c5e0739b6e1f1a396bdf71c77eea3b37f94b8a7524772638a1c885b062d56",
+      "updatedAt": "2026-04-04T12:05:20.523Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "classificationRule"
+    },
+    "config/migrations/classificationrule/F_updateClassificationRule.surql": {
+      "version": 1,
+      "hash": "58d71610ae5e02c92cd61f8aba90878410a947d0304608c13d0659114a41f9b7",
+      "updatedAt": "2026-04-04T12:05:20.524Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "classificationRule"
+    },
+    "config/migrations/classificationrule/F_deleteClassificationRule.surql": {
+      "version": 1,
+      "hash": "6cdec1c8b277ee25c69791ec3b950071345ecaf73a173860ee8b747b496c9da9",
+      "updatedAt": "2026-04-04T12:05:20.524Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "classificationRule"
+    },
+    "config/migrations/financialspace/F_createFinancialSpace.surql": {
+      "version": 1,
+      "hash": "e07b7ce231b214d80496ae3b5a84bd4b8ea70e9e20043a18413a192d678696f4",
+      "updatedAt": "2026-04-04T12:05:20.525Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "financialSpace"
+    },
+    "config/migrations/financialspace/F_updateFinancialSpace.surql": {
+      "version": 1,
+      "hash": "28a8230bc643fde423caace483376b332d90d40b824e2aff4cd110f6837a9cfb",
+      "updatedAt": "2026-04-04T12:05:20.526Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "financialSpace"
+    },
+    "config/migrations/financialspace/F_deleteFinancialSpace.surql": {
+      "version": 1,
+      "hash": "4e5dff09a4c9f80c506ca3cf19ee7a0f3b34b2f3fa661775d377d6208e62930f",
+      "updatedAt": "2026-04-04T12:05:20.526Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "financialSpace"
+    },
+    "config/migrations/merchant/F_createMerchant.surql": {
+      "version": 1,
+      "hash": "b0cfac49388439801faa0ea8ff82b6abdd02a9ae6fb79dd5d8135889275fa6c3",
+      "updatedAt": "2026-04-04T12:05:20.527Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "merchant"
+    },
+    "config/migrations/merchant/F_updateMerchant.surql": {
+      "version": 1,
+      "hash": "b24b58a61a8525d82a2bdf21990df90346f3372a1f259615955f855e6e05c6f1",
+      "updatedAt": "2026-04-04T12:05:20.528Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "merchant"
+    },
+    "config/migrations/merchant/F_deleteMerchant.surql": {
+      "version": 1,
+      "hash": "c0152c08cf256f41416ea21acb0164afbab0b4df28bde8e5017a978ac59d1e24",
+      "updatedAt": "2026-04-04T12:05:20.528Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "merchant"
+    },
+    "config/migrations/monthlysnapshot/F_createMonthlySnapshot.surql": {
+      "version": 1,
+      "hash": "390fb3d3f601e1bb1352a0c724d423d4fc21266b96565d6c53ddd0b6d9280c50",
+      "updatedAt": "2026-04-04T12:05:20.529Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "monthlySnapshot"
+    },
+    "config/migrations/monthlysnapshot/F_updateMonthlySnapshot.surql": {
+      "version": 1,
+      "hash": "7fcd009ee407d4df18a954350ec04d12cf983d166e7c6d19aa0d18c8b062da14",
+      "updatedAt": "2026-04-04T12:05:20.530Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "monthlySnapshot"
+    },
+    "config/migrations/monthlysnapshot/F_deleteMonthlySnapshot.surql": {
+      "version": 1,
+      "hash": "7648a6dbdb298eb029ce82e2a6170772124334bf5133f64d1cebf9d57d9845b1",
+      "updatedAt": "2026-04-04T12:05:20.530Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "monthlySnapshot"
+    },
+    "config/migrations/statementimport/F_createStatementImport.surql": {
+      "version": 1,
+      "hash": "054edb1cf188e32f86e61e020db59b938f00ad075824bde8662658da16692777",
+      "updatedAt": "2026-04-04T12:05:20.532Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "statementImport"
+    },
+    "config/migrations/statementimport/F_updateStatementImport.surql": {
+      "version": 1,
+      "hash": "7aafc01f8929aab1820056daa0f8cc0e6f25edaa0662a18565d5983bf23639ea",
+      "updatedAt": "2026-04-04T12:05:20.532Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "statementImport"
+    },
+    "config/migrations/statementimport/F_deleteStatementImport.surql": {
+      "version": 1,
+      "hash": "c0a92f8c6c39c0dee5aedae9445c3505477a31e1f002a29e9bfae66b36e5712a",
+      "updatedAt": "2026-04-04T12:05:20.533Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "statementImport"
+    },
+    "config/migrations/statementrow/F_createStatementRow.surql": {
+      "version": 1,
+      "hash": "95827ce0d09cfeabfdeabbb7924f5742298b582b1dd9ac7ac66577a9f3f63886",
+      "updatedAt": "2026-04-04T12:05:20.534Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "statementRow"
+    },
+    "config/migrations/statementrow/F_updateStatementRow.surql": {
+      "version": 1,
+      "hash": "17458c66fb84eaea0d2016183897ca68ff14a546a291b522462f660e1e6627a5",
+      "updatedAt": "2026-04-04T12:05:20.535Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "statementRow"
+    },
+    "config/migrations/statementrow/F_deleteStatementRow.surql": {
+      "version": 1,
+      "hash": "6353898bed02e976097711a75ac7c582027837c2f5820433719e5bfd62788a9a",
+      "updatedAt": "2026-04-04T12:05:20.535Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "statementRow"
+    },
+    "config/migrations/transaction/F_createTransaction.surql": {
+      "version": 1,
+      "hash": "3cb784b2cb740371271d41e6c20435de0cb5c5a403fd95918c54423aa106028e",
+      "updatedAt": "2026-04-04T12:05:20.536Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "transaction"
+    },
+    "config/migrations/transaction/F_updateTransaction.surql": {
+      "version": 1,
+      "hash": "7c4885f4c9542273b8f721107260ef10ede5081e1560f9f373b0445d29774969",
+      "updatedAt": "2026-04-04T12:05:20.537Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "transaction"
+    },
+    "config/migrations/transaction/F_deleteTransaction.surql": {
+      "version": 1,
+      "hash": "b04aea8d2f9a8cab4a9d4d05f83e32b9fa4002e96caedb4685d106637586864d",
+      "updatedAt": "2026-04-04T12:05:20.538Z",
+      "source": "generated",
+      "layer": "functions",
+      "table": "transaction"
+    },
+    "config/migrations/account/E_AccountDelete.surql": {
+      "version": 1,
+      "hash": "58526bdf53007f2bb071a19c936d36e14f2d73baea5e32dcc554ac51a1bfa48f",
+      "updatedAt": "2026-04-04T12:05:20.544Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "account"
+    },
+    "config/migrations/financialspace/E_FinancialSpaceDelete.surql": {
+      "version": 1,
+      "hash": "9b3f3b40b62742efd8d592c42aa2b81930507cac0a70e0d0867db634d2849802",
+      "updatedAt": "2026-04-04T12:05:20.545Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "financialSpace"
+    },
+    "config/migrations/statementimport/E_StatementImportDelete.surql": {
+      "version": 1,
+      "hash": "474a2e1f8da9f0963135ab1255543516456bac9bdd4b4c52c76a1d4e5bc1f800",
+      "updatedAt": "2026-04-04T12:05:20.545Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "statementImport"
+    },
+    "config/migrations/statementrow/E_StatementRowDelete.surql": {
+      "version": 1,
+      "hash": "4b708a9c73842348c300337d6d55be4af56754ad0e1772c11f5d10c714c54b81",
+      "updatedAt": "2026-04-04T12:05:20.546Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "statementRow"
+    },
+    "config/migrations/transaction/E_TransactionDelete.surql": {
+      "version": 1,
+      "hash": "a39cfb05e78ee80f862dfb52b97281e1ba170a7aa44e1865d22346eb5b124eb8",
+      "updatedAt": "2026-04-04T12:05:20.547Z",
+      "source": "generated",
+      "layer": "events",
+      "table": "transaction"
+    },
+    "config/migrations/account/V_AccountAdmin.surql": {
+      "version": 1,
+      "hash": "8e67d4ef20cfbed4da3600bc94776a61a35b886bc47ec42445a0c4498f2d0f51",
+      "updatedAt": "2026-04-04T12:05:20.553Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "account"
+    },
+    "config/migrations/category/V_CategoryAdmin.surql": {
+      "version": 1,
+      "hash": "08e8721fe6a3af523081cc793ae573a71d2daa6cd0675269405ca27542fa9934",
+      "updatedAt": "2026-04-04T12:05:20.554Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "category"
+    },
+    "config/migrations/clarificationtask/V_ClarificationTaskAdmin.surql": {
+      "version": 1,
+      "hash": "e669de100bf512c3f0a2cd80ec40ee9bac8f6da981d9da6b54a71418b4f82341",
+      "updatedAt": "2026-04-04T12:05:20.555Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "clarificationTask"
+    },
+    "config/migrations/classificationrule/V_ClassificationRuleAdmin.surql": {
+      "version": 1,
+      "hash": "2ef76048264142a6c74441483bb406a4640726e3d9ccbcc4685a742a1126ddbb",
+      "updatedAt": "2026-04-04T12:05:20.557Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "classificationRule"
+    },
+    "config/migrations/financialspace/V_FinancialSpaceAdmin.surql": {
+      "version": 1,
+      "hash": "5f8056342a03b11fc74ea66d37fd912f4eb948e3667c5de39815e932ac964bce",
+      "updatedAt": "2026-04-04T12:05:20.559Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "financialSpace"
+    },
+    "config/migrations/merchant/V_MerchantAdmin.surql": {
+      "version": 1,
+      "hash": "346e285d3490cb53b5c22baec7b02def223d07d878789225e1c14ed44afbdbfe",
+      "updatedAt": "2026-04-04T12:05:20.560Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "merchant"
+    },
+    "config/migrations/monthlysnapshot/V_MonthlySnapshotAdmin.surql": {
+      "version": 1,
+      "hash": "e1da715318a14b4b0050cc85c8e8a76f5512524a817211e0bd13eddad473dd01",
+      "updatedAt": "2026-04-04T12:05:20.561Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "monthlySnapshot"
+    },
+    "config/migrations/statementimport/V_StatementImportAdmin.surql": {
+      "version": 1,
+      "hash": "a39d72078481ffd5d92b4db14aefe615fdac513e8aefad85d7859b2bf986415a",
+      "updatedAt": "2026-04-04T12:05:20.562Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "statementImport"
+    },
+    "config/migrations/statementrow/V_StatementRowAdmin.surql": {
+      "version": 1,
+      "hash": "af9ab61649cdff41494c52884c35fd1dbe529f4ed23502f48e26c4df76a337e8",
+      "updatedAt": "2026-04-04T12:05:20.563Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "statementRow"
+    },
+    "config/migrations/transaction/V_TransactionAdmin.surql": {
+      "version": 1,
+      "hash": "d60edd6d56f71a7383c45146c818e5f1d635cdbe23e04ff6b74027350c570965",
+      "updatedAt": "2026-04-04T12:05:20.564Z",
+      "source": "generated",
+      "layer": "views",
+      "table": "transaction"
     }
   }
 }
