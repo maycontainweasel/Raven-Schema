@@ -2,11 +2,11 @@ name: raven
 slug: raven
 template: templates/nuxt-4.3.0
 target: apps/raven
-deploy:
-  ssl:
-    email: ""
-    redirect: true
 nuxtConfig:
+  unocss:
+    nuxtLayers: true
+    preflight: true
+    configFile: ./uno.config.ts
   devServer:
     port: 9274
     host: 0.0.0.0
@@ -23,7 +23,15 @@ nuxtConfig:
         port: 45017
   extends:
     - ./layers/schema-core
+    - ./layers/helios
+  modules:
+    - "@unocss/nuxt"
+deploy:
+  ssl:
+    email: ""
+    redirect: true
 layers:
   - schema-core
+  - helios
 schemaKit:
   capabilities: {}
