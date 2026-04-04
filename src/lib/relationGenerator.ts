@@ -104,6 +104,7 @@ function buildRelationEdges(relation: NormalizedRelation): string[] {
     inModel: relation.leftModel,
     outModel: relation.rightModel,
     unique: true,
+    permissions: 'FULL',
     allowAnyIn: false,
     allowAnyOut: false,
   };

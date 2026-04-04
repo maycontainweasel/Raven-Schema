@@ -90,6 +90,12 @@ DEFINE FUNCTION OVERWRITE fn::deleteInstance($InstanceID: any) {
 
 	let $result = (delete only $rid return before);
 
+	delete from Post where out = $rid;
+	let $PID = fn::PID($rid);
+	if type::is_record($PID) && record::exists($PID) {
+		fn::deletePost($PID);
+	};
+
 	return if $result {
 		return $result['id'];
 	} else {
@@ -164,8 +170,8 @@ fn::createPost({
   id: $RID,
   title: record::id($RID)
 });
+fn::attachRecordToPost($RID, { skipExists: true });
 let $PID = fn::PID($RID);
-fn::createEdge($PID, "Post", $RID, { boundId: true, overwrite: false, skipExists: true });
 
 if($after.status == 'publish') {
   fn::updatePost($PID, {
@@ -248,7 +254,8 @@ SELECT
     status,
     active,
     (select * from only type::record('instanceSettings', record::id($this.id))) AS settings
-FROM instance;
+FROM instance
+PERMISSIONS FULL;
 
 
 -- ---------- INDEXES ----------
@@ -263,12 +270,12 @@ DEFINE INDEX OVERWRITE InstanceKey ON TABLE instance
 -- ---------- EDGES ----------
 
 -- File: L_instanceEdges.surql
-DEFINE TABLE OVERWRITE Instances SCHEMAFULL TYPE RELATION OUT instance;
+DEFINE TABLE OVERWRITE Instances SCHEMAFULL TYPE RELATION OUT instance PERMISSIONS FULL;
 DEFINE FIELD OVERWRITE in ON TABLE Instances;
 DEFINE FIELD OVERWRITE out ON TABLE Instances TYPE record<instance>;
 DEFINE INDEX OVERWRITE Instances_unique ON TABLE Instances FIELDS in, out UNIQUE;
 
-DEFINE TABLE OVERWRITE InstanceSettings SCHEMAFULL TYPE RELATION IN instance OUT instanceSettings;
+DEFINE TABLE OVERWRITE InstanceSettings SCHEMAFULL TYPE RELATION IN instance OUT instanceSettings PERMISSIONS FULL;
 DEFINE FIELD OVERWRITE in ON TABLE InstanceSettings TYPE record<instance>;
 DEFINE FIELD OVERWRITE out ON TABLE InstanceSettings TYPE record<instanceSettings>;
 DEFINE INDEX OVERWRITE InstanceSettings_unique ON TABLE InstanceSettings FIELDS in, out UNIQUE;

@@ -9,4 +9,5 @@ SELECT
     status,
     active,
     (select * from only type::record('instanceSettings', record::id($this.id))) AS settings
-FROM instance;
+FROM instance
+PERMISSIONS FULL;

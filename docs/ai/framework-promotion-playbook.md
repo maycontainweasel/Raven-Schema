@@ -1,15 +1,30 @@
 # Schema Framework Promotion Playbook
 
-Use this when a schema change is made inside an app-side schema repo and needs to become shared framework truth in `origin/main`, then be applied into other schema app repos such as Lucky.
+Use this when a schema change is made inside an app-side schema repo and needs to become shared framework truth in the master `apps/schema` workspace on `origin/main`, then be applied into other schema app repos such as Lucky.
 
 ## Purpose
 
-This repo has two distinct roles:
+Consumer schema repos have two distinct roles:
 
 - `origin/main`: shared schema framework template
 - `app/app`: app-specific schema repo with graph state, generated assets, site specs, and project context
 
 Do not treat those as normal long-lived branches of one codebase. They serve different purposes.
+
+## Remote topology
+
+In the master schema workspace (`/Users/michaelpeters/Dev/mpd/projects/mpd-schema/apps/schema`):
+
+- `origin` is GitHub and is the canonical shared framework remote.
+- `bitbucket` is the old shared remote kept only for reference while repos are migrated.
+- local `main` should track `origin/main`.
+
+In a consumer app schema repo:
+
+- `origin` should point at the shared GitHub schema repo.
+- `app` should point at the app-owned schema remote.
+- local `main` tracks `origin/main`.
+- local `app` tracks `app/app`.
 
 ## Core rule
 
@@ -73,9 +88,10 @@ Use the app-side schema repo that contains the latest framework work. In the cur
 1. Start from a clean promotion branch off local `main`.
 2. Bring over only the framework file families listed above from the app-side work.
 3. Commit those files as a framework promotion commit.
-4. Test the schema workspace.
-5. Push that commit to `origin/main`.
-6. Cherry-pick that same commit onto the local `app` branch so the app-side schema repo also contains the shared framework commit.
+4. Add the next entry to `docs/ai/framework-release-log.md`.
+5. Test the schema workspace.
+6. Push that commit to `origin/main`.
+7. Cherry-pick that same commit onto the local `app` branch so the app-side schema repo also contains the shared framework commit.
 
 ### Recommended command shape
 
@@ -180,6 +196,7 @@ Then verify:
 Before pushing to `origin/main`:
 
 - `git diff --name-only main...HEAD` only shows framework files
+- `docs/ai/framework-release-log.md` includes the next shared release entry
 - no app graph/spec/migration files are included accidentally
 - schema AI bundle files and source files match
 

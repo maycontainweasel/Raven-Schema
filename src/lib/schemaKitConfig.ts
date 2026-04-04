@@ -21,6 +21,18 @@ export interface SchemaKitConfig {
   };
 }
 
+type SchemaKitFeaturesInput = {
+  typesense?: boolean | undefined;
+  trpcClient?: boolean | undefined;
+  trpcServer?: boolean | undefined;
+  sentry?: SchemaKitSentryFeature | boolean | undefined;
+  redis?: SchemaKitRedisFeature | boolean | undefined;
+  surrealdb?: SchemaKitSurrealFeature | boolean | undefined;
+  auth?: SchemaKitAuthFeature | boolean | undefined;
+};
+
+type SerializedSchemaKitFeatures = NonNullable<SchemaKitConfig['features']>;
+
 export async function writeSchemaKitConfig(options: {
   projectRoot: string;
   project: ProjectPathsConfig;
@@ -96,21 +108,22 @@ export async function writeSchemaKitConfig(options: {
     specEntry?.spec?.capabilities;
   const featureConfig = resolveSchemaKitFeatures(app, project, siteFeatures);
   const resolvedFeatures = applySchemaKitDefaults(app, project, featureConfig);
+  const normalizedFeatures = compactConfigFeatures({
+    typesense: resolvedFeatures?.typesense,
+    trpcClient: resolvedFeatures?.trpcClient,
+    trpcServer: resolvedFeatures?.trpcServer,
+    sentry: normalizeSentryFeature(resolvedFeatures?.sentry),
+    redis: normalizeRedisFeature(resolvedFeatures?.redis),
+    surrealdb: normalizeSurrealFeature(resolvedFeatures?.surrealdb),
+    auth: normalizeAuthFeature(resolvedFeatures?.auth),
+  });
   const config: SchemaKitConfig = {
     appName: project.name,
     aliases,
     validation: {
       strict: app.schemaKit?.validation?.strict !== false,
     },
-    features: {
-      typesense: resolvedFeatures?.typesense,
-      trpcClient: resolvedFeatures?.trpcClient,
-      trpcServer: resolvedFeatures?.trpcServer,
-      sentry: normalizeSentryFeature(resolvedFeatures?.sentry),
-      redis: normalizeRedisFeature(resolvedFeatures?.redis),
-      surrealdb: normalizeSurrealFeature(resolvedFeatures?.surrealdb),
-      auth: normalizeAuthFeature(resolvedFeatures?.auth),
-    },
+    features: normalizedFeatures,
   };
 
   const outputPath = path.join(appRoot, 'schema-kit.config.json');
@@ -145,14 +158,14 @@ export function resolveSchemaKitFeatures(
   const base = app.schemaKit?.features;
   const overrides = app.schemaKit?.projects?.find((entry) => entry.name === project.name)?.features;
   if (!base && !overrides && !siteFeatures) return undefined;
-  return {
+  return compactSchemaKitFeatures({
     ...base,
     ...overrides,
     ...siteFeatures,
     sentry: mergeFeature(base?.sentry, overrides?.sentry, siteFeatures?.sentry),
     redis: mergeFeature(base?.redis, overrides?.redis, siteFeatures?.redis),
     surrealdb: mergeFeature(base?.surrealdb, overrides?.surrealdb, siteFeatures?.surrealdb),
-  };
+  });
 }
 
 export function applySchemaKitDefaults(
@@ -162,7 +175,11 @@ export function applySchemaKitDefaults(
 ): SchemaKitFeatures {
   const isAdmin = isAdminProject(app, project);
   const defaults: SchemaKitFeatures = {
-    surrealdb: { enabled: true },
+    surrealdb: {
+      enabled: true,
+      reconnectOnAuthLoss: true,
+      retryFailedRequestsAfterReconnect: true,
+    },
     typesense: isAdmin,
     sentry: false,
     redis: false,
@@ -170,14 +187,50 @@ export function applySchemaKitDefaults(
     trpcClient: true,
     trpcServer: true,
   };
-  return {
+  return compactSchemaKitFeatures({
     ...defaults,
     ...(features ?? {}),
     sentry: mergeFeature(defaults.sentry, features?.sentry),
     redis: mergeFeature(defaults.redis, features?.redis),
     surrealdb: mergeFeature(defaults.surrealdb, features?.surrealdb),
     auth: mergeFeature(defaults.auth, features?.auth),
-  };
+  });
+}
+
+function compactSchemaKitFeatures(features: SchemaKitFeaturesInput): SchemaKitFeatures {
+  const compacted: SchemaKitFeatures = {};
+
+  if (features.typesense !== undefined) compacted.typesense = features.typesense;
+  if (features.trpcClient !== undefined) compacted.trpcClient = features.trpcClient;
+  if (features.trpcServer !== undefined) compacted.trpcServer = features.trpcServer;
+  if (features.sentry !== undefined) compacted.sentry = features.sentry;
+  if (features.redis !== undefined) compacted.redis = features.redis;
+  if (features.surrealdb !== undefined) compacted.surrealdb = features.surrealdb;
+  if (features.auth !== undefined) compacted.auth = features.auth;
+
+  return compacted;
+}
+
+function compactConfigFeatures(features: SerializedSchemaKitFeatures | {
+  typesense?: boolean | undefined;
+  trpcClient?: boolean | undefined;
+  trpcServer?: boolean | undefined;
+  sentry?: SchemaKitSentryFeature | undefined;
+  redis?: SchemaKitRedisFeature | undefined;
+  surrealdb?: SchemaKitSurrealFeature | undefined;
+  auth?: SchemaKitAuthFeature | undefined;
+}): SerializedSchemaKitFeatures {
+  const compacted: SerializedSchemaKitFeatures = {};
+
+  if (features.typesense !== undefined) compacted.typesense = features.typesense;
+  if (features.trpcClient !== undefined) compacted.trpcClient = features.trpcClient;
+  if (features.trpcServer !== undefined) compacted.trpcServer = features.trpcServer;
+  if (features.sentry !== undefined) compacted.sentry = features.sentry;
+  if (features.redis !== undefined) compacted.redis = features.redis;
+  if (features.surrealdb !== undefined) compacted.surrealdb = features.surrealdb;
+  if (features.auth !== undefined) compacted.auth = features.auth;
+
+  return compacted;
 }
 
 function mergeFeature<T extends { enabled?: boolean }>(

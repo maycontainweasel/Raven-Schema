@@ -21,23 +21,11 @@ DEFINE FUNCTION fn::attachRecordToPost($RID: record, $options: option<object>) {
   };
 
   return if fn::RIDExists($PID) {
-    let $REL = select * from Post where in = $PID and out = $RID;
-    if $REL && count($REL) > 0 {
-      return $REL;
-    };
-
-    let $EDGE_ID = type::record('Post', fn::stringID([$PID, $RID]));
-    let $EDGE = array::first(select * from $EDGE_ID);
-    if $EDGE {
-      if $EDGE.in != $PID || $EDGE.out != $RID {
-        delete $EDGE_ID;
-      } else {
-        return $EDGE;
-      };
-    };
-
-    return relate only $PID->Post->$RID
-      set id = $EDGE_ID;
+    fn::createEdge($PID, "Post", $RID, {
+      boundId: true,
+      overwrite: false,
+      skipExists: true
+    });
   } else {
     null;
   };

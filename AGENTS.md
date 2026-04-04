@@ -8,11 +8,15 @@
 ## Read first
 - `docs/AI-READ-HERE.md`
 - `docs/ai/README.md`
+- `docs/ai/skills/README.md` when the task is about choosing or naming a schema skill
 - `docs/ai/mpdg/README.md` for graph/DSL authoring tasks
 - `docs/ai/architecture.md`
 - `docs/ai/runtime/authority-routing.md`
 - `docs/ai/runtime/resource-selection.md`
 - `docs/ai/runtime/typesense.md`
+- `docs/ai/workstreams/README.md` when the task spans multiple rounds or repos
+- `docs/ai/framework-promotion-playbook.md` for cross-repo framework promotion work
+- `docs/ai/framework-release-log.md` to identify the latest shared master release
 
 ## Non-negotiable rules
 - Generated manifests, controller docs, and runtime templates are the truth. AGENTS and skills only route to them.
@@ -30,7 +34,9 @@
 - Do not report TypeSense refresh or rebuild success when fetched records were only partially indexed. Surface partial imports as failures.
 - If `instancesEnabled === false`, treat the app as single-database and use the generated default instance.
 - When a repeated agent mistake is corrected, update the nearest `AGENTS.md` file or schema skill in the same change.
+- For active multi-round schema efforts, keep scope, decisions, and validation in `docs/ai/workstreams/**` instead of leaving them only in chat context.
 - After MPDG changes, run `pnpm run graph:validate` before regeneration or promotion.
+- When a shared schema change is promoted to `origin/main`, update `docs/ai/framework-release-log.md` in the same change. If the work originated app-side, update `docs/ai/framework-promotion-ledger.md` too.
 
 ## Where examples belong
 - Consumer-app-specific examples belong in that app’s local docs and AGENTS files.

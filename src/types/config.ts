@@ -482,6 +482,8 @@ export interface SchemaKitRedisFeature {
 
 export interface SchemaKitSurrealFeature {
   enabled?: boolean;
+  reconnectOnAuthLoss?: boolean;
+  retryFailedRequestsAfterReconnect?: boolean;
 }
 
 export interface SchemaKitAuthFeature {
@@ -789,6 +791,7 @@ export interface EdgeDefinition {
   out?: string;
   index?: 'unique' | 'nonunique' | string;
   unique?: boolean;
+  permissions?: string;
   description?: string;
 }
 
@@ -840,6 +843,7 @@ export interface ResourceDefinition {
   description?: string;
   mode?: 'OVERWRITE' | 'IF NOT EXISTS';
   type?: 'NORMAL' | 'RELATION' | string;
+  permissions?: string;
   returnId?: 'record' | 'view';
   from?: string;
   function?: string;

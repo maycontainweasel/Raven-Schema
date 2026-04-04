@@ -15,6 +15,7 @@ export interface NormalizedEdge {
   inModel: string;
   outModel: string;
   unique: boolean;
+  permissions: string;
   allowAnyIn: boolean;
   allowAnyOut: boolean;
 }
@@ -101,6 +102,7 @@ function normalizeHasEdge(edge: EdgeDefinition, parentModel: string): Normalized
     table: tableName,
     inModel,
     outModel,
+    permissions: resolvePermissions(edge.permissions),
     allowAnyIn: isAnyModel(inModel),
     allowAnyOut,
     unique,
@@ -123,6 +125,7 @@ function normalizeBelongsEdge(edge: EdgeDefinition, parentModel: string): Normal
     table: tableName,
     inModel,
     outModel,
+    permissions: resolvePermissions(edge.permissions),
     allowAnyIn,
     allowAnyOut: isAnyModel(outModel),
     unique,
@@ -149,6 +152,7 @@ export function buildEdgeStatements(edge: NormalizedEdge): string[] {
   const parts: string[] = [`DEFINE TABLE OVERWRITE ${edge.table} SCHEMAFULL TYPE RELATION`];
   if (!edge.allowAnyIn) parts.push(`IN ${edge.inModel}`);
   if (!edge.allowAnyOut) parts.push(`OUT ${edge.outModel}`);
+  parts.push(`PERMISSIONS ${edge.permissions}`);
   statements.push(parts.join(' ') + ';');
 
   if (!edge.allowAnyIn) {
@@ -192,6 +196,11 @@ function normalizeModel(value: string | undefined): string | null {
   const trimmed = String(value).trim();
   if (trimmed.length === 0) return null;
   return trimmed;
+}
+
+function resolvePermissions(value: string | undefined): 'FULL' | 'NONE' {
+  const normalized = String(value ?? 'full').trim().toUpperCase();
+  return normalized === 'NONE' ? 'NONE' : 'FULL';
 }
 
 // Uses connectSurreal helper.

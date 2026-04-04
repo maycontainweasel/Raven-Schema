@@ -73,7 +73,7 @@ export async function generateResourceViews(
         filePath,
         content: view.content,
         tracker,
-        compareContent: prev,
+        compareContent: prev ?? null,
         meta: {
           source: 'generated',
           layer: 'views',
@@ -91,7 +91,7 @@ export async function generateResourceViews(
         filePath,
         content: fn.content,
         tracker,
-        compareContent: prev,
+        compareContent: prev ?? null,
         meta: {
           source: 'generated',
           layer: 'functions',
@@ -127,6 +127,7 @@ function buildViewsForTable(
     const mode = (resource.mode ?? 'OVERWRITE').toUpperCase();
     const type = (resource.type ?? 'NORMAL').toUpperCase();
     const fromSource = resource.from ?? tableModel;
+    const permissions = resolvePermissions(resource.permissions ?? table.table?.permissions);
 
     const selectLines = projections.map((projection, index) => {
       const aliasSegment = projection.alias ? ` AS ${projection.alias}` : '';
@@ -142,7 +143,8 @@ function buildViewsForTable(
       `DEFINE TABLE ${mode} ${resourceName} TYPE ${type} AS`,
       'SELECT',
       ...selectLines,
-      `FROM ${fromSource};`,
+      `FROM ${fromSource}`,
+      `PERMISSIONS ${permissions};`,
       '',
     ].join('\n');
 
@@ -218,11 +220,14 @@ function buildBaseTableDefinition(table: TableMigrationConfig): string | null {
   const type = (table.table?.type ?? 'NORMAL').toString().toUpperCase();
   const schemaModeRaw = (table.table?.schemaMode ?? 'schemaless').toString().toUpperCase();
   const schemaMode = schemaModeRaw === 'SCHEMAFULL' ? 'SCHEMAFULL' : 'SCHEMALESS';
-  const permissionsRaw = (table.table?.permissions ?? 'full').toString().toUpperCase();
-  const permissions =
-    permissionsRaw === 'FULL' || permissionsRaw === 'NONE' ? permissionsRaw : 'FULL';
+  const permissions = resolvePermissions(table.table?.permissions);
 
   return `DEFINE TABLE IF NOT EXISTS ${model} TYPE ${type} ${schemaMode} PERMISSIONS ${permissions};`;
+}
+
+function resolvePermissions(value: unknown): 'FULL' | 'NONE' {
+  const normalized = String(value ?? 'full').trim().toUpperCase();
+  return normalized === 'NONE' ? 'NONE' : 'FULL';
 }
 
 function resolveViewDefinitions(table: TableMigrationConfig): ResourceDefinition[] {
@@ -357,10 +362,11 @@ function appendAliasEntries(
       if (!expression) {
         continue;
       }
-      output.push({
-        expression,
-        alias: alias === expression ? undefined : alias,
-      });
+      if (alias === expression) {
+        output.push({ expression });
+      } else {
+        output.push({ expression, alias });
+      }
     }
   }
 }
@@ -383,15 +389,22 @@ function normalizeExpression(value: string | string[] | number | boolean): strin
   }
 
   let expression = String(value).trim();
+  const lambdaVars = new Set<string>();
+  for (const match of expression.matchAll(/\|\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\|/g)) {
+    const name = String(match[1] || '').trim();
+    if (!name) continue;
+    lambdaVars.add(name);
+    lambdaVars.add(name.toLowerCase());
+  }
   const exactVarMatch = expression.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
   if (exactVarMatch) {
-    const name = exactVarMatch[1];
-    if (name !== 'this' && name !== 'parent') {
+    const name = exactVarMatch[1] ?? '';
+    if (name !== 'this' && name !== 'parent' && !lambdaVars.has(name) && !lambdaVars.has(name.toLowerCase())) {
       expression = name;
     }
   } else {
     expression = expression.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_match, name: string) => {
-      if (name === 'this' || name === 'parent') {
+      if (name === 'this' || name === 'parent' || lambdaVars.has(name) || lambdaVars.has(name.toLowerCase())) {
         return `$${name}`;
       }
       return `$this.${name}`;

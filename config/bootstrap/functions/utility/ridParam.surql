@@ -23,7 +23,12 @@ DEFINE FUNCTION fn::ridParam($model: string, $value: any) {
       let $parts = string::split($trim, ":");
       if array::len($parts) > 1 {
         let $tb = $parts[0];
-        let $key = $parts[array::len($parts) - 1];
+        let $keyRaw = $parts[array::len($parts) - 1];
+        let $key = if string::len($keyRaw) >= 2 && string::slice($keyRaw, 0, 1) = "`" && string::slice($keyRaw, string::len($keyRaw) - 1, string::len($keyRaw)) = "`" {
+          string::slice($keyRaw, 1, string::len($keyRaw) - 1)
+        } else {
+          $keyRaw
+        };
         if string::matches($key, '^-?\\d+$') { type::record($tb, <int> $key) } else { type::record($tb, $key) }
       } else if string::matches($trim, '^-?\\d+$') {
         type::record($model, <int> $trim)

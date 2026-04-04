@@ -4,6 +4,12 @@ This repo is the schema/tooling workspace that turns a human‑readable “napki
 
 Start here if you’re a new AI working in this repo.
 
+For cross-repo promotion and version tracking, also read:
+- `docs/ai/framework-promotion-playbook.md`
+- `docs/ai/framework-release-log.md`
+- `docs/ai/skills/README.md`
+- `docs/ai/workstreams/README.md`
+
 ## Read next for schema runtime work
 
 The canonical schema-owned AI guidance now lives in:

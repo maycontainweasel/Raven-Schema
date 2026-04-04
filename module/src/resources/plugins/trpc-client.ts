@@ -59,6 +59,8 @@ superjson.registerCustom<any, { tb: string; id: any }>(
 export default defineNuxtPlugin({
   name: 'trpc-client',
   setup(nuxtApp) {
+    const requestFetch: any = import.meta.server ? useRequestFetch() : null
+
     const client = createTRPCProxyClient<AppRouter>({
       links: [
         httpBatchLink({
@@ -66,7 +68,9 @@ export default defineNuxtPlugin({
           transformer: superjson,
           fetch: async (url, opts) => {
             console.log('🔗 [TRPC] Fetching:', url)
-            const res = await fetch(url, { ...opts, credentials: 'include' })
+            const res = import.meta.server && requestFetch
+              ? await requestFetch.raw(url, { ...opts, credentials: 'include' })
+              : await fetch(url, { ...opts, credentials: 'include' })
             if (res.status === 401) {
               // Optional: guard for recursive loops if logout triggers calls
               // try { await $auth.logout() } catch {}

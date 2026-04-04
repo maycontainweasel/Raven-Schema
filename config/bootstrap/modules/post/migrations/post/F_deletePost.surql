@@ -7,7 +7,6 @@ DEFINE FUNCTION OVERWRITE fn::deletePost($PostID: any) {
 		return null;
 	};
 
-	delete from Post where in = $rid;
 	let $result = (delete only $rid return before);
 
 	return if $result {

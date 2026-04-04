@@ -323,6 +323,7 @@ function buildTaxonomyEdges(cfg: NormalizedTaxonomy): string[] {
       inModel: cfg.taxonomyModel,
       outModel: cfg.termModel,
       unique: true,
+      permissions: 'FULL',
       allowAnyIn: false,
       allowAnyOut: false,
     },
@@ -331,6 +332,7 @@ function buildTaxonomyEdges(cfg: NormalizedTaxonomy): string[] {
       inModel: cfg.tableModel,
       outModel: cfg.termModel,
       unique: true,
+      permissions: 'FULL',
       allowAnyIn: false,
       allowAnyOut: false,
     },
@@ -596,7 +598,7 @@ function normalizeTermId(termId: string, tableModel: string, taxonomyKey: string
   const trimmed = termId.trim();
   const stringId = parseStringIdSpec(trimmed);
   if (stringId && stringId.fn === 'stringID' && stringId.args.length === 3) {
-    const [a, b, c] = stringId.args;
+    const [a = '', b = '', c = ''] = stringId.args;
     const fieldKeyMatch = /^<\s*field\s*:\s*key\s*>$/i.test(c);
     if (a === tableModel && b === taxonomyKey && fieldKeyMatch) {
       return `<field:key>`;
@@ -617,8 +619,6 @@ function normalizePayloadAliases(
         aliases.push(alias.trim());
       }
     }
-  } else if (typeof payloadAliases === 'string' && payloadAliases.trim()) {
-    aliases.push(payloadAliases.trim());
   }
   if (typeof payloadAlias === 'string' && payloadAlias.trim()) {
     aliases.push(payloadAlias.trim());

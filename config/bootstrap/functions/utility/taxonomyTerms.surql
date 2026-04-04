@@ -4,7 +4,12 @@ DEFINE FUNCTION fn::ensureTaxonomyRecord($meta: object) {
 	};
 
 	let $TAX_ID = $meta.taxonomyRid;
-	if $TAX_ID && record::exists($TAX_ID) {
+	let $TAX_ROW = if type::is_record($TAX_ID) {
+		select * from only $TAX_ID
+	} else {
+		NONE
+	};
+	if type::is_object($TAX_ROW) && type::is_record($TAX_ROW.id) {
 		return $TAX_ID;
 	};
 	if !$TAX_ID {
@@ -22,6 +27,36 @@ DEFINE FUNCTION fn::ensureTaxonomyRecord($meta: object) {
 
 	upsert only $TAX_ID merge $payload;
 	return $TAX_ID;
+};
+
+DEFINE FUNCTION fn::createTaxonomy($model: string, $taxonomy: string, $payload: option<object>) {
+	let $meta = fn::getTaxonomyMeta($model, $taxonomy);
+	if !$meta {
+		throw "createTaxonomy | taxonomy not registered";
+	};
+
+	let $payloadInput = if type::is_object($payload) {
+		$payload;
+	} else {
+		{};
+	};
+
+	let $defaults = if type::is_object($meta.taxonomyDefaults) { $meta.taxonomyDefaults } else { {} };
+	let $payload = fn::objectAssign($defaults, $payloadInput);
+
+	if !$payload.permalink || $payload.permalink == "" {
+		let $payload = fn::objectAssign($payload, { permalink: string::slug($payload.key) });
+	} else {
+		let $payload = fn::objectAssign($payload, { permalink: string::slug($payload.permalink) });
+	};
+
+	let $TAX_ID = fn::ensureTaxonomyRecord($meta);
+	if !$TAX_ID {
+		throw "createTaxonomy | taxonomy record id not configured";
+	};
+
+	let $record = upsert only $TAX_ID merge $payload;
+	return $record;
 };
 
 DEFINE FUNCTION fn::createTerm($model: string, $taxonomy: string, $payload: any) {
@@ -68,7 +103,12 @@ DEFINE FUNCTION fn::createTerm($model: string, $taxonomy: string, $payload: any)
 
 	if $meta.hierarchical == true && $payload.parent && $payload.parent != "" {
 		let $PARENT_ID = fn::ridParam($meta.termModel ?? "term", $payload.parent);
-		if !record::exists($PARENT_ID) {
+		let $PARENT_ROW = if type::is_record($PARENT_ID) {
+			select * from only $PARENT_ID
+		} else {
+			NONE
+		};
+		if !(type::is_object($PARENT_ROW) && type::is_record($PARENT_ROW.id)) {
 			throw "createTerm | parent not found";
 		};
 		let $payload = fn::objectAssign($payload, { parent: $PARENT_ID });
@@ -100,7 +140,12 @@ DEFINE FUNCTION fn::updateTerm($model: string, $taxonomy: string, $term: any, $p
 	};
 
 	let $TERM_ID = fn::ridParam($meta.termModel ?? "term", $term);
-	if !record::exists($TERM_ID) {
+	let $TERM_ROW = if type::is_record($TERM_ID) {
+		select * from only $TERM_ID
+	} else {
+		NONE
+	};
+	if !(type::is_object($TERM_ROW) && type::is_record($TERM_ROW.id)) {
 		throw "updateTerm | term not found";
 	};
 
@@ -117,7 +162,12 @@ DEFINE FUNCTION fn::updateTerm($model: string, $taxonomy: string, $term: any, $p
 
 	if $meta.hierarchical == true && $payload.parent && $payload.parent != "" {
 		let $PARENT_ID = fn::ridParam($meta.termModel ?? "term", $payload.parent);
-		if !record::exists($PARENT_ID) {
+		let $PARENT_ROW = if type::is_record($PARENT_ID) {
+			select * from only $PARENT_ID
+		} else {
+			NONE
+		};
+		if !(type::is_object($PARENT_ROW) && type::is_record($PARENT_ROW.id)) {
 			throw "updateTerm | parent not found";
 		};
 		let $payload = fn::objectAssign($payload, { parent: $PARENT_ID });
@@ -134,7 +184,12 @@ DEFINE FUNCTION fn::removeTerm($model: string, $taxonomy: string, $term: any) {
 	};
 
 	let $TERM_ID = fn::ridParam($meta.termModel ?? "term", $term);
-	if !record::exists($TERM_ID) {
+	let $TERM_ROW = if type::is_record($TERM_ID) {
+		select * from only $TERM_ID
+	} else {
+		NONE
+	};
+	if !(type::is_object($TERM_ROW) && type::is_record($TERM_ROW.id)) {
 		throw "removeTerm | term not found";
 	};
 
@@ -180,7 +235,12 @@ DEFINE FUNCTION fn::attachTerm($model: string, $taxonomy: string, $record: any, 
 	} else {
 		false
 	};
-	if !type::is_record($RID) || (!$skipExists && !record::exists($RID)) {
+	let $RID_ROW = if type::is_record($RID) {
+		select * from only $RID
+	} else {
+		NONE
+	};
+	if !type::is_record($RID) || (!$skipExists && !(type::is_object($RID_ROW) && type::is_record($RID_ROW.id))) {
 		throw "attachTerm | record not found";
 	};
 
@@ -190,7 +250,15 @@ DEFINE FUNCTION fn::attachTerm($model: string, $taxonomy: string, $record: any, 
 	} else {
 		true
 	};
-	if !record::exists($TERM_ID) {
+	let $TERM_ROW = (
+		select *
+		from type::table($meta.termModel ?? "term")
+		where id = $TERM_ID
+		limit 1
+	);
+	let $TERM_ROW = if type::is_array($TERM_ROW) { array::first($TERM_ROW) } else { $TERM_ROW };
+	let $TERM_EXISTS = type::is_object($TERM_ROW) && type::is_record($TERM_ROW.id);
+	if !$TERM_EXISTS {
 		if !$createOnAttach {
 			throw "attachTerm | term not found";
 		};
@@ -230,10 +298,14 @@ DEFINE FUNCTION fn::attachTerm($model: string, $taxonomy: string, $record: any, 
 			$term
 		};
 		let $TERM_ID = fn::ridParam($meta.termModel ?? "term", $createdId);
-		// `record::exists` can report false negatives in some nested function execution paths.
-		// Probe via SELECT to confirm whether the term can be resolved before failing.
-		let $TERM_ROW = (select * from only $TERM_ID);
-		if !$TERM_ROW {
+		let $TERM_ROW = (
+			select *
+			from type::table($meta.termModel ?? "term")
+			where id = $TERM_ID
+			limit 1
+		);
+		let $TERM_ROW = if type::is_array($TERM_ROW) { array::first($TERM_ROW) } else { $TERM_ROW };
+		if !(type::is_object($TERM_ROW) && type::is_record($TERM_ROW.id)) {
 			throw "attachTerm | failed to auto-create term";
 		};
 	};
@@ -255,7 +327,8 @@ DEFINE FUNCTION fn::attachTerm($model: string, $taxonomy: string, $record: any, 
 			let $patch = object::from_entries([[$meta.payloadField, $TERM_ID]]);
 			update $RID merge $patch;
 		} else {
-			let $row = (select * from only $RID)[0] ?? {};
+			let $row = select * from only $RID;
+			let $row = if type::is_object($row) { $row } else { {} };
 			let $current = $row[$meta.payloadField] ?? [];
 			let $next = array::distinct(array::concat($current, [$TERM_ID]));
 			let $patch = object::from_entries([[$meta.payloadField, $next]]);
@@ -278,12 +351,22 @@ DEFINE FUNCTION fn::detachTerm($model: string, $taxonomy: string, $record: any, 
 	} else {
 		false
 	};
-	if !type::is_record($RID) || (!$skipExists && !record::exists($RID)) {
+	let $RID_ROW = if type::is_record($RID) {
+		select * from only $RID
+	} else {
+		NONE
+	};
+	if !type::is_record($RID) || (!$skipExists && !(type::is_object($RID_ROW) && type::is_record($RID_ROW.id))) {
 		throw "detachTerm | record not found";
 	};
 
 	let $TERM_ID = fn::ridParam($meta.termModel ?? "term", $term);
-	if !record::exists($TERM_ID) {
+	let $TERM_ROW = if type::is_record($TERM_ID) {
+		select * from only $TERM_ID
+	} else {
+		NONE
+	};
+	if !(type::is_object($TERM_ROW) && type::is_record($TERM_ROW.id)) {
 		throw "detachTerm | term not found";
 	};
 
@@ -296,7 +379,8 @@ DEFINE FUNCTION fn::detachTerm($model: string, $taxonomy: string, $record: any, 
 			let $patch = object::from_entries([[$meta.payloadField, null]]);
 			update $RID merge $patch;
 		} else {
-			let $row = (select * from only $RID)[0] ?? {};
+			let $row = select * from only $RID;
+			let $row = if type::is_object($row) { $row } else { {} };
 			let $current = $row[$meta.payloadField] ?? [];
 			let $next = array::remove($current, $TERM_ID);
 			let $patch = object::from_entries([[$meta.payloadField, $next]]);
@@ -314,7 +398,12 @@ DEFINE FUNCTION fn::getTerms($model: string, $taxonomy: string) {
 	};
 
 	let $TAX_ID = $meta.taxonomyRid;
-	if !$TAX_ID || !record::exists($TAX_ID) {
+	let $TAX_ROW = if type::is_record($TAX_ID) {
+		select * from only $TAX_ID
+	} else {
+		NONE
+	};
+	if !$TAX_ID || !(type::is_object($TAX_ROW) && type::is_record($TAX_ROW.id)) {
 		return [];
 	};
 
@@ -337,7 +426,12 @@ DEFINE FUNCTION fn::getRecordTerms($model: string, $taxonomy: string, $record: a
 	};
 
 	let $RID = fn::ridParam($model, $record);
-	if !type::is_record($RID) || !record::exists($RID) {
+	let $RID_ROW = if type::is_record($RID) {
+		select * from only $RID
+	} else {
+		NONE
+	};
+	if !type::is_record($RID) || !(type::is_object($RID_ROW) && type::is_record($RID_ROW.id)) {
 		throw "getRecordTerms | record not found";
 	};
 
