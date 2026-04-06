@@ -65,13 +65,13 @@ repos:
       - pmv2-admin
       - public
     status:
-      expected_release_id: schema-master-0002
+      expected_release_id: schema-master-0003
       last_verified_at: 2026-04-06
       last_verified_by: schema:repos:audit
-      local_main_commit: 3d35ca2
-      remote_main_commit: 3d35ca2
-      local_app_commit: 3ee07f8
-      remote_app_commit: 3ee07f8
+      local_main_commit: "6111977"
+      remote_main_commit: "6111977"
+      local_app_commit: 3c05cc9
+      remote_app_commit: 3c05cc9
       sync_state: dirty-working-tree
       notes:
         - Working tree is dirty with 180 change(s)
@@ -98,13 +98,45 @@ repos:
       - learning
       - live
     status:
-      expected_release_id: schema-master-0002
+      expected_release_id: schema-master-0003
       last_verified_at: 2026-04-06
       last_verified_by: schema:repos:audit
-      local_main_commit: 3d35ca2
-      remote_main_commit: 3d35ca2
-      local_app_commit: d405250
+      local_main_commit: "6111977"
+      remote_main_commit: "6111977"
+      local_app_commit: d3bbd73
       remote_app_commit: 429b397
       sync_state: app-unpushed
       notes:
         - Working tree is dirty with 301 change(s)
+  helios:
+    name: Helios
+    turbo_repo_path: /Users/michaelpeters/Dev/mpd/projects/mpd-helios-v2
+    schema_repo_path: /Users/michaelpeters/Dev/mpd/projects/mpd-helios-v2/apps/schema
+    shared_remote:
+      name: origin
+      url: git@github.com:mpireco/Schema.git
+      branch: main
+    app_remote:
+      name: app
+      url: git@github.com:mpireco/helios-scheme.git
+      branch: app
+    local_branches:
+      main: main
+      app: app
+    release_marker_path: .schema-release.yaml
+    projects:
+      - helios
+      - heliosadmin
+      - heliostest
+      - heliosfields
+    status:
+      expected_release_id: schema-master-0004
+      last_verified_at: 2026-04-06
+      last_verified_by: schema:repos:audit
+      local_main_commit: 4c3aa25
+      remote_main_commit: 4c3aa25
+      local_app_commit: 30c086d
+      remote_app_commit: 30c086d
+      sync_state: dirty-working-tree
+      notes:
+        - Working tree is dirty with 11 change(s)
