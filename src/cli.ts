@@ -25,6 +25,7 @@ import { generateTableTaxonomies } from './lib/taxonomyGenerator';
 import { generateTableRelations } from './lib/relationGenerator';
 import { generateRequestSchema } from './lib/requestSchemaGenerator';
 import { generateDatabasesExport } from './lib/databasesExport';
+import { generateSurrealMcpExport } from './lib/surrealMcpExport';
 import { generateModelsManifest } from './lib/modelsManifest';
 import { generateTableTypes } from './lib/typeGenerator';
 import { generateTrpcRouters } from './lib/routerGenerator';
@@ -2716,6 +2717,60 @@ export type AppRouter = typeof appRouter
       const projectRoot = path.resolve(__dirname, '..');
       const bundle = await loadConfigBundle(projectRoot);
       await generateDatabasesExport({ app: bundle.app, projectRoot });
+    }
+  )
+  .command(
+    'surrealmcp:generate [database]',
+    'Generate Surreal MCP docker compose + Codex config from app.config.yaml',
+    (yargsBuilder: any) =>
+      yargsBuilder
+        .positional('database', {
+          describe: 'Database key from app.config.yaml (defaults to surrealMcpExport.database or environment.defaultDatabase)',
+          type: 'string',
+        })
+        .option('port', {
+          type: 'number',
+          describe: 'Local MCP proxy port override',
+        })
+        .option('output', {
+          type: 'string',
+          describe: 'Compose output path override',
+        })
+        .option('codex-config', {
+          type: 'string',
+          describe: 'Codex config output path override',
+        })
+        .option('server-name', {
+          type: 'string',
+          describe: 'MCP server key override for .codex/config.toml',
+        })
+        .option('service-name', {
+          type: 'string',
+          describe: 'Docker compose service name override',
+        })
+        .option('container-name', {
+          type: 'string',
+          describe: 'Docker container name override',
+        })
+        .option('approval-mode', {
+          type: 'string',
+          describe: 'Approval mode for connect_endpoint in .codex/config.toml',
+        }),
+    async (args: any) => {
+      const projectRoot = path.resolve(__dirname, '..');
+      const bundle = await loadConfigBundle(projectRoot);
+      await generateSurrealMcpExport({
+        app: bundle.app,
+        projectRoot,
+        databaseKey: args.database,
+        port: args.port,
+        outputPath: args.output,
+        codexConfigOutputPath: args['codex-config'],
+        serverName: args['server-name'],
+        serviceName: args['service-name'],
+        containerName: args['container-name'],
+        approvalMode: args['approval-mode'],
+      });
     }
   )
   .command(

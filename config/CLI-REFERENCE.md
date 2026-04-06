@@ -116,6 +116,7 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   - Use `nuxt.config.ts` for manual overrides (merged after generated + runtime).
   - Merges `packageJson` from the site spec into `package.json` (arrays override, objects merge).
   - Writes `.env` and `.env.staging` when `env` is present in the site spec.
+  - Wraps the app `dev` script with `scripts/schema-dev.mjs` so local `NUXT_SITEURL` is printed before Nuxt starts.
   - Writes `ecosystem.config.cjs` when `deploy.ecosystem` is present.
   - If the site spec already includes `helios`, creates a safe root redirect (`/ -> /helios`) when missing.
   Flags:
@@ -163,6 +164,9 @@ pnpm -C apps/schema run site:project:setup -- --project admin
   Examples:
   - `pnpm -C apps/schema run site:env:sync:yaml -- my-site`
   - `pnpm -C apps/schema run site:env:sync:yaml -- --app apps/testapp --env env.yaml`
+  Notes:
+  - Keeps the target app `dev` script wrapped with `scripts/schema-dev.mjs`.
+  - If `.env` contains `NUXT_SITEURL`, running the app `dev` script prints that local browser URL before Nuxt logs its own ports.
 
 - `site:env [name]`  
   Alias for `site:env:sync:yaml`.  
@@ -281,6 +285,13 @@ pnpm -C apps/schema run site:project:setup -- --project admin
 
 - `databases:generate`  
   Generate databases export.
+
+- `surrealmcp:generate [database]`  
+  Generate `surrealmcp.compose.yml` and sync the matching MCP server block into `.codex/config.toml` from `app.config.yaml`.  
+  Examples:
+  - `pnpm -C apps/schema run surrealmcp:generate`
+  - `pnpm -C apps/schema run surrealmcp:generate -- helios`
+  - `pnpm -C apps/schema run surrealmcp:generate -- --port 911 --server-name surreal911`
 
 - `models:generate`  
   Generate models manifest.

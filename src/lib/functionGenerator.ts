@@ -108,7 +108,7 @@ export async function generateTableFunctions(options: GenerateFunctionsOptions):
         filePath: createPath,
         content,
         tracker,
-        compareContent: prev,
+        compareContent: prev ?? null,
         meta: {
           source: 'generated',
           layer: 'functions',
@@ -134,7 +134,7 @@ export async function generateTableFunctions(options: GenerateFunctionsOptions):
         filePath: updatePath,
         content,
         tracker,
-        compareContent: prev,
+        compareContent: prev ?? null,
         meta: {
           source: 'generated',
           layer: 'functions',
@@ -160,7 +160,7 @@ export async function generateTableFunctions(options: GenerateFunctionsOptions):
         filePath: deletePath,
         content,
         tracker,
-        compareContent: prev,
+        compareContent: prev ?? null,
         meta: {
           source: 'generated',
           layer: 'functions',
@@ -295,7 +295,7 @@ async function writeEventFiles(
         filePath,
         content,
         tracker,
-        compareContent: prev,
+        compareContent: prev ?? null,
         meta: {
           source: 'generated',
           layer: 'events',
@@ -330,7 +330,7 @@ async function writeEventFiles(
       filePath,
       content,
       tracker,
-      compareContent: prev,
+      compareContent: prev ?? null,
       meta: {
         source: 'generated',
         layer: 'events',
@@ -374,7 +374,13 @@ function buildCreateFunctionContent(
   const assignOverrides = buildAssignOverrides(fields, '$payload');
   const subtablePlans = buildSubtableCreatePlans(table, tablesByModel);
 
-  const relationValidations = buildRelationValidations(relationHooks, '$payload', functionName, 'create');
+  const relationValidations = buildRelationValidations(
+    relationHooks,
+    '$payload',
+    functionName,
+    'create',
+    fields
+  );
   const taxonomyValidations = buildTaxonomyValidations(taxonomyHooks, '$payload', functionName, 'create');
   const validations = buildRequiredFieldValidations(requiredFields, '$payload', functionName);
   const subtableValidations =
@@ -476,7 +482,7 @@ function buildCreateFunctionContent(
     lines.push(...recordFieldContracts, '');
   }
 
-  const relationCapture = buildRelationCaptureLines(relationHooks, '$payload');
+  const relationCapture = buildRelationCaptureLines(relationHooks, '$payload', fields);
   if (relationCapture.length > 0) {
     lines.push(...relationCapture, '');
   }
@@ -494,7 +500,7 @@ function buildCreateFunctionContent(
     lines.push(...taxonomyPayloadStrip, '');
   }
 
-  const relationNormalize = buildRelationNormalizationLines(relationHooks, '$payload', 'create');
+  const relationNormalize = buildRelationNormalizationLines(relationHooks, '$payload', 'create', fields);
   if (relationNormalize.length > 0) {
     lines.push(...relationNormalize, '');
   }
@@ -547,7 +553,8 @@ function buildCreateFunctionContent(
     '$recordID',
     '$payload',
     'create',
-    relationNormalize.length > 0
+    relationNormalize.length > 0,
+    fields
   );
   const taxonomyPost = buildTaxonomyPostProcessLines(
     taxonomyHooks,
@@ -701,7 +708,7 @@ function buildUpdateFunctionContent(
     lines.push(...hooks.postValidate, '');
   }
 
-  const relationCapture = buildRelationCaptureLines(relationHooks, payloadParam);
+  const relationCapture = buildRelationCaptureLines(relationHooks, payloadParam, fields);
   if (relationCapture.length > 0) {
     lines.push(...relationCapture, '');
   }
@@ -718,7 +725,7 @@ function buildUpdateFunctionContent(
     lines.push(...taxonomyStrip, '');
   }
 
-  const relationNormalize = buildRelationNormalizationLines(relationHooks, payloadParam, 'update');
+  const relationNormalize = buildRelationNormalizationLines(relationHooks, payloadParam, 'update', fields);
   if (relationNormalize.length > 0) {
     lines.push(...relationNormalize, '');
   }
@@ -742,7 +749,8 @@ function buildUpdateFunctionContent(
     '$rid',
     payloadParam,
     'update',
-    relationNormalize.length > 0
+    relationNormalize.length > 0,
+    fields
   );
   const taxonomyPost = buildTaxonomyPostProcessLines(
     taxonomyHooks,
@@ -1050,10 +1058,12 @@ function buildRelationValidations(
   relations: NormalizedRelation[] | undefined,
   payloadVar: string,
   functionName: string,
-  mode: 'create' | 'update'
+  mode: 'create' | 'update',
+  fields?: NormalizedField[]
 ): string[] {
   if (!relations || relations.length === 0) return [];
   if (mode !== 'create') return [];
+  const availableFieldNames = new Set((fields ?? []).map((field) => field.name));
   const lines: string[] = [];
   for (const relation of relations) {
     if (!relation.required) continue;
@@ -1065,7 +1075,7 @@ function buildRelationValidations(
     ) {
       continue;
     }
-    const field = relation.payloadField;
+    const field = relationHookInputField(relation, availableFieldNames);
     if (relation.cardinality === 'one') {
       lines.push(
         `\tif !${payloadVar}.${field} {`,
@@ -1089,13 +1099,16 @@ function buildRelationValidations(
 
 function buildRelationCaptureLines(
   relations: NormalizedRelation[] | undefined,
-  payloadVar: string
+  payloadVar: string,
+  fields?: NormalizedField[]
 ): string[] {
   if (!relations || relations.length === 0) return [];
+  const availableFieldNames = new Set((fields ?? []).map((field) => field.name));
   const lines: string[] = [];
   for (const relation of relations) {
-    const varName = relationVarName(relation.payloadField);
-    lines.push(`\tlet ${varName} = ${payloadVar}.${relation.payloadField};`);
+    const inputField = relationHookInputField(relation, availableFieldNames);
+    const varName = relationVarName(inputField, relation.edge);
+    lines.push(`\tlet ${varName} = ${payloadVar}.${inputField};`);
   }
   return lines;
 }
@@ -1476,19 +1489,26 @@ function buildSubtablePayloadExpression(rawVar: string, scalarField: string | nu
   return `if type::is_object(${rawVar}) { ${rawVar} } else if ${rawVar} = NONE || ${rawVar} = null { {} } else { { ${key}: ${rawVar} } }`;
 }
 
+const SURQL_RESERVED_BARE_OBJECT_KEYS = new Set(['access']);
+
 function formatObjectKey(key: string): string {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : JSON.stringify(key);
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !SURQL_RESERVED_BARE_OBJECT_KEYS.has(key)
+    ? key
+    : JSON.stringify(key);
 }
 
 function buildRelationNormalizationLines(
   relations: NormalizedRelation[] | undefined,
   payloadVar: string,
-  mode: 'create' | 'update'
+  mode: 'create' | 'update',
+  fields?: NormalizedField[]
 ): string[] {
   if (!relations || relations.length === 0) return [];
+  const availableFieldNames = new Set((fields ?? []).map((field) => field.name));
   const lines: string[] = [];
   for (const relation of relations) {
-    const varName = relationVarName(relation.payloadField);
+    const inputField = relationHookInputField(relation, availableFieldNames);
+    const varName = relationVarName(inputField, relation.edge);
     const normVar = `${varName}_norm`;
     lines.push(`\tlet ${normVar} = fn::toRecordArray('${relation.leftModel}', ${varName});`);
 
@@ -1547,14 +1567,17 @@ function buildRelationPostProcessLines(
   recordVar: string,
   payloadVar: string,
   mode: 'create' | 'update' | 'delete',
-  normVarsDeclared = false
+  normVarsDeclared = false,
+  fields?: NormalizedField[]
 ): string[] {
   if (!relations || relations.length === 0) return [];
+  const availableFieldNames = new Set((fields ?? []).map((field) => field.name));
   const lines: string[] = [];
   const recordIdExpr = recordVar;
 
   for (const relation of relations) {
-    const varName = relationVarName(relation.payloadField);
+    const inputField = relationHookInputField(relation, availableFieldNames);
+    const varName = relationVarName(inputField, relation.edge);
     const normVar = `${varName}_norm`;
     const edgeField = relation.hookModel === relation.leftModel ? 'in' : 'out';
     const deleteLine = `\tdelete from ${relation.edge} where ${edgeField} = ${recordIdExpr};`;
@@ -2074,8 +2097,34 @@ function resolveIdToken(token: string, payloadVar: string): string {
   return JSON.stringify(trimmed);
 }
 
-function relationVarName(field: string): string {
-  const sanitized = field.replace(/[^a-zA-Z0-9_]/g, '_');
+function relationHookInputField(
+  relation: NormalizedRelation,
+  availableFieldNames?: Set<string>
+): string {
+  const payloadField = relation.payloadField;
+  if (!availableFieldNames || relation.sourceModel === relation.hookModel) {
+    return payloadField;
+  }
+
+  const candidates =
+    relation.hookModel === relation.rightModel
+      ? [relation.leftModel, sanitizeCamel(relation.leftLabel)]
+      : relation.hookModel === relation.leftModel
+        ? [relation.rightModel, sanitizeCamel(relation.rightLabel)]
+        : [];
+
+  for (const candidate of candidates) {
+    if (candidate && availableFieldNames.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return payloadField;
+}
+
+function relationVarName(field: string, edge?: string): string {
+  const base = edge ? `${edge}_${field}` : field;
+  const sanitized = base.replace(/[^a-zA-Z0-9_]/g, '_');
   return `$rel_${sanitized}`;
 }
 
@@ -2666,7 +2715,7 @@ function buildDefaultsObject(
   }
 
   const entries = fields.map(
-    (field) => `\t\t${field.name}: ${resolveFieldDefault(field, payloadVar, 2, parentVar)},`
+    (field) => `\t\t${formatObjectKey(field.name)}: ${resolveFieldDefault(field, payloadVar, 2, parentVar)},`
   );
   return entries.join('\n');
 }
@@ -2732,7 +2781,7 @@ function buildObjectLiteral(
   const lines: string[] = ['{'];
   for (const child of fields) {
     lines.push(
-      `${childIndent}${child.name}: ${resolveFieldDefault(child, payloadVar, depth + 1, parentVar)},`
+      `${childIndent}${formatObjectKey(child.name)}: ${resolveFieldDefault(child, payloadVar, depth + 1, parentVar)},`
     );
   }
   lines.push(`${indent}}`);
@@ -3328,6 +3377,12 @@ function replaceFieldReferences(value: string, payloadVar: string, parentVar?: s
   if (parentVar) {
     reserved.add(parentVar.replace(/^\$/, ''));
     reserved.add(parentVar.replace(/^\$/, '').toLowerCase());
+  }
+  for (const match of withParent.matchAll(/\|\s*\$([A-Za-z_][\w]*)\s*\|/g)) {
+    const lambdaVar = String(match[1] || '').trim();
+    if (!lambdaVar) continue;
+    reserved.add(lambdaVar);
+    reserved.add(lambdaVar.toLowerCase());
   }
   const reservedPattern = Array.from(reserved).join('|');
   const refRegex = new RegExp(`\\$(?!${reservedPattern}\\b)([A-Za-z_][\\w]*)`, 'gi');

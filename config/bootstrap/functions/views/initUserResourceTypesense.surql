@@ -1,4 +1,4 @@
-DEFINE FUNCTION fn::initUserResourceTypesense($UID: record) {
+DEFINE FUNCTION OVERWRITE fn::initUserResourceTypesense($UID: record) {
 	
 	if !$UID {
     THROW "initUserResourceTypesense | UID is required";
@@ -8,7 +8,9 @@ DEFINE FUNCTION fn::initUserResourceTypesense($UID: record) {
 		THROW "initUserResourceTypesense | UID doesn't exist";
 	};
 
-  return select *,
+	let $ResolvedAccess = fn::reconcileUserAccess($UID);
+	let $TrialID = type::record('uTrial', record::id($UID));
+	let $Resource = select *,
 		
 		(
 			select currency,lastCheckout from only type::record('uState', $this.id)
@@ -37,37 +39,23 @@ DEFINE FUNCTION fn::initUserResourceTypesense($UID: record) {
 		) as instance,
 
 		(
-			select exam,exam_date from uExamDate where <-(UserExamDates where in = $UID)
-		) as examDates,
-
-		{
-			return select 
-				*,
-				{
-					let $UAccessID = $this.id;
-					return select 
-						create_datetime,
-						expiry_datetime,
-						start_datetime,
-						({
-							"id": $this.exam.id,
-							"title": $this.exam.title,
-							"titleShort": $this.exam.titleShort
-						}) as exam
-					from uSubscription where 
-						<-(Subscriptions where in = $UAccessID)
-						fetch exam;
-				} as subscriptions,
-				{
-					let $UID = $this.id;
-					return select exam, s,sessionComplete, startDate, sessionStartDate from only type::record('uTrial', $UID)
-				} as trial
-			from only type::record('uAccess', record::id($UID))
-			
-		} as access
-
+			select exam, examDate from uExamDate where <-(UserExamDate where in = $UID)
+		) as examDates
     omit password, dateCreated
 
   from only $UID;
+	let $Resource = if type::is_array($Resource) { array::first($Resource) } else { $Resource };
+
+	return fn::objectAssign($Resource, {
+		"access": {
+			"access": if type::is_object($ResolvedAccess) && type::is_string($ResolvedAccess.access) { $ResolvedAccess.access } else { "none" },
+			"subscriptions": fn::userAccessibleSubscriptions($UID),
+			"trial": if record::exists($TrialID) {
+				select exam, s, sessionComplete, sessionCompleteDate, sessionStarted, sessionStartDate, startDate from only $TrialID
+			} else {
+				NONE
+			}
+		}
+	});
 
 };

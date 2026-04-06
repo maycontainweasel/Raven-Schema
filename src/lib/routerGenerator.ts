@@ -14,7 +14,6 @@ import type {
 } from '../types';
 import {
   CrudOperationKind,
-  getParentModelValue,
   isSubTable,
   isOperationEnabled,
   normalizeCrudConfig,
@@ -891,7 +890,12 @@ async function buildRouterFile(
     if (countSchemaIdentifier) {
       fileSegments.push(buildViewCountInputSchema(countSchemaIdentifier), '');
     }
-    viewOperationSchemas.push({ methodKey: operationKey, schemaIdentifier, viewName, countSchemaIdentifier });
+    viewOperationSchemas.push({
+      methodKey: operationKey,
+      schemaIdentifier,
+      viewName,
+      ...(countSchemaIdentifier ? { countSchemaIdentifier } : {}),
+    });
   }
 
   for (const [operationKey, config] of mainFunctionOperations) {
@@ -908,7 +912,12 @@ async function buildRouterFile(
     if (countSchemaIdentifier) {
       fileSegments.push(buildViewCountInputSchema(countSchemaIdentifier), '');
     }
-    functionOperationSchemas.push({ methodKey: operationKey, schemaIdentifier, functionName, countSchemaIdentifier });
+    functionOperationSchemas.push({
+      methodKey: operationKey,
+      schemaIdentifier,
+      functionName,
+      ...(countSchemaIdentifier ? { countSchemaIdentifier } : {}),
+    });
   }
 
   const routerLines: string[] = [];
@@ -1982,7 +1991,9 @@ function buildTaxonomyRouters(
     const fnGetModel = functionOverrides?.getModelTerms ?? `get${prefix}Terms`;
     const fnGetTable = functionOverrides?.getTableTerms ?? `get${prefix}s`;
 
-    const createTaxonomyCall = `RETURN fn::${fnCreate}($payload);`;
+    const createTaxonomyCall = generateNamedFunctions
+      ? `RETURN fn::${fnCreate}($payload);`
+      : `RETURN fn::createTaxonomy("${tableModel}", "${key}", $payload);`;
     const addTermCall = generateNamedFunctions
       ? `RETURN fn::${fnAdd}($payload);`
       : `RETURN fn::createTerm("${tableModel}", "${key}", $payload);`;
@@ -3214,7 +3225,12 @@ function resolveResourceView(
     }
     const mapped = definitionViewMap.get(normalized);
     if (mapped) {
-      return { viewName: mapped.viewName, returnId: mapped.returnId, tableModel, functionName: mapped.functionName };
+      return {
+        viewName: mapped.viewName,
+        returnId: mapped.returnId,
+        tableModel,
+        ...(mapped.functionName ? { functionName: mapped.functionName } : {}),
+      };
     }
   }
 
@@ -3242,11 +3258,12 @@ function buildResourceDefinitionViewMap(
     }
     const viewName = `${tableNamePascal}${sanitizePascal(definition.name)}`;
     const returnId = definition.returnId === 'view' ? 'view' : 'record';
-    map.set(normalized, {
-      viewName,
-      returnId,
-      functionName: definition.function,
-    });
+    map.set(
+      normalized,
+      definition.function
+        ? { viewName, returnId, functionName: definition.function }
+        : { viewName, returnId }
+    );
   }
   return map;
 }

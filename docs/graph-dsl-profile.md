@@ -601,6 +601,7 @@ Generic taxonomy helpers (SurrealQL)
 ------------------------------------
 All per‑taxonomy SURQL helpers are now thin wrappers around the generic taxonomy
 API defined in `config/bootstrap/functions/utility/taxonomyTerms.surql`:
+- `fn::createTaxonomy(model, taxonomy, payload)`
 - `fn::createTerm(model, taxonomy, payload)`
 - `fn::updateTerm(model, taxonomy, term, payload)`
 - `fn::removeTerm(model, taxonomy, term)`
@@ -610,9 +611,11 @@ API defined in `config/bootstrap/functions/utility/taxonomyTerms.surql`:
 - `fn::getRecordTerms(model, taxonomy, record)`
 
 This means every taxonomy uses the same attach/detach semantics, edge creation,
-and store‑on‑model logic. The generated `add...Term`, `remove...Term`,
-`attach...Term`, `detach...Term`, `get...Terms`, and `get...RecordTerms`
-functions simply call the generic versions.
+and store‑on‑model logic. When `generateNamedFunctions: false`, generated
+routers call these generic helpers directly instead of taxonomy-specific
+wrappers. The generated `add...Term`, `remove...Term`, `attach...Term`,
+`detach...Term`, `get...Terms`, and `get...RecordTerms` functions simply call
+the generic versions.
 
 `attachTerm` / `detachTerm` options:
 - `skipExists: true` bypasses the record existence check (useful immediately after create).

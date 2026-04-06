@@ -50,6 +50,22 @@ Per‑database fields:
 - `allowScripting` (boolean): whether to allow script execution.
 - `root` (boolean): mark as a root instance (e.g. mothership).
 
+## surrealMcpExport
+
+Controls generation of a repo-local Surreal MCP docker compose file and the
+matching `.codex/config.toml` MCP server block.
+
+- `output` (string): compose output path, relative to the repository root.
+- `codexConfigOutput` (string): Codex config output path, relative to the repository root.
+- `database` (string): database key from `databases.*` to proxy through MCP.
+- `port` (number): local MCP proxy port.
+- `serverName` (string): MCP server key written to `.codex/config.toml`.
+- `serviceName` (string): Docker compose service name.
+- `containerName` (string): Docker container name.
+- `dockerHost` (string): hostname used inside Docker when the database URL points at localhost.
+- `enabled` (boolean): whether the generated MCP server is enabled in `.codex/config.toml`.
+- `approvalMode` (string): approval mode written for `tools.connect_endpoint`.
+
 ## paths
 
 Filesystem locations used by the tooling.

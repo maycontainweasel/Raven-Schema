@@ -16,13 +16,14 @@ export function getSurrealDb(): SurrealDbAuth {
   return {
     async register({ email, firstName, surname, password, role }) {
       const query = `
-        LET $id = SELECT value id FROM user WHERE email = $email LIMIT 1;
-        IF $id THEN
+        LET $EMAIL = string::lowercase($email);
+        LET $id = type::record('u', $EMAIL);
+        IF record::exists($id) THEN
           RETURN { err: "email_taken" };
         END;
         LET $role = if $role THEN $role ELSE "student" END;
         LET $user = fn::createUser({
-          email: string::lowercase($email),
+          email: $EMAIL,
           firstName: $firstName,
           surname: $surname,
           password: $password,
@@ -49,7 +50,10 @@ export function getSurrealDb(): SurrealDbAuth {
       let uid: string
       if (typeof UserID === 'object' && (UserID as any)?.tb && (UserID as any)?.id) {
         const raw = (UserID as any).id as string
-        const idValue = raw.includes('@') || raw.includes('-') ? `⟨${raw}⟩` : raw
+        const normalized = raw.replace(/^⟨/, '').replace(/⟩$/, '').replace(/^`/, '').replace(/`$/, '')
+        const idValue = normalized.includes('@') || normalized.includes('-') || normalized.includes('|')
+          ? `\`${normalized}\``
+          : normalized
         uid = `${(UserID as any).tb}:${idValue}`
       } else if (typeof UserID === 'string') {
         uid = UserID
@@ -74,7 +78,10 @@ export function getSurrealDb(): SurrealDbAuth {
       let uid: string
       if (typeof res.id === 'object' && res.id.tb && res.id.id) {
         const raw = res.id.id as string
-        const idValue = raw.includes('@') || raw.includes('-') ? `⟨${raw}⟩` : raw
+        const normalized = raw.replace(/^⟨/, '').replace(/⟩$/, '').replace(/^`/, '').replace(/`$/, '')
+        const idValue = normalized.includes('@') || normalized.includes('-') || normalized.includes('|')
+          ? `\`${normalized}\``
+          : normalized
         uid = `${res.id.tb}:${idValue}`
       } else if (typeof res.id === 'string') {
         uid = res.id

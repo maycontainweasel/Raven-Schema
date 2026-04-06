@@ -14,9 +14,17 @@ type Cfg = {
   pass: string
 }
 
+type FeatureCfg = {
+  reconnectOnAuthLoss: boolean
+  retryFailedRequestsAfterReconnect: boolean
+}
+
+function readRuntimeCfg(): any {
+  return typeof useRuntimeConfig === 'function' ? useRuntimeConfig() : {}
+}
+
 function readConfig(): Cfg {
-  const rc: any =
-    typeof useRuntimeConfig === 'function' ? useRuntimeConfig() : {}
+  const rc = readRuntimeCfg()
   const s = rc?.surrealdb || {}
   return {
     url: s.url || process.env.NUXT_SURREALDB_URL || '',
@@ -25,6 +33,43 @@ function readConfig(): Cfg {
     user: s.user || process.env.NUXT_SURREALDB_USER || '',
     pass: s.pass || process.env.NUXT_SURREALDB_PASS || '',
   }
+}
+
+function readFeatureConfig(): FeatureCfg {
+  const rc = readRuntimeCfg()
+  const raw = rc?.schemaKit?.features?.surrealdb
+  if (raw === false) {
+    return {
+      reconnectOnAuthLoss: false,
+      retryFailedRequestsAfterReconnect: false,
+    }
+  }
+  if (!raw || raw === true) {
+    return {
+      reconnectOnAuthLoss: true,
+      retryFailedRequestsAfterReconnect: true,
+    }
+  }
+  return {
+    reconnectOnAuthLoss: raw.reconnectOnAuthLoss !== false,
+    retryFailedRequestsAfterReconnect: raw.retryFailedRequestsAfterReconnect !== false,
+  }
+}
+
+function getErrorMessage(error: any): string {
+  return String(error?.message || error || '')
+}
+
+function isRecoverableAuthLoss(error: any): boolean {
+  const message = getErrorMessage(error).toLowerCase()
+  return (
+    message.includes('token has expired') ||
+    message.includes('jwt expired') ||
+    message.includes('expired token') ||
+    message.includes('anonymous access not allowed') ||
+    (message.includes('not enough permissions to perform this action') &&
+      message.includes('anonymous'))
+  )
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string) {
@@ -49,6 +94,7 @@ function createSurrealDBServerPlugin(appName: string) {
     if (globalThis.surrealDb) return
 
     const cfg = readConfig()
+    const featureCfg = readFeatureConfig()
     if (!cfg.url) {
       throw new Error('surrealdb: NUXT_SURREALDB_URL is not set')
     }
@@ -94,40 +140,82 @@ function createSurrealDBServerPlugin(appName: string) {
       await signin()
       console.info('[surrealdb] Connected successfully')
     } catch (e: any) {
-      const msg = e?.message || String(e)
+      const msg = getErrorMessage(e)
       console.error('[surrealdb] Initial connection failed:', msg)
       try { globalThis.$SE?.(new Error(`Surreal initial connect failed: ${msg}`), { app: appName }) } catch {}
       throw e
     }
 
-    // wrap query: timeout + one retry on expired token
-    const originalQuery = client.query.bind(client)
-    client.query = (async (...args: any[]) => {
-      try {
-        return await withTimeout(originalQuery(...(args as [any])), 30000, 'query')
-      } catch (e: any) {
-        const msg = String(e?.message || e).toLowerCase()
-        const expired = msg.includes('token has expired') || msg.includes('jwt expired') || msg.includes('expired token')
-        if (expired) {
-          console.warn('[surrealdb] JWT expired; re-signing in and retrying once...')
+    const reportFailure = (message: string) => {
+      try { globalThis.$SE?.(new Error(message), { app: appName }) } catch {}
+    }
+
+    const OPERATION_TIMEOUT_MS = 30000
+    const wrapClientMethod = (methodName: string) => {
+      const original = (client as any)[methodName]
+      if (typeof original !== 'function') return
+      const bound = original.bind(client)
+      ;(client as any)[methodName] = async (...args: any[]) => {
+        try {
+          return await withTimeout(bound(...args), OPERATION_TIMEOUT_MS, methodName)
+        } catch (error: any) {
+          if (!featureCfg.reconnectOnAuthLoss || !isRecoverableAuthLoss(error)) {
+            reportFailure(`Surreal ${methodName} failed: ${getErrorMessage(error)}`)
+            throw error
+          }
+
+          console.warn(
+            `[surrealdb] Auth session lost during ${methodName}; reconnecting and retrying once...`
+          )
+
           try {
             await ensureSignedInOnce()
-            return await withTimeout(originalQuery(...(args as [any])), 30000, 'query(retry)')
-          } catch (e2: any) {
-            console.error('[surrealdb] Re-signin + retry failed:', e2?.message || e2)
-            try { globalThis.$SE?.(new Error(`Surreal reauth+retry failed: ${e2?.message || e2}`), { app: appName }) } catch {}
-            throw e2
+          } catch (reauthError: any) {
+            console.error('[surrealdb] Re-signin failed:', getErrorMessage(reauthError))
+            reportFailure(
+              `Surreal reauth failed after ${methodName}: ${getErrorMessage(reauthError)}`
+            )
+            throw reauthError
+          }
+
+          if (featureCfg.retryFailedRequestsAfterReconnect === false) {
+            throw error
+          }
+
+          try {
+            return await withTimeout(bound(...args), OPERATION_TIMEOUT_MS, `${methodName}(retry)`)
+          } catch (retryError: any) {
+            console.error(
+              `[surrealdb] Retry after re-signin failed for ${methodName}:`,
+              getErrorMessage(retryError)
+            )
+            reportFailure(
+              `Surreal ${methodName} retry failed after reauth: ${getErrorMessage(retryError)}`
+            )
+            throw retryError
           }
         }
-        try { globalThis.$SE?.(new Error(`Surreal query failed: ${e?.message || e}`), { app: appName }) } catch {}
-        throw e
       }
-    }) as typeof client.query
+    }
+
+    for (const methodName of [
+      'query',
+      'select',
+      'create',
+      'update',
+      'merge',
+      'patch',
+      'delete',
+      'insert',
+      'upsert',
+    ]) {
+      wrapClientMethod(methodName)
+    }
 
     const KEEPALIVE_MS = 45 * 60 * 1000
     const timer = setInterval(async () => {
       try { await client.query('RETURN 1') } catch (err: any) {
-        console.warn('[surrealdb] Keepalive error:', err?.message || err)
+        console.warn('[surrealdb] Keepalive error:', getErrorMessage(err))
       }
     }, KEEPALIVE_MS)
     // @ts-ignore

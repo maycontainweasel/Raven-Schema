@@ -6,13 +6,13 @@ define function overwrite fn::defaultInstance($options: option<object>) {
 
   let $options = fn::objectAssign($defaults, $options ?? {});
   
-  let $localInstanceCode = select value instance from only type::record("instance", "local");
+  let $localInstanceID = type::record("instance", "local");
 
-  if($localInstanceCode) {
+  if(fn::RIDExists($localInstanceID)) {
       if($options.returnArray) {
-          return [$localInstanceCode];
+          return ["local"];
       } else {
-          return $localInstanceCode;
+          return "local";
       };
   } else {
       if($options.errorOnMissing) {

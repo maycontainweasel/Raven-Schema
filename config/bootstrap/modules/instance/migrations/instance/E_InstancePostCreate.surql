@@ -5,8 +5,8 @@ fn::createPost({
   id: $RID,
   title: record::id($RID)
 });
+fn::attachRecordToPost($RID, { skipExists: true });
 let $PID = fn::PID($RID);
-fn::createEdge($PID, "Post", $RID, { boundId: true, overwrite: false, skipExists: true });
 
 if($after.status == 'publish') {
   fn::updatePost($PID, {

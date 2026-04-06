@@ -27,11 +27,18 @@ server {
     listen {LISTEN_PORT} ssl;
     http2 on;
     server_name {NAME};
+    client_max_body_size 64m;
+    client_body_temp_path /tmp/nginx-client-body 1 2;
 
     ssl_certificate     {CERTS_PATH}/{NAME}.pem;
     ssl_certificate_key {CERTS_PATH}/{NAME}-key.pem;
 
-    location / { proxy_pass http://127.0.0.1:{PORT}; }
+    location / {
+      proxy_buffering off;
+      proxy_request_buffering off;
+      proxy_read_timeout 300s;
+      proxy_pass http://127.0.0.1:{PORT};
+    }
 
     location ~ ^/(?:_nuxt/)?__vitews$ {
       proxy_http_version 1.1;

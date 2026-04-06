@@ -33,7 +33,11 @@ type SchemaKitConfig = {
       sourceMaps?: boolean
     } | boolean
     redis?: { enabled?: boolean } | boolean
-    surrealdb?: { enabled?: boolean } | boolean
+    surrealdb?: {
+      enabled?: boolean
+      reconnectOnAuthLoss?: boolean
+      retryFailedRequestsAfterReconnect?: boolean
+    } | boolean
     notify?: boolean
   }
 }

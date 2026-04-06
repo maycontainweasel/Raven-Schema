@@ -6,3 +6,4 @@
 - `module/src/resources/composables/useTypesense.ts`: server-backed Typesense transport.
 - `module/src/resources/composables/useTypesenseDirectory.ts`: directory state and search behavior.
 - `module/docs/controllers/<model>.md`: model-specific endpoint and payload reference.
+- Consumer apps may also have committed custom references such as `app/pages/exams/**` for source-authority directory + record flows.

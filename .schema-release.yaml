@@ -1,0 +1,9 @@
+version: 1
+repo_key: raven
+repo_name: Raven
+shared_framework:
+  release_id: schema-master-0004
+  release_commit: 6d9fcb0
+  applied_shared_head_commit: b07c0e9
+  applied_at: 2026-04-06T15:10:00.000Z
+  applied_by: schema:repos:sync-manual-ours

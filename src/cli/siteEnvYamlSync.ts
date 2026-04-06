@@ -4,6 +4,7 @@ import YAML from 'yaml';
 
 import { toKebabCase } from './util';
 import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
+import { applySiteDevRunner, ensureSiteDevRunner, isSiteDevRunner } from '../lib/siteDevRunner';
 
 interface SiteSpec {
   name: string;
@@ -436,13 +437,25 @@ async function updatePackageJson(appRoot: string, repoRoot: string): Promise<voi
   const packagePath = path.join(appRoot, 'package.json');
   const content = await readFile(packagePath, 'utf-8').catch(() => null);
   if (!content) return;
+  await ensureSiteDevRunner(appRoot);
   const base = JSON.parse(content) as Record<string, unknown>;
+  const baseScripts = isPlainObject(base.scripts) ? (base.scripts as Record<string, unknown>) : {};
+  const currentDevCommand = typeof baseScripts.dev === 'string' ? baseScripts.dev : null;
   const override: Record<string, unknown> = {};
 
   override.scripts = {
-    ...(isPlainObject(base.scripts) ? base.scripts : {}),
+    ...baseScripts,
     build: 'dotenv -e .env.staging -- nuxi build',
   };
+  const wrappedDevCommand = applySiteDevRunner(
+    isSiteDevRunner(currentDevCommand) ? currentDevCommand : currentDevCommand ?? 'nuxt dev'
+  );
+  if (wrappedDevCommand) {
+    override.scripts = {
+      ...(override.scripts as Record<string, unknown>),
+      dev: wrappedDevCommand,
+    };
+  }
   override.dependencies = {
     ...(isPlainObject(base.dependencies) ? base.dependencies : {}),
     'dotenv-cli': '^10.0.0',

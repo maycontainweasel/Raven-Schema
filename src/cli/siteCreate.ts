@@ -13,6 +13,7 @@ import { loadLayerPackages, mergePackages } from '../lib/sitePackages';
 import { loadLayerEnvDefaults, mergeEnvDefaults } from '../lib/siteEnvDefaults';
 import { collectLayerNuxtDefaults, mergeDefaults, mergeModuleList, mergeOverride } from '../lib/layerNuxtConfig';
 import { normalizeConfigValue, writeGeneratedNuxtConfig } from '../lib/siteNuxtConfig';
+import { applySiteDevRunner, ensureSiteDevRunner, isSiteDevRunner } from '../lib/siteDevRunner';
 import { ensureSchemaKitModule } from '../lib/schemaKitModule';
 import { syncProjectLayers } from '../lib/layerSync';
 import { ensureHeliosAppScaffold } from './heliosBootstrap';
@@ -369,22 +370,31 @@ async function updatePackageJson(
   const packagePath = path.join(targetPath, 'package.json');
   const content = await readFile(packagePath, 'utf-8').catch(() => null);
   if (!content) return;
+  await ensureSiteDevRunner(targetPath);
   const base = JSON.parse(content) as Record<string, unknown>;
   const overrideRaw = normalizeConfigValue(spec.packageJson ?? {});
   const override = isPlainObject(overrideRaw) ? overrideRaw : {};
+  const baseScripts = isPlainObject(base.scripts) ? (base.scripts as Record<string, unknown>) : {};
+  const currentDevCommand = typeof baseScripts.dev === 'string' ? baseScripts.dev : null;
 
-  const port = resolveDevServerPort(spec.nuxtConfig);
-  if (port && !hasScriptOverride(override, 'dev')) {
-    override.scripts = {
-      ...(isPlainObject(base.scripts) ? base.scripts : {}),
-      ...(isPlainObject(override.scripts) ? override.scripts : {}),
-      dev: `nuxt dev --port ${port}`,
-    };
+  if (!hasScriptOverride(override, 'dev')) {
+    const port = resolveDevServerPort(spec.nuxtConfig);
+    const preferredDevCommand = isSiteDevRunner(currentDevCommand)
+      ? currentDevCommand
+      : currentDevCommand ?? (port ? `nuxt dev --port ${port}` : 'nuxt dev');
+    const wrappedDevCommand = applySiteDevRunner(preferredDevCommand);
+    if (wrappedDevCommand) {
+      override.scripts = {
+        ...baseScripts,
+        ...(isPlainObject(override.scripts) ? override.scripts : {}),
+        dev: wrappedDevCommand,
+      };
+    }
   }
 
   if (spec.env && Object.keys(spec.env).length > 0 && !hasScriptOverride(override, 'build')) {
     override.scripts = {
-      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...baseScripts,
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
       build: 'dotenv -e .env.staging -- nuxi build',
     };
@@ -398,7 +408,7 @@ async function updatePackageJson(
   if (!hasScriptOverride(override, 'inst')) {
     const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
     override.scripts = {
-      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...baseScripts,
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
       inst: `pnpm -C ${relRoot} --filter ${slug} install`,
     };
@@ -406,7 +416,7 @@ async function updatePackageJson(
   if (!hasScriptOverride(override, 'add')) {
     const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
     override.scripts = {
-      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...baseScripts,
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
       add: `pnpm -C ${relRoot} --filter ${slug} add`,
     };
@@ -414,7 +424,7 @@ async function updatePackageJson(
   if (!hasScriptOverride(override, 'remove')) {
     const relRoot = toPosixPath(path.relative(targetPath, repoRoot)) || '.';
     override.scripts = {
-      ...(isPlainObject(base.scripts) ? base.scripts : {}),
+      ...baseScripts,
       ...(isPlainObject(override.scripts) ? override.scripts : {}),
       remove: `pnpm -C ${relRoot} --filter ${slug} remove`,
     };

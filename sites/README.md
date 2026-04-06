@@ -118,6 +118,17 @@ Current merge behavior:
 - objects are deep merged
 - explicit values in `nuxt.config.ts` override previous merged values
 
+## Local Dev URL Banner
+
+When a site has `NUXT_SITEURL` in `env.yaml`, schema site tooling now treats that as the preferred local browser URL.
+
+- `site:create` seeds `NUXT_SITEURL` from nginx-aware site defaults when available
+- `site:env` / `site:env:sync:yaml` writes `.env` from `env.yaml`
+- package sync writes `scripts/schema-dev.mjs` into the target app and wraps the app `dev` script
+- running `pnpm run dev` or `bun run dev` in the app prints the local site URL before Nuxt starts
+
+This is intended for local nginx-backed domains like `https://orbit.local:4443` so the terminal shows a clickable browser URL, not only the raw Nuxt port.
+
 ## Deployment Modes
 
 Full pipeline (`site:deploy`):

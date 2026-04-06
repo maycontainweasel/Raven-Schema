@@ -1,199 +1,113 @@
 # Schema Framework Promotion Playbook
 
-Use this when a schema change is made inside an app-side schema repo and needs to become shared framework truth in `origin/main`, then be applied into other schema app repos such as Lucky.
+Use this when framework work is discovered in a child schema repo and must become shared truth in the master `apps/schema` repo, then be propagated back out to child repos.
 
-## Purpose
+## Canonical model
 
-This repo has two distinct roles:
+- `apps/schema` is the only master schema repo.
+- `origin/main` in the master repo is the shared framework line.
+- Each child schema repo keeps:
+  - local `main`: exact mirror of shared `origin/main`
+  - local `app`: app-specific schema repo with the latest shared framework already integrated
 
-- `origin/main`: shared schema framework template
-- `app/app`: app-specific schema repo with graph state, generated assets, site specs, and project context
+The authoritative repo inventory lives in `docs/ai/repo-registry.yaml`.
 
-Do not treat those as normal long-lived branches of one codebase. They serve different purposes.
+## Control-plane files
 
-## Core rule
+- `docs/ai/control-plane.md`
+- `docs/ai/repo-registry.yaml`
+- `docs/ai/framework-release-log.md`
+- `docs/ai/framework-promotion-ledger.md`
+- `docs/ai/workstreams/schema-repo-operations/`
 
-Do not merge `main` into `app`.
+## Shared versus app-owned
 
-`main` omits generated app state by design, so merging it into `app` creates destructive noise. Promote framework changes by commit or patch, then cherry-pick those framework commits into each app-side schema repo.
-
-## What belongs in `origin/main`
-
-Framework-safe changes only:
+Shared framework work belongs in master `origin/main`:
 
 - schema tooling under `src/**`
-- schema module runtime templates under `module/**`
-- schema-owned AI guidance under `AGENTS.md`, `docs/AGENTS.md`, `docs/ai/**`, `.agents/**`, `module/ai-bundle/**`
-- package or config changes required for shared tooling
+- shared scripts under `scripts/**`
+- shared runtime/module code under `module/**`
+- shared AI guidance under `AGENTS.md`, `docs/ai/**`, `.agents/**`
+- shared bootstrap assets that genuinely belong to the framework
 
-## What stays app-side
-
-App-owned or generated state:
+App-owned state stays in child `app`:
 
 - `config/graph.mpdg`
 - `config/specs/**`
 - `config/migrations/**`
 - `config/schema-assets.json`
 - `sites/**`
-- app-specific `config/app.config.yaml` project settings unless the setting is genuinely shared framework behaviour
-- generated site/runtime output tied to one app's models
+- app-specific project settings in `config/app.config.yaml`
+- generated assets tied to one app’s model set
 
-## Current framework bundle for the agent-guidance rollout
+Promotion rules for first-pass classification live in `docs/ai/repo-registry.yaml`.
 
-For the work done in PassMed, the framework-worthy file families are:
+## Promotion workflow
 
-- `.agents/skills/schema-*`
-- `AGENTS.md`
-- `docs/AGENTS.md`
-- `docs/AI-INSTRUCTIONS.md`
-- `docs/AI-READ-HERE.md`
-- `docs/admin-runtime-reference.md`
-- `docs/admin-runtime-toolkit-plan.md`
-- `docs/admin-runtime-recipe-tutorial.md`
-- `docs/ai/**`
-- `module/AGENTS.md`
-- `module/ai-bundle/**`
-- `package.json`
-- `src/cli.ts`
-- `src/lib/schemaKitModule.ts`
-- `src/lib/routerGenerator.ts`
-- `src/types/config.ts`
+1. Audit the child repo from master.
+2. Classify framework-safe versus app-owned changes.
+3. Pull framework-safe changes into the master working tree.
+4. Review and commit the master promotion.
+5. Update `framework-release-log.md`.
+6. Push master `origin/main`.
+7. Fan the shared release back out to affected child repos.
 
-For this rollout, exclude:
+## Command surface
 
-- `config/**`
-- `sites/**`
-- `schema.zip`
-- app-owned graph/spec/migration changes
-
-## Promotion workflow from app repo to `origin/main`
-
-Use the app-side schema repo that contains the latest framework work. In the current case, that is PassMed.
-
-1. Start from a clean promotion branch off local `main`.
-2. Bring over only the framework file families listed above from the app-side work.
-3. Commit those files as a framework promotion commit.
-4. Test the schema workspace.
-5. Push that commit to `origin/main`.
-6. Cherry-pick that same commit onto the local `app` branch so the app-side schema repo also contains the shared framework commit.
-
-### Recommended command shape
-
-From the schema repo root:
+From `apps/schema`:
 
 ```bash
-git switch main
-git pull origin main
-git switch -c promote/<topic>
-
-# Bring over only framework files from the source branch or worktree.
-git checkout <source-branch> -- \
-  .agents \
-  AGENTS.md \
-  docs/AGENTS.md \
-  docs/AI-INSTRUCTIONS.md \
-  docs/AI-READ-HERE.md \
-  docs/admin-runtime-reference.md \
-  docs/admin-runtime-toolkit-plan.md \
-  docs/admin-runtime-recipe-tutorial.md \
-  docs/ai \
-  module/AGENTS.md \
-  module/ai-bundle \
-  package.json \
-  src/cli.ts \
-  src/lib/schemaKitModule.ts \
-  src/lib/routerGenerator.ts \
-  src/types/config.ts
-
-git status --short
-git commit -m "Promote schema agent guidance and resource hardening"
-git push origin HEAD:main
+pnpm run schema:repos:audit -- <repo-key> --refresh
+pnpm run schema:repos:promote -- <repo-key>
+pnpm run schema:repos:promote -- <repo-key> --apply-safe
 ```
 
-After `origin/main` is updated:
+After the shared release is committed and pushed:
 
 ```bash
-git switch app
-git pull app app
-git cherry-pick <framework-commit-sha>
-git push app HEAD:app
+pnpm run schema:repos:sync -- <repo-key> --apply --push-app --update-registry
 ```
 
-## Propagation workflow for another app schema repo
-
-Use this for Lucky or any other schema consumer repo that also has `origin/main` and `app/app`.
-
-1. Fetch both remotes.
-2. Update local `main` from `origin/main`.
-3. Cherry-pick the new shared framework commit(s) from `origin/main` onto local `app`.
-4. Run generation or AI sync as needed for that app repo.
-5. Validate emitted AGENTS, skills, and generated routers in the consumer apps.
-
-### Recommended command shape
+For multiple repos:
 
 ```bash
-git fetch origin
-git fetch app
-
-git switch main
-git pull origin main
-
-git switch app
-git pull app app
-git cherry-pick <framework-commit-sha>
+pnpm run schema:repos:fanout -- --apply --push-app --update-registry passmed lucky
 ```
 
-## Lucky-specific notes
+## Sync workflow
 
-Lucky schema lives at:
+Child sync is controlled from the master repo, not ad hoc from the child repo.
 
-- `/Users/michaelpeters/Dev/lucky/apps/schema`
+The child sync result must be:
 
-Its active schema projects include:
+- child `main` == child `origin/main`
+- child `app` contains the latest shared `origin/main`
+- child `app` still contains app-owned schema state
+- child `.schema-release.yaml` records the latest applied shared release
 
-- `heliosadmin`
-- `public`
-- `dashboard`
-- `learning`
-- `live`
-
-Lucky is currently on local branch `app` and only has a local modification in `config/graph.mpdg`, so it is a good target for this rollout once the framework commit exists.
-
-### Lucky post-cherry-pick validation
-
-Run from `/Users/michaelpeters/Dev/lucky/apps/schema`:
-
-```bash
-pnpm exec tsx src/cli.ts schema-ai:sync --project heliosadmin,public,dashboard,learning,live
-pnpm exec tsx src/cli.ts generate --no-sync-graph --project heliosadmin,public,dashboard,learning,live
-```
-
-Then verify:
-
-- `AGENTS.md` exists in each target app
-- `.agents/skills/schema-resource-selection` exists in each target app
-- `docs/ai/runtime/resource-selection.md` exists in each target app
-- generated `server/trpc/routers/generated/*` resource procedures fail soft on unsupported selectors
+If the child repo is dirty or the live checkout is sitting on `main` or `app`, the sync should refuse and report the blocker.
 
 ## Validation checklist
 
-Before pushing to `origin/main`:
+Before pushing master `origin/main`:
 
-- `git diff --name-only main...HEAD` only shows framework files
-- no app graph/spec/migration files are included accidentally
-- schema AI bundle files and source files match
+- only framework-safe files are in the promotion commit
+- `framework-release-log.md` has the next release entry
+- the shared repo still type-checks where practical
 
-After updating another app repo:
+After syncing a child repo:
 
-- `git status --short` only shows expected framework and generated sync changes
-- consumer app type-check passes where possible
-- at least one schema-driven page confirms the new guidance is present
-- at least one bad resource lookup returns `null` and logs a server warning instead of crashing the page
+- child `main` matches child `origin/main`
+- child `app` contains child `origin/main`
+- child `app` is pushed when required
+- the child release marker reflects the latest shared release
+- the registry is updated when the round is officially verified
 
-## Working rule going forward
+## Working rule
 
-When a change is clearly shared schema behaviour, make it promotable immediately:
+If a child-to-master promotion is painful, fix the process in the master repo immediately:
 
-- keep the implementation in shared schema files
-- keep app-only graph/spec changes separate
-- record the framework file family in this playbook if the rollout introduces a new shared area
+- tighten the registry
+- improve the scripts
+- update the skills
+- record the decision in the repo-operations workstream
