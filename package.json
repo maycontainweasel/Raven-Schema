@@ -87,6 +87,12 @@
     "graph:ids": "tsx scripts/gen-ids-mpdg.ts",
     "spec": "pnpm run graph:spec && pnpm run graph:mermaid",
     "spec:copy": "tsx scripts/spec-copy.ts",
+    "schema:repos": "node --import tsx scripts/schema-repos.ts",
+    "schema:repos:list": "node --import tsx scripts/schema-repos.ts list",
+    "schema:repos:audit": "node --import tsx scripts/schema-repos.ts audit",
+    "schema:repos:sync": "node --import tsx scripts/schema-repos.ts sync",
+    "schema:repos:fanout": "node --import tsx scripts/schema-repos.ts fanout",
+    "schema:repos:promote": "node --import tsx scripts/schema-repos.ts promote",
     "schema:tenants:pull": "bash scripts/pull-schema-tenants.sh",
     "schema:tenants:pull:dry": "bash scripts/pull-schema-tenants.sh --dry-run"
   },

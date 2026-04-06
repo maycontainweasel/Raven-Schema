@@ -8,6 +8,63 @@ Open this file when you want a copy-ready prompt for schema work.
 - If a task touches a model and you are not sure where to start, begin with `schema-model-primer`.
 - For consumer-app pages, pair a directory skill with `schema-record-workspace` when the task includes the single-record page.
 
+## Repo Operations
+
+### Master Orientation
+- Skill: `schema-master-orient`
+- Use for: recovering the master-repo operating model, latest shared release, and known child repos after a fresh instantiation
+- Prompt:
+```text
+Use schema-master-orient first.
+State the latest shared release, the repo keys currently registered, and which child repo or promotion flow you are about to touch.
+```
+
+### Child Repo Audit
+- Skill: `schema-audit-child-state`
+- Use for: checking one child repo’s remotes, branch state, dirty state, and release marker before sync or promotion work
+- Prompt:
+```text
+Use schema-audit-child-state for <repo-key>.
+Audit remotes, local main, local app, dirty state, and the release marker before suggesting any mutations.
+```
+
+### Child Repo Sync
+- Skill: `schema-sync-child-repo`
+- Use for: bringing one child repo up to the latest shared framework from the master repo
+- Short command phrase: `normalize <repo-key>`
+- Prompt:
+```text
+Use schema-sync-child-repo for <repo-key>.
+Audit first, then sync the child so local main mirrors origin/main and local app contains the latest shared framework plus app-owned state.
+```
+
+### Shared Release Fanout
+- Skill: `schema-fanout-shared-release`
+- Use for: applying one shared framework release to multiple child repos from the master repo
+- Prompt:
+```text
+Use schema-fanout-shared-release for the target repo set.
+Report repo-by-repo success, blockers, and any child repos that still need manual attention.
+```
+
+### Child Framework Promotion
+- Skill: `schema-promote-child-framework`
+- Use for: classifying and pulling framework-safe work out of a child repo into the master repo
+- Prompt:
+```text
+Use schema-promote-child-framework for <repo-key>.
+Classify framework-safe, review-required, app-owned, and unknown paths before copying anything into the master repo.
+```
+
+### Shared Framework Feature
+- Skill: `schema-framework-feature-round`
+- Use for: implementing one reusable schema-engine capability in master, documenting it, and preparing the later child-repo rollout
+- Prompt:
+```text
+Use schema-framework-feature-round for this capability.
+Implement it in apps/schema, say whether it is engine-only or requires app-side regeneration, and tell me which child repos should sync it afterwards.
+```
+
 ## Consumer App Workflows
 
 ### Source-Authority Directory
@@ -131,6 +188,8 @@ State the model key, table key, router key, authority, slug or sub-id policy, Ty
 ```
 
 ## Recommended Pairings
+- Cross-repo work: `schema-master-orient` + one of the repo-operation skills
+- Shared engine capability: `schema-framework-feature-round`, then `schema-fanout-shared-release` when the release is ready
 - Directory + record page: `schema-source-directory` + `schema-record-workspace`
 - MPDG edit + safety pass: the relevant MPDG authoring skill + `schema-graph-validation`
 - Unclear model behaviour: `schema-model-primer` before anything else

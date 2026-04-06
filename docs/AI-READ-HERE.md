@@ -1,10 +1,12 @@
-# AI Read‑Here (Passmed Schema Tooling)
+# AI Read‑Here (Schema Tooling Workspace)
 
 This repo is the schema/tooling workspace that turns a human‑readable “napkin” graph DSL into SurrealDB specs, migrations, views, CRUD functions, TRPC routers, and TypeScript types.
 
 Start here if you’re a new AI working in this repo.
 
-For cross-repo promotion and version tracking, also read:
+For cross-repo promotion, child-repo sync, and version tracking, also read:
+- `docs/ai/control-plane.md`
+- `docs/ai/repo-registry.yaml`
 - `docs/ai/framework-promotion-playbook.md`
 - `docs/ai/framework-release-log.md`
 - `docs/ai/skills/README.md`
@@ -19,6 +21,21 @@ The canonical schema-owned AI guidance now lives in:
 - `docs/ai/runtime/typesense.md`
 
 Use those docs for runtime contracts and agent workflow. Use this file for the schema generator workflow and file map.
+
+## Read next for cross-repo schema operations
+
+The canonical master-repo operating model now lives in:
+- `docs/ai/control-plane.md`
+- `docs/ai/repo-registry.yaml`
+- `docs/ai/framework-promotion-playbook.md`
+- `docs/ai/framework-release-log.md`
+- `docs/ai/workstreams/schema-repo-operations/README.md`
+
+Use those files when the task is about:
+- promoting framework work from a child schema repo
+- bringing a child repo up to date
+- auditing remotes, `main`, `app`, or release markers
+- improving the long-term schema repo operating system
 
 ## Read next for graph authoring work
 

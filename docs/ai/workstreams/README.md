@@ -23,7 +23,7 @@ Optional files:
 - `prompt-recipes.md`
 
 ## Current workstreams
-- `commerce-checkout/`
+- `schema-repo-operations/`
 
 ## Working rule
 

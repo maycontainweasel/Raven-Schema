@@ -81,28 +81,32 @@ temp/
 /.deploy/*
 
 # Schema app local config (do not sync across repos)
-# config/app.config.yaml
-# config/environment.yaml
-# config/imports.config.yaml
-# config/nginx.yaml
-# config/sync.yaml
+config/app.config.yaml
+config/environment.yaml
+config/imports.config.yaml
+config/nginx.yaml
+config/sync.yaml
 
 # config/bootstrap/functions/utility/initTaxonomies.surql
 # config/schema-tenants.paths
 # config/schema-tenants.paths.local
 
 # Graph + generated artifacts (per-project or generated)
-# config/graph.ts
-# config/graph.mmd
-# config/specs/
-# config/specs_stage/
-# config/specs-bak/
-# config/migrations/
-# config/generated/
-# config/types/
-# config/typesense/
-# config/schema-assets.json
-# config/admin/
+config/graph.mpdg
+config/graph.ts
+config/graph.mmd
+config/specs/
+config/specs_stage/
+config/specs-bak/
+config/migrations/
+config/generated/
+config/types/
+config/typesense/
+config/schema-assets.json
+config/admin/
+config/ui/
+config/ui-back/
+sites/*.yaml
 
 # Schema docs build output
 schema-docs/.nuxt/

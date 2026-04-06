@@ -8,6 +8,8 @@
 ## Read first
 - `docs/AI-READ-HERE.md`
 - `docs/ai/README.md`
+- `docs/ai/control-plane.md` for cross-repo governance, sync, and promotion work
+- `docs/ai/repo-registry.yaml` for the canonical child-repo registry
 - `docs/ai/skills/README.md` when the task is about choosing or naming a schema skill
 - `docs/ai/mpdg/README.md` for graph/DSL authoring tasks
 - `docs/ai/architecture.md`
@@ -20,6 +22,8 @@
 
 ## Non-negotiable rules
 - Generated manifests, controller docs, and runtime templates are the truth. AGENTS and skills only route to them.
+- `apps/schema` is the only control plane for shared schema promotion and child-repo sync.
+- Child schema repos must keep local `main` as the shared mirror and local `app` as the integrated app branch.
 - Use the human-facing terms `source authority` and `instance authority`.
 - Current runtime metadata may still encode the non-source class as `tenant`, `remote`, or `instance`; normalize all three to instance authority before reasoning about behavior.
 - Do not turn consumer-app examples into schema canon. Keep schema guidance abstract and reusable.
@@ -37,6 +41,8 @@
 - For active multi-round schema efforts, keep scope, decisions, and validation in `docs/ai/workstreams/**` instead of leaving them only in chat context.
 - After MPDG changes, run `pnpm run graph:validate` before regeneration or promotion.
 - When a shared schema change is promoted to `origin/main`, update `docs/ai/framework-release-log.md` in the same change. If the work originated app-side, update `docs/ai/framework-promotion-ledger.md` too.
+- Treat reusable engine work like generator fixes, site tooling, runtime-template changes, and shared dev ergonomics as a shared framework feature round in `apps/schema` first, then fan it out to child repos afterwards.
+- If a cross-repo sync or promotion process is awkward, capture the fix in the control-plane docs, workstream, registry, or repo-maintenance skills before ending the round.
 
 ## Where examples belong
 - Consumer-app-specific examples belong in that app’s local docs and AGENTS files.
