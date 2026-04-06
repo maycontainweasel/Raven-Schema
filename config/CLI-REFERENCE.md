@@ -286,6 +286,13 @@ pnpm -C apps/schema run site:project:setup -- --project admin
 - `databases:generate`  
   Generate databases export.
 
+- `surrealmcp:generate [database]`  
+  Generate `surrealmcp.compose.yml` and sync the matching MCP server block into `.codex/config.toml` from `app.config.yaml`.  
+  Examples:
+  - `pnpm -C apps/schema run surrealmcp:generate`
+  - `pnpm -C apps/schema run surrealmcp:generate -- helios`
+  - `pnpm -C apps/schema run surrealmcp:generate -- --port 911 --server-name surreal911`
+
 - `models:generate`  
   Generate models manifest.
 

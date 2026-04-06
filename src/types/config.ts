@@ -35,6 +35,7 @@ export interface AppConfig {
   typesense?: TypesenseConfig;
   schemaKit?: SchemaKitConfig;
   databasesExport?: DatabasesExportConfig;
+  surrealMcpExport?: SurrealMcpExportConfig;
   modelsExport?: ModelsExportConfig;
   ui?: UiConfig;
   layers?: LayersConfig;
@@ -501,6 +502,58 @@ export interface DatabasesExportConfig {
    * Relative to each project's Nuxt root (nuxtProjectRoot).
    */
   projectOutput?: string;
+}
+
+export interface SurrealMcpExportConfig {
+  /**
+   * Output path for generated Surreal MCP docker compose file.
+   * Relative paths are resolved from the repository root.
+   */
+  output?: string;
+  /**
+   * Repo-local Codex config output that receives the MCP server entry.
+   * Relative paths are resolved from the repository root.
+   */
+  codexConfigOutput?: string;
+  /**
+   * Database key from app.config.yaml -> databases.* to proxy through MCP.
+   * Defaults to environment.defaultDatabase when omitted.
+   */
+  database?: string;
+  /**
+   * Local MCP proxy port.
+   */
+  port?: number;
+  /**
+   * MCP server key written into .codex/config.toml.
+   * Defaults to surreal<port>.
+   */
+  serverName?: string;
+  /**
+   * Docker compose service name.
+   * Defaults to surrealmcp.
+   */
+  serviceName?: string;
+  /**
+   * Docker container name.
+   * Defaults to <serviceName>_<port>.
+   */
+  containerName?: string;
+  /**
+   * Host alias used inside Docker when the SurrealDB URL points at localhost.
+   * Defaults to host.docker.internal.
+   */
+  dockerHost?: string;
+  /**
+   * Whether the generated MCP server is enabled in .codex/config.toml.
+   * Defaults to true.
+   */
+  enabled?: boolean;
+  /**
+   * Approval mode for connect_endpoint in the generated Codex config.
+   * Defaults to approve.
+   */
+  approvalMode?: string;
 }
 
 export interface ModelsExportConfig {

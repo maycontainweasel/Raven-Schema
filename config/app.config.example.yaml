@@ -205,6 +205,18 @@ databasesExport:
   # Per-project database export (bundled into each target app)
   projectOutput: modules/schema-kit/runtime/generated/databases.ts
 
+surrealMcpExport:
+  output: ../surrealmcp.compose.yml
+  codexConfigOutput: ../.codex/config.toml
+  database: helios
+  port: 911
+  serverName: surreal911
+  serviceName: surrealmcp
+  containerName: surrealmcp_911
+  dockerHost: host.docker.internal
+  enabled: true
+  approvalMode: approve
+
 modelsExport:
   # Per-project models manifest (bundled into each target app)
   projectOutput: modules/schema-kit/runtime/generated/models.ts

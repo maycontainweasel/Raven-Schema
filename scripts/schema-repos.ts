@@ -1046,8 +1046,10 @@ function parseReleaseMarker(raw: string): { exists: boolean; releaseId: string; 
     }
     return {
       exists: true,
-      releaseId: parsed.shared_framework?.release_id ?? '',
-      sharedHeadCommit: parsed.shared_framework?.applied_shared_head_commit ?? '',
+      releaseId: parsed.shared_framework?.release_id ? String(parsed.shared_framework.release_id) : '',
+      sharedHeadCommit: parsed.shared_framework?.applied_shared_head_commit
+        ? String(parsed.shared_framework.applied_shared_head_commit)
+        : '',
     }
   } catch {
     return { exists: true, releaseId: '', sharedHeadCommit: '' }

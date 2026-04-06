@@ -32,6 +32,7 @@
     "schema:seed": "tsx src/cli.ts seed",
     "schema:bootstrap:seed": "tsx src/cli.ts seed",
     "schema:request-schema": "tsx src/cli.ts request-schema:generate",
+    "surrealmcp:generate": "tsx src/cli.ts surrealmcp:generate",
     "site:create": "tsx src/cli.ts site:create",
     "site:delete": "tsx src/cli.ts site:delete",
     "site:env:sync": "tsx src/cli.ts site:env:sync",
