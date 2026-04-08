@@ -24,6 +24,8 @@ Optional files:
 
 ## Current workstreams
 - `schema-repo-operations/`
+- `schema-operating-system/`
+- `mpdg-editor-tooling/`
 
 ## Working rule
 

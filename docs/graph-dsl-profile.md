@@ -200,6 +200,7 @@ Expansion targets (what the generator will write)
 Editing aids (planned)
 - VS Code snippets for `*.mpdg` to drop the 4-block skeleton with tabstops.
 - Grammar updates in `extension/mpd-graph-dsl` to highlight `{fields}[caps](connections){extras}` and common tags.
+- Zed editor support now lives in `extension/zed-mpdg` and the planning track is `docs/ai/workstreams/mpdg-editor-tooling/`.
 
 Workflow (staging → live)
 - Treat `config/graph.mpdg` as the sketchpad.

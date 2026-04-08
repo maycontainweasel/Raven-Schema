@@ -12,6 +12,13 @@ For cross-repo promotion, child-repo sync, and version tracking, also read:
 - `docs/ai/skills/README.md`
 - `docs/ai/workstreams/README.md`
 
+For editor tooling and MPDG authoring ergonomics, also read:
+- `docs/ai/workstreams/mpdg-editor-tooling/README.md`
+- `docs/graph-dsl-profile.md`
+- `docs/ai/mpdg/validation-workflow.md`
+- `extension/mpd-graph-dsl/README.md`
+- `extension/zed-mpdg/README.md`
+
 ## Read next for schema runtime work
 
 The canonical schema-owned AI guidance now lives in:
@@ -27,15 +34,37 @@ Use those docs for runtime contracts and agent workflow. Use this file for the s
 The canonical master-repo operating model now lives in:
 - `docs/ai/control-plane.md`
 - `docs/ai/repo-registry.yaml`
+- `docs/ai/tenant-governance.md`
+- `docs/ai/versioning-model.md`
+- `docs/ai/skill-architecture.md`
+- `docs/ai/templates/framework-candidate-note.md`
 - `docs/ai/framework-promotion-playbook.md`
 - `docs/ai/framework-release-log.md`
 - `docs/ai/workstreams/schema-repo-operations/README.md`
+- `docs/ai/workstreams/schema-operating-system/README.md`
+- `docs/ai/workstreams/schema-operating-system/backlog.md`
 
 Use those files when the task is about:
 - promoting framework work from a child schema repo
 - bringing a child repo up to date
 - auditing remotes, `main`, `app`, or release markers
 - improving the long-term schema repo operating system
+
+## Read next for editor tooling work
+
+The canonical editor-tooling track now lives in:
+- `docs/ai/workstreams/mpdg-editor-tooling/README.md`
+- `docs/ai/workstreams/mpdg-editor-tooling/implementation-plan.md`
+- `docs/graph-dsl-profile.md`
+- `docs/ai/mpdg/validation-workflow.md`
+- `extension/mpd-graph-dsl/README.md`
+- `extension/zed-mpdg/README.md`
+
+Use those files when the task is about:
+- MPDG syntax highlighting
+- Zed editor support
+- future MPDG completions, diagnostics, linting, or formatting
+- improving editor ergonomics for `graph.mpdg` authoring
 
 ## Read next for graph authoring work
 
