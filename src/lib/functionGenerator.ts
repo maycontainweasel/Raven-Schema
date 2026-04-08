@@ -534,12 +534,16 @@ function buildCreateFunctionContent(
     );
   }
   lines.push(
-    `\tlet $recordID = if type::is_object(${creationBlock.recordVar}) && type::is_record(${creationBlock.recordVar}.id) {`,
+    `\tlet $recordIDSource = if type::is_object(${creationBlock.recordVar}) && ${creationBlock.recordVar}.id != NONE && ${creationBlock.recordVar}.id != null {`,
     `\t\t${creationBlock.recordVar}.id`,
-    `\t} else if type::is_record(${creationBlock.recordVar}) {`,
-    `\t\t${creationBlock.recordVar}`,
     `\t} else {`,
-    `\t\tnull`,
+    `\t\t${creationBlock.recordVar}`,
+    `\t};`,
+    ``,
+    `\tlet $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {`,
+    `\t\tNONE`,
+    `\t} else {`,
+    `\t\tfn::ridParam("${tableModel}", $recordIDSource)`,
     `\t};`,
     '',
     `\tif !$recordID {`,
@@ -1639,11 +1643,11 @@ function buildRelationPostProcessLines(
           `\t\t\tthrow "${relationSingleRelationErrorLabel(relation)} | expects single relation";`,
           `\t\t};`,
           `\t\tif array::len(${normVar}) == 1 {`,
-          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
+          `\t\t\t${buildRelationCreateAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tif array::len(${normVar}) > 0 {`,
-          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
+          `\t\t\t${buildRelationCreateAttachStatement(relation, recordIdExpr, `array::first(${normVar})`)}`,
           `\t\t};`,
           `\t};`
         );
@@ -1651,11 +1655,11 @@ function buildRelationPostProcessLines(
         lines.push(
           `\tif type::is_array(${normVar}) {`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, '$rel')}`,
+          `\t\t\t${buildRelationCreateAttachStatement(relation, recordIdExpr, '$rel')}`,
           `\t\t};`,
           `\t} else if ${varName} {`,
           `\t\tfor $rel in ${normVar} {`,
-          `\t\t\t${buildRelationAttachStatement(relation, recordIdExpr, '$rel')}`,
+          `\t\t\t${buildRelationCreateAttachStatement(relation, recordIdExpr, '$rel')}`,
           `\t\t};`,
           `\t};`
         );
@@ -1713,6 +1717,14 @@ function buildRelationAttachStatement(
     return `fn::${relation.functions.attach}(${recordIdExpr}, ${leftRelationExpr});`;
   }
   // When relation helper functions are disabled, CRUD hooks write edges directly.
+  return `fn::createEdge(${leftRelationExpr}, "${relation.edge}", ${recordIdExpr}, { boundId: true, overwrite: false, skipExists: true });`;
+}
+
+function buildRelationCreateAttachStatement(
+  relation: NormalizedRelation,
+  recordIdExpr: string,
+  leftRelationExpr: string
+): string {
   return `fn::createEdge(${leftRelationExpr}, "${relation.edge}", ${recordIdExpr}, { boundId: true, overwrite: false, skipExists: true });`;
 }
 
@@ -2311,7 +2323,12 @@ function buildSubtableCreateFunctionContent(
     `		let $fallback = select * from only $RID;`,
     `		if type::is_array($fallback) { array::first($fallback) } else { $fallback };`,
     `	};`,
-    `	let $recordID = if $record.id { $record.id } else { $record };`,
+    `	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null { $record.id } else { $record };`,
+    `	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {`,
+    `		NONE`,
+    `	} else {`,
+    `		fn::ridParam("${tableModel}", $recordIDSource)`,
+    `	};`,
     '',
     `	if !$recordID {`,
     `		throw "${functionName} | failed to create ${tableModel}";`,
