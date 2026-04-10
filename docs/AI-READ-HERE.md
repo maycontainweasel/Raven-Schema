@@ -1,6 +1,10 @@
-# AI Read‑Here (Schema Tooling Workspace)
+# AI Read‑Here (Schema v1 Workspace)
 
-This repo is the schema/tooling workspace that turns a human‑readable “napkin” graph DSL into SurrealDB specs, migrations, views, CRUD functions, TRPC routers, and TypeScript types.
+This repo is the active **Schema v1** tooling workspace.
+
+It turns a human-readable graph DSL into SurrealDB specs, migrations, views, CRUD functions, TRPC routers, and TypeScript types.
+
+The next-generation redesign is tracked in parallel as **Lyric v2**.
 
 Start here if you’re a new AI working in this repo.
 
@@ -11,6 +15,16 @@ For cross-repo promotion, child-repo sync, and version tracking, also read:
 - `docs/ai/framework-release-log.md`
 - `docs/ai/skills/README.md`
 - `docs/ai/workstreams/README.md`
+- `docs/ai/workstreams/schema-v1-5/README.md` when the task is about current-platform hardening
+- `docs/ai/workstreams/lyric-v2/README.md` when the task is about the next-generation redesign
+- `docs/ai/workstreams/lyric-docs/README.md` when the task is about the new interactive documentation app
+
+For editor tooling and MPDG authoring ergonomics, also read:
+- `docs/ai/workstreams/mpdg-editor-tooling/README.md`
+- `docs/graph-dsl-profile.md`
+- `docs/ai/mpdg/validation-workflow.md`
+- `extension/mpd-graph-dsl/README.md`
+- `extension/zed-mpdg/README.md`
 
 ## Read next for schema runtime work
 
@@ -27,15 +41,49 @@ Use those docs for runtime contracts and agent workflow. Use this file for the s
 The canonical master-repo operating model now lives in:
 - `docs/ai/control-plane.md`
 - `docs/ai/repo-registry.yaml`
+- `docs/ai/tenant-governance.md`
+- `docs/ai/versioning-model.md`
+- `docs/ai/skill-architecture.md`
+- `docs/ai/templates/framework-candidate-note.md`
 - `docs/ai/framework-promotion-playbook.md`
 - `docs/ai/framework-release-log.md`
+- `docs/ai/workstreams/schema-v1-5/README.md`
 - `docs/ai/workstreams/schema-repo-operations/README.md`
+- `docs/ai/workstreams/schema-operating-system/README.md`
+- `docs/ai/workstreams/schema-operating-system/backlog.md`
 
 Use those files when the task is about:
 - promoting framework work from a child schema repo
 - bringing a child repo up to date
 - auditing remotes, `main`, `app`, or release markers
 - improving the long-term schema repo operating system
+- keeping Schema v1 delivery work separate from Lyric v2 planning
+
+If the task is about:
+- helper-function minimal contracts
+- bad patterns
+- router/request id shapes
+- current-platform hardening before v2
+
+also read:
+- `docs/ai/workstreams/schema-v1-5/vision.md`
+- `docs/schema-commerce/ridparam-contract.md`
+
+## Read next for editor tooling work
+
+The canonical editor-tooling track now lives in:
+- `docs/ai/workstreams/mpdg-editor-tooling/README.md`
+- `docs/ai/workstreams/mpdg-editor-tooling/implementation-plan.md`
+- `docs/graph-dsl-profile.md`
+- `docs/ai/mpdg/validation-workflow.md`
+- `extension/mpd-graph-dsl/README.md`
+- `extension/zed-mpdg/README.md`
+
+Use those files when the task is about:
+- MPDG syntax highlighting
+- Zed editor support
+- future MPDG completions, diagnostics, linting, or formatting
+- improving editor ergonomics for `graph.mpdg` authoring
 
 ## Read next for graph authoring work
 
@@ -50,6 +98,9 @@ The canonical MPDG authoring guidance now lives in:
 Use those docs when the task is about editing `config/graph.mpdg`, adding a stanza, changing a view, adding Typesense, or defining relations/taxonomies/subtables.
 
 ## What this tool does
+
+- **Current platform name**: Schema v1
+- **Next-generation planning name**: Lyric v2
 
 - **Source of truth**: `config/graph.mpdg` (MPDG DSL).
 - **Specs**: Generated into `config/specs_stage/*` (staging) or `config/specs/*` (live).
@@ -78,6 +129,8 @@ Use those docs when the task is about editing `config/graph.mpdg`, adding a stan
   - `docs/ai/mpdg/README.md`
 - Schema runtime/authority canon:
   - `docs/ai/runtime/authority-routing.md`
+- Record-id helper canon:
+  - `docs/schema-commerce/ridparam-contract.md`
 - Schema Typesense canon:
   - `docs/ai/runtime/typesense.md`
 - Tag/program glossary:

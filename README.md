@@ -1,6 +1,27 @@
-# Node.js TypeScript Base Template
+# Schema v1
 
-A solid baseline Node.js TypeScript framework for rapid development of utility tools and applications.
+This workspace is the active **Schema v1** engine.
+
+It is the current shared framework used to author data intent, compile it into specs, generate runtime/database assets, and support schema-driven Nuxt applications.
+
+The next-generation redesign is being planned in parallel as **Lyric v2**.
+
+See:
+- `docs/AI-READ-HERE.md`
+- `docs/ai/framework-release-log.md`
+- `docs/ai/workstreams/schema-operating-system/README.md`
+- `docs/ai/workstreams/lyric-v2/README.md`
+- `docs/ai/workstreams/lyric-docs/README.md`
+
+## Current program status
+
+- `apps/schema` is the shipping Schema v1 workspace.
+- `lyric-v2/` is the reserved future workspace for the redesign.
+- `lyric-docs/` is the reserved future sibling app for interactive capability documentation and verification.
+
+## Legacy operational notes
+
+The sections below still contain useful command and workflow notes from the older workspace README. Treat them as operational reference, not as the product identity.
 
 ## Overview
 

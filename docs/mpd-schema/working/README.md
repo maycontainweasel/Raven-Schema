@@ -11,3 +11,5 @@ Planned working docs (v1):
 - Instances: multi‑tenant CRUD flow
 - Helios Model Engine project: `projects/PROJECT-HELIOS-MODEL-ENGINE.md`
 - Helios Fullscreen Page Builder V1: `projects/PROJECT-HELIOS-FULLSCREEN-PAGE-BUILDER-V1.md`
+- MPDG Editor Tooling project: `projects/PROJECT-MPDG-EDITOR-TOOLING.md`
+- Schema Control Plane UI project: `projects/PROJECT-SCHEMA-CONTROL-PLANE-UI.md`

@@ -95,6 +95,17 @@ pnpm -C apps/schema run site:project:setup -- --project admin
 
 ## Other utilities
 
+- `schema:changelog`
+  Show the latest shared framework release, current unreleased notes from `docs/ai/framework-release-log.md`, and the local changed files in `apps/schema`.
+  Examples:
+  - `pnpm -C apps/schema run schema:changelog`
+  - `pnpm -C apps/schema run schema:changelog -- --limit 3`
+
+- `schema:version`
+  Print the latest shared release id plus the current local head SHA.
+  Example:
+  - `pnpm -C apps/schema run schema:version`
+
 - Helios standard setup (new app)
   1. `pnpm -C apps/schema run site:create <name> -- --setup`
   2. `pnpm -C apps/schema run site:layers:add <name> helios`

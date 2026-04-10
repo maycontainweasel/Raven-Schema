@@ -2,6 +2,14 @@
 
 Open this file when you want a copy-ready prompt for schema work.
 
+Canonical skill-system rules now live in:
+- `docs/ai/skill-architecture.md`
+- `docs/ai/tenant-governance.md`
+- `docs/ai/versioning-model.md`
+- `docs/ai/templates/framework-candidate-note.md`
+- `docs/ai/workstreams/schema-operating-system/README.md`
+- `docs/ai/workstreams/schema-operating-system/prompt-recipes.md`
+
 ## How To Use This Menu
 - Naming the skill explicitly is the most reliable option.
 - Agents may choose the right skill proactively when the task is clear, but explicit naming is still better for important work.
@@ -9,6 +17,24 @@ Open this file when you want a copy-ready prompt for schema work.
 - For consumer-app pages, pair a directory skill with `schema-record-workspace` when the task includes the single-record page.
 
 ## Repo Operations
+
+### Design Dump Capture
+- Skill: `schema-capture-design-dump`
+- Use for: capturing an important debugging lesson, bad pattern, or design idea into the Schema v1.5 / Lyric v2 workstreams before it gets lost
+- Prompt:
+```text
+Use schema-capture-design-dump for this lesson.
+Capture the problem, why it is bad or important, whether it belongs in Schema v1.5 or Lyric v2, and update the right workstream docs.
+```
+
+### Tenant Registration
+- Skill: `schema-register-tenant`
+- Use for: adding a new tenant schema repo to the master registry before sync, promotion, or governance work begins
+- Prompt:
+```text
+Use schema-register-tenant for <repo-key>.
+Register the tenant in the master registry, then audit it and report what blocks normalization.
+```
 
 ### Master Orientation
 - Skill: `schema-master-orient`
@@ -56,6 +82,15 @@ Use schema-promote-child-framework for <repo-key>.
 Classify framework-safe, review-required, app-owned, and unknown paths before copying anything into the master repo.
 ```
 
+### Tenant Framework Candidate Handoff
+- Skill: `schema-report-framework-candidate`
+- Use for: capturing a tenant-discovered framework fix in a durable note before or alongside master promotion work
+- Prompt:
+```text
+Use schema-report-framework-candidate for <repo-key>.
+Capture the bug summary, changed paths, verification, and whether downstream regeneration will be required after adoption.
+```
+
 ### Shared Framework Feature
 - Skill: `schema-framework-feature-round`
 - Use for: implementing one reusable schema-engine capability in master, documenting it, and preparing the later child-repo rollout
@@ -63,6 +98,94 @@ Classify framework-safe, review-required, app-owned, and unknown paths before co
 ```text
 Use schema-framework-feature-round for this capability.
 Implement it in apps/schema, say whether it is engine-only or requires app-side regeneration, and tell me which child repos should sync it afterwards.
+```
+
+### Shared Release Adoption
+- Skill: `schema-adopt-framework-release`
+- Use for: carrying a shared framework release into a tenant all the way through normalization, regeneration when required, and verification
+- Prompt:
+```text
+Use schema-adopt-framework-release for <repo-key>.
+Normalize first, then decide whether regeneration is required, run the right verification, and update the release marker/reporting state.
+```
+
+## Guardian Skills
+
+### Tenant Fix Guardian
+- Skill: `schema-guardian-tenant-fix`
+- Use for: any tenant-discovered bug where the AI must default to the safe path before deciding what becomes shared framework work
+- Prompt:
+```text
+Use schema-guardian-tenant-fix for <repo-key>.
+Default to the safe tenant-first path, classify engine work vs app-owned work, and tell me whether promotion and downstream regeneration are required.
+```
+
+Recommended follow-up:
+- If the fix should travel back to master, use `schema-report-framework-candidate` before or during the promotion round.
+
+### Auth Flow Guardian
+- Skill: `schema-guardian-auth-flow`
+- Use for: any auth/password/session task where the AI must not casually change shared contracts
+- Prompt:
+```text
+Use schema-guardian-auth-flow first.
+State the current auth assumptions, what is risky, and which verification skills must run after the change.
+```
+
+## Operational Verification
+
+### Anti-Pattern Review
+- Skill: `schema-anti-pattern-review`
+- Use for: checking generator, helper, router, or promotion work against the known bad-pattern library before treating it as safe
+- Prompt:
+```text
+Use schema-anti-pattern-review for these changes.
+Check them against the known schema anti-patterns and report concrete findings first.
+```
+
+### Router Flow Hardening
+- Skill: `schema-router-flow-hardening`
+- Use for: building or fixing a schema-generated router flow end to end, with tests and validation at each layer
+- Prompt:
+```text
+Use schema-router-flow-hardening for this route or router fix.
+State the input contract, verify helper/function/router/controller layers, and make sure the full flow is covered by tests.
+```
+
+### Password Refresh
+- Skill: `schema-auth-password-refresh`
+- Use for: password-hash changes, refreshes, or migrations
+- Prompt:
+```text
+Use schema-auth-password-refresh for this auth change.
+State whether the change is generator/runtime source, tenant data migration, or both, and what downstream regeneration/verification is required.
+```
+
+### Login Verification
+- Skill: `schema-auth-login-verify`
+- Use for: proving a user can still log in after an auth change
+- Prompt:
+```text
+Use schema-auth-login-verify after the auth change.
+Report the exact login path exercised, the environment used, and whether the expected auth artifacts were created.
+```
+
+### Session Cookie Verification
+- Skill: `schema-session-cookie-verify`
+- Use for: proving session-cookie and refresh behavior still works after auth/runtime changes
+- Prompt:
+```text
+Use schema-session-cookie-verify after the auth change.
+Verify cookie creation, scope, and refresh behavior explicitly.
+```
+
+### MCP Connectivity Check
+- Skill: `schema-mcp-connect-check`
+- Use for: verifying schema-controlled MCP configuration and connectivity
+- Prompt:
+```text
+Use schema-mcp-connect-check for this MCP setup.
+Report the config source, expected endpoint, and whether the server is actually reachable.
 ```
 
 ## Consumer App Workflows
@@ -189,7 +312,10 @@ State the model key, table key, router key, authority, slug or sub-id policy, Ty
 
 ## Recommended Pairings
 - Cross-repo work: `schema-master-orient` + one of the repo-operation skills
+- New tenant onboarding: `schema-register-tenant` + `schema-audit-child-state`
 - Shared engine capability: `schema-framework-feature-round`, then `schema-fanout-shared-release` when the release is ready
+- Tenant-discovered bug: `schema-guardian-tenant-fix`, then promotion/adoption skills as needed
+- Auth change: `schema-guardian-auth-flow` + the relevant auth/session verification skills
 - Directory + record page: `schema-source-directory` + `schema-record-workspace`
 - MPDG edit + safety pass: the relevant MPDG authoring skill + `schema-graph-validation`
 - Unclear model behaviour: `schema-model-primer` before anything else

@@ -94,8 +94,11 @@
     "schema:repos:sync": "node --import tsx scripts/schema-repos.ts sync",
     "schema:repos:fanout": "node --import tsx scripts/schema-repos.ts fanout",
     "schema:repos:promote": "node --import tsx scripts/schema-repos.ts promote",
+    "schema:changelog": "node --import tsx scripts/schema-changelog.ts",
+    "schema:version": "node --import tsx scripts/schema-changelog.ts --version-only",
     "schema:tenants:pull": "bash scripts/pull-schema-tenants.sh",
-    "schema:tenants:pull:dry": "bash scripts/pull-schema-tenants.sh --dry-run"
+    "schema:tenants:pull:dry": "bash scripts/pull-schema-tenants.sh --dry-run",
+    "schema:zed:install": "bash scripts/install-zed-extension.sh"
   },
   "keywords": [
     "typescript",

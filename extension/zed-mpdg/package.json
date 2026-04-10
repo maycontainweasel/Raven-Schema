@@ -1,0 +1,47 @@
+{
+  "name": "tree-sitter-mpdg",
+  "version": "0.0.1",
+  "description": "Tree-sitter grammar for MPDG",
+  "main": "grammar.js",
+  "types": "bindings/node",
+  "license": "MIT",
+  "keywords": [
+    "tree-sitter",
+    "mpdg",
+    "schema",
+    "dsl"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**"
+  ],
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.6",
+    "prebuildify": "^6.0.0"
+  },
+  "dependencies": {
+    "node-gyp-build": "^4.8.0"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree_sitter": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.mpdg",
+      "injection-regex": "^mpdg$"
+    }
+  ]
+}

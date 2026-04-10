@@ -1,6 +1,26 @@
-# Nuxt Minimal Starter
+# Schema Docs
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+This is the current Schema v1 documentation/demo/reference app.
+
+It already serves as:
+- a reference docs surface
+- a capability-testing app
+- a demo admin and API playground
+
+It is not the planned final shape of the future documentation experience.
+
+That future sibling app is tracked as `../lyric-docs/` and in:
+- `../docs/ai/workstreams/lyric-docs/README.md`
+- `../docs/ai/workstreams/lyric-v2/README.md`
+
+## Current role
+
+Use `schema-docs` as:
+- the current v1 reference surface
+- a source of patterns and fixtures
+- an input to the future Lyric Docs app
+
+## Legacy Nuxt starter notes
 
 ## Setup
 

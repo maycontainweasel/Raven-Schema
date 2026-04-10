@@ -1,0 +1,64 @@
+# Change Ledger
+
+## 2026-04-08
+
+- Created the `schema-operating-system` workstream.
+- Captured the broad project scope:
+  - schema skill architecture
+  - guardian/nanny skill direction
+  - tenant governance
+  - shared and tenant versioning
+  - verification flows
+  - naming exploration
+  - graph modularization
+- Established a stable phrase for future prompts:
+  - "Continue the schema operating system workstream."
+- Added the first operating-system baseline docs:
+  - `docs/ai/skill-architecture.md`
+  - `docs/ai/tenant-governance.md`
+  - `docs/ai/versioning-model.md`
+- Added prompt recipes for recurring operating-system rounds.
+- Scaffolded the first guardian and operational skills for:
+  - tenant registration
+  - tenant-discovered fixes
+  - auth flow protection
+  - password refresh
+  - login verification
+  - session-cookie verification
+  - MCP connectivity checks
+  - framework release adoption
+- Tightened the control-plane language around tenants, release impact categories, normalization, and adoption.
+- Added a durable framework-candidate note template for tenant-discovered framework fixes.
+- Added the `schema-report-framework-candidate` skill scaffold.
+- Added an explicit backlog for the schema operating system workstream.
+- Audited unregistered `apps/schema` turbo candidates under `~/Dev` and registered the active tenants that were clear enough to govern immediately:
+  - `isolvents`
+  - `trading`
+- Recorded why other scan hits were intentionally left out for now:
+  - `coligo`
+  - `dmo`
+  - `mpd-life`
+  - `pmv2-turbo-master`
+- Migrated and normalized these tenant schema repos onto the GitHub shared framework remote plus GitHub app remotes:
+  - `isolvents`
+  - `trading`
+  - `dmo`
+- For all three:
+  - parked the live dirty checkout on a safety branch
+  - aligned local `main` to shared GitHub `origin/main`
+  - ensured local `app` contains the shared framework
+  - wrote `.schema-release.yaml`
+  - pushed `app/app`
+- `dmo` required a tenant-favoring migration merge because its tenant history was still living on `main` rather than `app`.
+- Established the Schema v1 / Lyric v2 program split in master docs.
+- Added the first Lyric workstreams:
+  - `docs/ai/workstreams/lyric-v2/`
+  - `docs/ai/workstreams/lyric-docs/`
+- Captured the redesign intent, v2 vision, and first capability inventory.
+- Reserved the future workspace folders:
+  - `lyric-v2/`
+  - `lyric-docs/`
+- Updated master guidance so fresh agents can distinguish:
+  - active Schema v1 work
+  - Lyric v2 redesign planning
+  - the role of the future interactive documentation app

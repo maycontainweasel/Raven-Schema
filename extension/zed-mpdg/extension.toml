@@ -1,0 +1,18 @@
+id = "mpdg"
+name = "MPDG"
+version = "0.0.1"
+schema_version = 1
+description = "MPDG language support for Zed."
+repository = "https://github.com/mpireco/Schema"
+authors = ["Michael Peters"]
+themes = []
+languages = ["languages/mpdg"]
+capabilities = []
+
+[lib]
+
+[grammars.mpdg]
+repository = "file:///Users/michaelpeters/Dev/mpd/projects/mpd-schema/apps/schema/extension/zed-mpdg"
+rev = "HEAD"
+
+[language_servers]

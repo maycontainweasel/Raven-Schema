@@ -24,6 +24,11 @@ Optional files:
 
 ## Current workstreams
 - `schema-repo-operations/`
+- `schema-operating-system/`
+- `mpdg-editor-tooling/`
+- `schema-v1-5/`
+- `lyric-v2/`
+- `lyric-docs/`
 
 ## Working rule
 

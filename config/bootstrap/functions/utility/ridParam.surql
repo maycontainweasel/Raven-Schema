@@ -1,53 +1,61 @@
-DEFINE FUNCTION fn::ridParam($model: string, $value: any) {
+DEFINE FUNCTION OVERWRITE fn::ridParam($model: string, $value: any) {
   if !$model || !type::is_string($model) {
     throw "ridParam | model is required";
   };
 
-  if $value == NONE {
+  if $value == NONE || $value = null {
     return NONE;
   };
 
-  let $RID = if type::is_record($value) {
-    $value
-  } else if type::is_object($value) && $value.tb && $value.id {
-    if $value.id == NONE { NONE } else { type::record($value.tb, $value.id) }
-  } else if type::is_object($value) && $value.id {
-    if $value.id == NONE { NONE } else { type::record($model, $value.id) }
+  let $source = if type::is_array($value) {
+    NONE
+  } else if type::is_object($value) && $value.tb != NONE && $value.tb != null && $value.id != NONE && $value.id != null {
+    string::concat(<string> $value.tb, ":", <string> $value.id)
+  } else if type::is_object($value) && $value.id != NONE && $value.id != null {
+    <string> $value.id
   } else if type::is_object($value) {
     NONE
-  } else if type::is_string($value) {
-    let $trim = string::trim($value);
-    if $trim == "" {
-      NONE
-    } else {
-      let $parts = string::split($trim, ":");
-      if array::len($parts) > 1 {
-        let $tb = $parts[0];
-        let $keyRaw = $parts[array::len($parts) - 1];
-        let $key = if string::len($keyRaw) >= 2 && string::slice($keyRaw, 0, 1) = "`" && string::slice($keyRaw, string::len($keyRaw) - 1, string::len($keyRaw)) = "`" {
-          string::slice($keyRaw, 1, string::len($keyRaw) - 1)
-        } else {
-          $keyRaw
-        };
-        if string::matches($key, '^-?\\d+$') { type::record($tb, <int> $key) } else { type::record($tb, $key) }
-      } else if string::matches($trim, '^-?\\d+$') {
-        type::record($model, <int> $trim)
-      } else {
-        type::record($model, $trim)
-      }
-    }
   } else {
-    type::record($model, $value)
+    <string> $value
   };
 
-  if type::is_record($RID) {
-    let $id = record::id($RID);
-    if type::is_string($id) {
-      if string::matches($id, '^-?\\d+$') {
-        return type::record(record::tb($RID), <int> $id);
-      };
-    };
+  if $source == NONE || $source = null {
+    return NONE;
   };
 
-  return $RID;
+  let $raw = string::trim($source);
+  let $raw = string::replace($raw, "`", "");
+  let $raw = string::replace($raw, "⟨", "");
+  let $raw = string::replace($raw, "⟩", "");
+  let $raw = string::replace($raw, "<", "");
+  let $raw = string::replace($raw, ">", "");
+  let $raw = string::replace($raw, "{", "");
+  let $raw = string::replace($raw, "}", "");
+  let $raw = string::trim($raw);
+
+  if $raw == "" {
+    return NONE;
+  };
+
+  let $parts = string::split($raw, ":");
+  let $tb = if array::len($parts) > 1 {
+    string::trim($parts[0])
+  } else {
+    $model
+  };
+  let $key = if array::len($parts) > 1 {
+    string::trim($parts[array::len($parts) - 1])
+  } else {
+    $raw
+  };
+
+  if $tb == "" || $key == "" {
+    return NONE;
+  };
+
+  return if string::matches($key, '^-?\\d+$') {
+    type::record($tb, <int> $key)
+  } else {
+    type::record($tb, $key)
+  };
 };
