@@ -3,7 +3,7 @@ kind: table
 name: MonthlySnapshot
 primary: true
 tableType: primary
-description: Monthly truth snapshot
+description: Month-level financial truth snapshot for a financial space
 table:
   model: monthlySnapshot
   type: NORMAL
@@ -21,7 +21,6 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - month:
       type: string
       required: true
@@ -58,9 +57,9 @@ fields:
       type: number
       default: 0
   - generatedAt:
-      type: datetime
+      type: string
       required: true
-      default: time::now()
+      default: ""
   - status:
       type: enum<"draft" | "final">
       required: true
@@ -100,6 +99,20 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - month
+      - currency
+      - incomeTotal
+      - outflowTotal
+      - netTotal
+      - transferTotal
+      - cashAvailable
+      - recurringTotal
+      - businessSpendTotal
+      - personalSpendTotal
+      - generatedAt
+      - status
+      - notes
 refreshViews: true
 admin:
   authority: source

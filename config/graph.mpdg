@@ -1,15 +1,25 @@
-User, u | Minimal user profile {
+// Raven financial operating system schema
+// Raven is the application/codebase. Financial Mastery is the Orbit planning project.
+//
+// This graph is a parity baseline reconstructed from the current Raven generated
+// model manifest, generated table types, and app import flow. It intentionally
+// keeps the current generated contract narrow: CRUD + router + Admin views.
+// Rich relation/taxonomy expansion can be layered on after this baseline
+// validates cleanly and the app has regenerated from a stable source of truth.
+
+User, u | Minimal Raven user profile {
   id: $email,
-  email!: "",
+  email!: "", <email>
   uniqueId: "", <md5<$email>> <assign>
   firstName!: "",
   surname!: ""
+} & {
+  authority: "source"
 } [
   crud,
   router,
-  views: admin,
-  typesense,
-  post,
+  views:
+    Admin[*](),
 
   taxonomies:
     Role/Roles, role | User roles {} {
@@ -21,33 +31,29 @@ User, u | Minimal user profile {
       required: true
       processor: functions
     }
-] () {}
+]
 
-// Raven phase 1: truth layer
-// Keep observed facts, import provenance, and account ownership explicit.
-
-FinancialSpace, financialSpace | Personal or business money context {
+FinancialSpace, financialSpace | Personal, business, trading, family, or other money context {
   id: $key,
-  key!: "", <slug> <unique>
+  key!: "",
   name!: "",
   spaceType!: "personal", <"personal" | "business" | "trading" | "family" | "other">
   currency!: "ZAR",
   description: "",
   active!: true,
-  archivedAt: null, <datetime>
+  archivedAt: ""
 } & {
   authority: "source"
 } [
   crud,
   router,
-  views: admin,
-] (
-  ->FinancialSpaceAccounts->account
-)
+  views:
+    Admin[*]()
+]
 
-Account, account | Real-world bank account within a financial space {
-  id: S($space, $key),
-  space!: "", <record<financialSpace>> <assign>
+Account, account | Real-world bank, card, savings, loan, debt, investment, cash, or other account inside a financial space {
+  id: $key,
+  space!: "", <record<financialSpace>>
   key!: "",
   name!: "",
   bankName!: "",
@@ -62,21 +68,19 @@ Account, account | Real-world bank account within a financial space {
 } [
   crud,
   router,
-  views: admin,
-] (
-  ->AccountStatementImports->statementImport
-  ->AccountTransactions->transaction
-)
+  views:
+    Admin[*]()
+]
 
-StatementImport, statementImport | Raw statement import batch {
-  id: S($account, $key),
-  space!: "", <record<financialSpace>> <assign>
-  account!: "", <record<account>> <assign>
+StatementImport, statementImport | Source statement import batch for an account cycle {
+  id: $key,
+  space!: "", <record<financialSpace>>
+  account!: "", <record<account>>
   key!: "",
   sourceFileName!: "",
-  sourceFormat!: "csv", <"csv" | "ofx" | "qif" | "pdf" | "manual">
-  importedAt!: time::now(), <datetime>
-  statementDate: null, <datetime>
+  sourceFormat!: "pdf", <"csv" | "ofx" | "qif" | "pdf" | "manual">
+  importedAt!: "",
+  statementDate: "",
   status!: "raw", <"raw" | "parsed" | "matched" | "reviewed" | "error">
   rowCount: 0,
   normalizedCount: 0,
@@ -88,18 +92,17 @@ StatementImport, statementImport | Raw statement import batch {
 } [
   crud,
   router,
-  views: admin,
-] (
-  ->StatementImportRows->statementRow
-)
+  views:
+    Admin[*]()
+]
 
-StatementRow, statementRow | Immutable raw statement row {
-  id: S($statementImport, $rowNumber),
-  space!: "", <record<financialSpace>> <assign>
-  account!: "", <record<account>> <assign>
-  statementImport!: "", <record<statementImport>> <assign>
+StatementRow, statementRow | Raw statement row preserved from imported source material {
+  id: default,
+  space!: "", <record<financialSpace>>
+  account!: "", <record<account>>
+  statementImport!: "", <record<statementImport>>
   rowNumber!: 0,
-  postedAt: null, <datetime>
+  postedAt: "",
   description!: "",
   normalizedDescription: "",
   amount!: 0,
@@ -116,26 +119,25 @@ StatementRow, statementRow | Immutable raw statement row {
 } [
   crud,
   router,
-  views: admin,
-] (
-  ->StatementRowTransactions->transaction
-)
+  views:
+    Admin[*]()
+]
 
-Transaction, transaction | Normalized transaction candidate {
-  id: S($account, $key),
-  space!: "", <record<financialSpace>> <assign>
-  account!: "", <record<account>> <assign>
+Transaction, transaction | Normalized money movement derived from a statement row or manual entry {
+  id: $key,
+  space!: "", <record<financialSpace>>
+  account!: "", <record<account>>
   key!: "",
   sourceRow: "", <record<statementRow>>
-  postedAt!: "", <datetime>
-  effectiveAt: null, <datetime>
+  postedAt!: "",
+  effectiveAt: "",
   description!: "",
   normalizedDescription: "",
   amount!: 0,
   balance: 0,
   currency!: "ZAR",
   direction!: "debit", <"debit" | "credit" | "transfer">
-  status!: "normalized", <"imported" | "normalized" | "matched" | "classified" | "clarified" | "ignored">
+  status!: "imported", <"imported" | "normalized" | "matched" | "classified" | "clarified" | "ignored">
   confidence: 0,
   merchantName: "",
   merchant: "", <record<merchant>>
@@ -148,32 +150,13 @@ Transaction, transaction | Normalized transaction candidate {
 } [
   crud,
   router,
-  views: admin,
-] (
-  ->TransactionMerchant->merchant
-  ->TransactionCategory->category
-  ->TransactionClarificationTasks->clarificationTask
-)
-
-Merchant, merchant | Merchant memory record {
-  id: S($space, $key),
-  space!: "", <record<financialSpace>> <assign>
-  key!: "",
-  name!: "",
-  normalizedName: "",
-  active!: true,
-  notes: ""
-} & {
-  authority: "source"
-} [
-  crud,
-  router,
-  views: admin,
+  views:
+    Admin[*]()
 ]
 
-Category, category | Transaction category {
-  id: S($space, $key),
-  space!: "", <record<financialSpace>> <assign>
+Category, category | Transaction category and category hierarchy node {
+  id: $key,
+  space!: "", <record<financialSpace>>
   key!: "",
   name!: "",
   categoryKind!: "expense", <"income" | "expense" | "transfer" | "tax" | "savings" | "other">
@@ -185,12 +168,30 @@ Category, category | Transaction category {
 } [
   crud,
   router,
-  views: admin,
+  views:
+    Admin[*]()
 ]
 
-ClassificationRule, classificationRule | Rule for automatic transaction matching {
-  id: S($space, $key),
-  space!: "", <record<financialSpace>> <assign>
+Merchant, merchant | Merchant, customer, vendor, or counterparty memory record {
+  id: $key,
+  space!: "", <record<financialSpace>>
+  key!: "",
+  name!: "",
+  normalizedName: "",
+  active!: true,
+  notes: ""
+} & {
+  authority: "source"
+} [
+  crud,
+  router,
+  views:
+    Admin[*]()
+]
+
+ClassificationRule, classificationRule | Rule for automatic transaction matching and future classification suggestions {
+  id: $key,
+  space!: "", <record<financialSpace>>
   key!: "",
   name!: "",
   matcher!: "",
@@ -205,21 +206,22 @@ ClassificationRule, classificationRule | Rule for automatic transaction matching
 } [
   crud,
   router,
-  views: admin,
+  views:
+    Admin[*]()
 ]
 
-ClarificationTask, clarificationTask | Review task for uncertain transactions {
-  id: S($space, $key),
-  space!: "", <record<financialSpace>> <assign>
+ClarificationTask, clarificationTask | Review task for uncertain transaction meaning {
+  id: $key,
+  space!: "", <record<financialSpace>>
   key!: "",
-  transaction!: "", <record<transaction>> <assign>
+  transaction!: "", <record<transaction>>
   status!: "open", <"open" | "suggested" | "resolved" | "dismissed">
   question!: "",
   reason: "",
   suggestedSpace: "", <record<financialSpace>>
   suggestedMerchant: "", <record<merchant>>
   suggestedCategory: "", <record<category>>
-  resolvedAt: null, <datetime>
+  resolvedAt: "",
   resolutionNotes: "",
   confidence: 0,
   notes: ""
@@ -228,12 +230,13 @@ ClarificationTask, clarificationTask | Review task for uncertain transactions {
 } [
   crud,
   router,
-  views: admin,
+  views:
+    Admin[*]()
 ]
 
-MonthlySnapshot, monthlySnapshot | Monthly truth snapshot {
+MonthlySnapshot, monthlySnapshot | Month-level financial truth snapshot for a financial space {
   id: S($space, $month),
-  space!: "", <record<financialSpace>> <assign>
+  space!: "", <record<financialSpace>>
   month!: "",
   currency!: "ZAR",
   incomeTotal!: 0,
@@ -244,7 +247,7 @@ MonthlySnapshot, monthlySnapshot | Monthly truth snapshot {
   recurringTotal: 0,
   businessSpendTotal: 0,
   personalSpendTotal: 0,
-  generatedAt!: time::now(), <datetime>
+  generatedAt!: "",
   status!: "draft", <"draft" | "final">
   notes: ""
 } & {
@@ -252,5 +255,6 @@ MonthlySnapshot, monthlySnapshot | Monthly truth snapshot {
 } [
   crud,
   router,
-  views: admin,
+  views:
+    Admin[*]()
 ]

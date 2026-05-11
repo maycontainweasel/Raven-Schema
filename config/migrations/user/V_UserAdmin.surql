@@ -2,5 +2,10 @@ DEFINE TABLE IF NOT EXISTS u TYPE NORMAL SCHEMALESS PERMISSIONS FULL;
 
 DEFINE TABLE OVERWRITE UserAdmin TYPE NORMAL AS
 SELECT
-    id
-FROM u;
+    id,
+    email,
+    uniqueId,
+    firstName,
+    surname
+FROM u
+PERMISSIONS FULL;

@@ -2,5 +2,19 @@ DEFINE TABLE IF NOT EXISTS statementImport TYPE NORMAL SCHEMALESS PERMISSIONS FU
 
 DEFINE TABLE OVERWRITE StatementImportAdmin TYPE NORMAL AS
 SELECT
-    id
-FROM statementImport;
+    id,
+    space,
+    account,
+    key,
+    sourceFileName,
+    sourceFormat,
+    importedAt,
+    statementDate,
+    status,
+    rowCount,
+    normalizedCount,
+    clarificationCount,
+    sourceChecksum,
+    notes
+FROM statementImport
+PERMISSIONS FULL;

@@ -3,7 +3,7 @@ kind: table
 name: Transaction
 primary: true
 tableType: primary
-description: Normalized transaction candidate
+description: Normalized money movement derived from a statement row or manual entry
 table:
   model: transaction
   type: NORMAL
@@ -13,7 +13,7 @@ id:
   type: string
   exportType: true
   exportName: TransactionId
-  structure: stringID<account, key>
+  structure: key
 modelSettings:
   authority: source
 fields:
@@ -21,12 +21,10 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - account:
       type: record<account>
       required: true
       default: ""
-      assign: true
   - key:
       type: string
       required: true
@@ -35,12 +33,12 @@ fields:
       type: record<statementRow>
       default: ""
   - postedAt:
-      type: datetime
+      type: string
       required: true
       default: ""
   - effectiveAt:
-      type: datetime
-      default: null
+      type: string
+      default: ""
   - description:
       type: string
       required: true
@@ -67,7 +65,7 @@ fields:
       type: enum<"imported" | "normalized" | "matched" | "classified" | "clarified" |
         "ignored">
       required: true
-      default: normalized
+      default: imported
   - confidence:
       type: number
       default: 0
@@ -89,21 +87,6 @@ fields:
   - notes:
       type: string
       default: ""
-edges:
-  has:
-    - table: TransactionMerchant
-      in: transaction
-      out: merchant
-      unique: true
-    - table: TransactionCategory
-      in: transaction
-      out: category
-      unique: true
-    - table: TransactionClarificationTasks
-      in: transaction
-      out: clarificationTask
-      unique: true
-  belongs: []
 crud:
   create:
     enabled: true
@@ -136,6 +119,26 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - account
+      - key
+      - sourceRow
+      - postedAt
+      - effectiveAt
+      - description
+      - normalizedDescription
+      - amount
+      - balance
+      - currency
+      - direction
+      - status
+      - confidence
+      - merchantName
+      - merchant
+      - category
+      - isTransfer
+      - manualOverride
+      - notes
 refreshViews: true
 admin:
   authority: source

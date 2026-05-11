@@ -2,5 +2,13 @@ DEFINE TABLE IF NOT EXISTS financialSpace TYPE NORMAL SCHEMALESS PERMISSIONS FUL
 
 DEFINE TABLE OVERWRITE FinancialSpaceAdmin TYPE NORMAL AS
 SELECT
-    id
-FROM financialSpace;
+    id,
+    key,
+    name,
+    spaceType,
+    currency,
+    description,
+    active,
+    archivedAt
+FROM financialSpace
+PERMISSIONS FULL;

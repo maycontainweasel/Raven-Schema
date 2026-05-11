@@ -1,7 +1,7 @@
 // AUTO-GENERATED — rich admin model manifest for Helios model manager
 export const adminManifest = {
   "version": 1,
-  "generatedAt": "2026-04-03T19:27:29.483Z",
+  "generatedAt": "2026-05-11T16:14:54.858Z",
   "source": "schema.modelsManifest",
   "models": {
     "account": {
@@ -852,7 +852,9 @@ export const adminManifest = {
       "admin": {
         "enabled": true
       },
-      "settingsRaw": {},
+      "settingsRaw": {
+        "authority": "source"
+      },
       "warnings": []
     }
   }

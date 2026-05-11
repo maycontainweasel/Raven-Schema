@@ -84,12 +84,16 @@ DEFINE FUNCTION OVERWRITE fn::createUser($payload: object) {
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
 
-	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null {
 		$record.id
-	} else if type::is_record($record) {
-		$record
 	} else {
-		null
+		$record
+	};
+
+	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {
+		NONE
+	} else {
+		fn::ridParam("u", $recordIDSource)
 	};
 
 	if !$recordID {

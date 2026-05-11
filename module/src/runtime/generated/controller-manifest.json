@@ -1,7 +1,43 @@
 [
   {
-    "key": "post",
-    "typeName": "PostController"
+    "key": "account",
+    "typeName": "AccountController"
+  },
+  {
+    "key": "category",
+    "typeName": "CategoryController"
+  },
+  {
+    "key": "clarificationTask",
+    "typeName": "ClarificationTaskController"
+  },
+  {
+    "key": "classificationRule",
+    "typeName": "ClassificationRuleController"
+  },
+  {
+    "key": "financialSpace",
+    "typeName": "FinancialSpaceController"
+  },
+  {
+    "key": "merchant",
+    "typeName": "MerchantController"
+  },
+  {
+    "key": "monthlySnapshot",
+    "typeName": "MonthlySnapshotController"
+  },
+  {
+    "key": "statementImport",
+    "typeName": "StatementImportController"
+  },
+  {
+    "key": "statementRow",
+    "typeName": "StatementRowController"
+  },
+  {
+    "key": "transaction",
+    "typeName": "TransactionController"
   },
   {
     "key": "user",

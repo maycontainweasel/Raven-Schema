@@ -3,7 +3,7 @@ kind: table
 name: User
 primary: true
 tableType: primary
-description: Minimal user profile
+description: Minimal Raven user profile
 table:
   model: u
   type: NORMAL
@@ -14,9 +14,11 @@ id:
   exportType: true
   exportName: UserId
   structure: email
+modelSettings:
+  authority: source
 fields:
   - email:
-      type: string
+      type: email
       required: true
       default: ""
   - uniqueId:
@@ -65,6 +67,10 @@ views:
   - name: Admin
     fields:
       - id
+      - email
+      - uniqueId
+      - firstName
+      - surname
 taxonomies:
   - key: role
     labels:
@@ -112,5 +118,7 @@ taxonomies:
       - roles
     required: true
     processor: functions
-post: true
 refreshViews: true
+admin:
+  authority: source
+  data: source

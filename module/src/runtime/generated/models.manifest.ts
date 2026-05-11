@@ -1,7 +1,7 @@
 // AUTO-GENERATED — canonical models manifest
 export const modelsManifest = {
   "manifestVersion": "1.0.0",
-  "generatedAt": "2026-04-03T19:27:29.482Z",
+  "generatedAt": "2026-05-11T16:14:54.857Z",
   "source": "schema.modelsManifest",
   "warnings": [],
   "models": {
@@ -9,7 +9,7 @@ export const modelsManifest = {
       "key": "account",
       "table": "account",
       "label": "Account",
-      "description": "Real-world bank account within a financial space",
+      "description": "Real-world bank, card, savings, loan, debt, investment, cash, or other account inside a financial space",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -88,7 +88,7 @@ export const modelsManifest = {
       "key": "category",
       "table": "category",
       "label": "Category",
-      "description": "Transaction category",
+      "description": "Transaction category and category hierarchy node",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -162,7 +162,7 @@ export const modelsManifest = {
       "key": "clarificationTask",
       "table": "clarificationtask",
       "label": "ClarificationTask",
-      "description": "Review task for uncertain transactions",
+      "description": "Review task for uncertain transaction meaning",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -242,7 +242,7 @@ export const modelsManifest = {
       "key": "classificationRule",
       "table": "classificationrule",
       "label": "ClassificationRule",
-      "description": "Rule for automatic transaction matching",
+      "description": "Rule for automatic transaction matching and future classification suggestions",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -320,7 +320,7 @@ export const modelsManifest = {
       "key": "financialSpace",
       "table": "financialspace",
       "label": "FinancialSpace",
-      "description": "Personal or business money context",
+      "description": "Personal, business, trading, family, or other money context",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -394,7 +394,7 @@ export const modelsManifest = {
       "key": "merchant",
       "table": "merchant",
       "label": "Merchant",
-      "description": "Merchant memory record",
+      "description": "Merchant, customer, vendor, or counterparty memory record",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -466,7 +466,7 @@ export const modelsManifest = {
       "key": "monthlySnapshot",
       "table": "monthlysnapshot",
       "label": "MonthlySnapshot",
-      "description": "Monthly truth snapshot",
+      "description": "Month-level financial truth snapshot for a financial space",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -550,7 +550,7 @@ export const modelsManifest = {
       "key": "statementImport",
       "table": "statementimport",
       "label": "StatementImport",
-      "description": "Raw statement import batch",
+      "description": "Source statement import batch for an account cycle",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -632,7 +632,7 @@ export const modelsManifest = {
       "key": "statementRow",
       "table": "statementrow",
       "label": "StatementRow",
-      "description": "Immutable raw statement row",
+      "description": "Raw statement row preserved from imported source material",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -719,7 +719,7 @@ export const modelsManifest = {
       "key": "transaction",
       "table": "transaction",
       "label": "Transaction",
-      "description": "Normalized transaction candidate",
+      "description": "Normalized money movement derived from a statement row or manual entry",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -810,7 +810,7 @@ export const modelsManifest = {
       "key": "user",
       "table": "u",
       "label": "User",
-      "description": "Minimal user profile",
+      "description": "Minimal Raven user profile",
       "authority": "source",
       "data": "local",
       "schemaType": "schemaless",
@@ -886,7 +886,9 @@ export const modelsManifest = {
       "admin": {
         "enabled": true
       },
-      "settingsRaw": {},
+      "settingsRaw": {
+        "authority": "source"
+      },
       "warnings": []
     }
   }

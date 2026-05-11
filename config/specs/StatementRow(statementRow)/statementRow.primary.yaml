@@ -3,7 +3,7 @@ kind: table
 name: StatementRow
 primary: true
 tableType: primary
-description: Immutable raw statement row
+description: Raw statement row preserved from imported source material
 table:
   model: statementRow
   type: NORMAL
@@ -13,7 +13,6 @@ id:
   type: string
   exportType: true
   exportName: StatementRowId
-  structure: stringID<statementImport, rowNumber>
 modelSettings:
   authority: source
 fields:
@@ -21,24 +20,21 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - account:
       type: record<account>
       required: true
       default: ""
-      assign: true
   - statementImport:
       type: record<statementImport>
       required: true
       default: ""
-      assign: true
   - rowNumber:
       type: number
       required: true
       default: 0
   - postedAt:
-      type: datetime
-      default: null
+      type: string
+      default: ""
   - description:
       type: string
       required: true
@@ -76,13 +72,6 @@ fields:
   - notes:
       type: string
       default: ""
-edges:
-  has:
-    - table: StatementRowTransactions
-      in: statementRow
-      out: transaction
-      unique: true
-  belongs: []
 crud:
   create:
     enabled: true
@@ -115,6 +104,22 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - account
+      - statementImport
+      - rowNumber
+      - postedAt
+      - description
+      - normalizedDescription
+      - amount
+      - balance
+      - currency
+      - direction
+      - status
+      - confidence
+      - rawData
+      - transaction
+      - notes
 refreshViews: true
 admin:
   authority: source

@@ -43,10 +43,6 @@ DEFINE FUNCTION OVERWRITE fn::createClassificationRule($payload: object) {
 	let $payload = fn::objectAssign($defaultData, $payload);
 
 	let $payload = fn::objectAssign($payload, {
-		space: if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { null } else { fn::ridParam("financialSpace", $payload.space) },
-	});
-
-	let $payload = fn::objectAssign($payload, {
 		space: if type::is_array($payload.space) { $payload.space } else if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { $payload.space } else { fn::ridParam("financialSpace", $payload.space) },
 		targetMerchant: if type::is_array($payload.targetMerchant) { $payload.targetMerchant } else if $payload.targetMerchant = NONE || $payload.targetMerchant = null || (type::is_string($payload.targetMerchant) && string::len(string::trim($payload.targetMerchant)) = 0) { $payload.targetMerchant } else { fn::ridParam("merchant", $payload.targetMerchant) },
 		targetCategory: if type::is_array($payload.targetCategory) { $payload.targetCategory } else if $payload.targetCategory = NONE || $payload.targetCategory = null || (type::is_string($payload.targetCategory) && string::len(string::trim($payload.targetCategory)) = 0) { $payload.targetCategory } else { fn::ridParam("category", $payload.targetCategory) },
@@ -70,7 +66,7 @@ DEFINE FUNCTION OVERWRITE fn::createClassificationRule($payload: object) {
 		$payload
 	};
 
-	let $rid = type::record('classificationRule', fn::stringID([$payload.space, $payload.key]));
+	let $rid = type::record('classificationRule', $payload.key);
 	let $payload = fn::objectRemove($payload, ["id"]);
 	let $record = upsert $rid content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
@@ -80,12 +76,16 @@ DEFINE FUNCTION OVERWRITE fn::createClassificationRule($payload: object) {
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
 
-	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null {
 		$record.id
-	} else if type::is_record($record) {
-		$record
 	} else {
-		null
+		$record
+	};
+
+	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {
+		NONE
+	} else {
+		fn::ridParam("classificationRule", $recordIDSource)
 	};
 
 	if !$recordID {

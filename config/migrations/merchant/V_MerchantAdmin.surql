@@ -2,5 +2,12 @@ DEFINE TABLE IF NOT EXISTS merchant TYPE NORMAL SCHEMALESS PERMISSIONS FULL;
 
 DEFINE TABLE OVERWRITE MerchantAdmin TYPE NORMAL AS
 SELECT
-    id
-FROM merchant;
+    id,
+    space,
+    key,
+    name,
+    normalizedName,
+    active,
+    notes
+FROM merchant
+PERMISSIONS FULL;

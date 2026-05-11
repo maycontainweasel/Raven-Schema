@@ -45,16 +45,12 @@ DEFINE FUNCTION OVERWRITE fn::createMonthlySnapshot($payload: object) {
 		recurringTotal: 0,
 		businessSpendTotal: 0,
 		personalSpendTotal: 0,
-		generatedAt: time::now(),
+		generatedAt: "",
 		status: "draft",
 		notes: "",
 	};
 
 	let $payload = fn::objectAssign($defaultData, $payload);
-
-	let $payload = fn::objectAssign($payload, {
-		space: if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { null } else { fn::ridParam("financialSpace", $payload.space) },
-	});
 
 	let $payload = fn::objectAssign($payload, {
 		space: if type::is_array($payload.space) { $payload.space } else if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { $payload.space } else { fn::ridParam("financialSpace", $payload.space) },
@@ -74,12 +70,16 @@ DEFINE FUNCTION OVERWRITE fn::createMonthlySnapshot($payload: object) {
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
 
-	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null {
 		$record.id
-	} else if type::is_record($record) {
-		$record
 	} else {
-		null
+		$record
+	};
+
+	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {
+		NONE
+	} else {
+		fn::ridParam("monthlySnapshot", $recordIDSource)
 	};
 
 	if !$recordID {

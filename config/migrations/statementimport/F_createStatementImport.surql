@@ -38,9 +38,9 @@ DEFINE FUNCTION OVERWRITE fn::createStatementImport($payload: object) {
 		account: "",
 		key: "",
 		sourceFileName: "",
-		sourceFormat: "csv",
-		importedAt: time::now(),
-		statementDate: null,
+		sourceFormat: "pdf",
+		importedAt: "",
+		statementDate: "",
 		status: "raw",
 		rowCount: 0,
 		normalizedCount: 0,
@@ -50,11 +50,6 @@ DEFINE FUNCTION OVERWRITE fn::createStatementImport($payload: object) {
 	};
 
 	let $payload = fn::objectAssign($defaultData, $payload);
-
-	let $payload = fn::objectAssign($payload, {
-		space: if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { null } else { fn::ridParam("financialSpace", $payload.space) },
-		account: if $payload.account = NONE || $payload.account = null || (type::is_string($payload.account) && string::len(string::trim($payload.account)) = 0) { null } else { fn::ridParam("account", $payload.account) },
-	});
 
 	let $payload = fn::objectAssign($payload, {
 		space: if type::is_array($payload.space) { $payload.space } else if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { $payload.space } else { fn::ridParam("financialSpace", $payload.space) },
@@ -68,7 +63,7 @@ DEFINE FUNCTION OVERWRITE fn::createStatementImport($payload: object) {
 		throw "createStatementImport | account must reference an existing account record";
 	};
 
-	let $rid = type::record('statementImport', fn::stringID([$payload.account, $payload.key]));
+	let $rid = type::record('statementImport', $payload.key);
 	let $payload = fn::objectRemove($payload, ["id"]);
 	let $record = upsert $rid content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
@@ -78,12 +73,16 @@ DEFINE FUNCTION OVERWRITE fn::createStatementImport($payload: object) {
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
 
-	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null {
 		$record.id
-	} else if type::is_record($record) {
-		$record
 	} else {
-		null
+		$record
+	};
+
+	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {
+		NONE
+	} else {
+		fn::ridParam("statementImport", $recordIDSource)
 	};
 
 	if !$recordID {

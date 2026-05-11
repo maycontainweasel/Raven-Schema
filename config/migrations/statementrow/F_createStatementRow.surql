@@ -44,7 +44,7 @@ DEFINE FUNCTION OVERWRITE fn::createStatementRow($payload: object) {
 		account: "",
 		statementImport: "",
 		rowNumber: 0,
-		postedAt: null,
+		postedAt: "",
 		description: "",
 		normalizedDescription: "",
 		amount: 0,
@@ -59,12 +59,6 @@ DEFINE FUNCTION OVERWRITE fn::createStatementRow($payload: object) {
 	};
 
 	let $payload = fn::objectAssign($defaultData, $payload);
-
-	let $payload = fn::objectAssign($payload, {
-		space: if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { null } else { fn::ridParam("financialSpace", $payload.space) },
-		account: if $payload.account = NONE || $payload.account = null || (type::is_string($payload.account) && string::len(string::trim($payload.account)) = 0) { null } else { fn::ridParam("account", $payload.account) },
-		statementImport: if $payload.statementImport = NONE || $payload.statementImport = null || (type::is_string($payload.statementImport) && string::len(string::trim($payload.statementImport)) = 0) { null } else { fn::ridParam("statementImport", $payload.statementImport) },
-	});
 
 	let $payload = fn::objectAssign($payload, {
 		space: if type::is_array($payload.space) { $payload.space } else if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { $payload.space } else { fn::ridParam("financialSpace", $payload.space) },
@@ -90,22 +84,19 @@ DEFINE FUNCTION OVERWRITE fn::createStatementRow($payload: object) {
 		$payload
 	};
 
-	let $rid = type::record('statementRow', fn::stringID([$payload.statementImport, $payload.rowNumber]));
-	let $payload = fn::objectRemove($payload, ["id"]);
-	let $record = upsert $rid content $payload;
+	let $record = upsert statementRow content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
 
-	let $record = if $record { $record } else {
-		let $fallback = select * from only $rid;
-		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
+	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null {
+		$record.id
+	} else {
+		$record
 	};
 
-	let $recordID = if type::is_object($record) && type::is_record($record.id) {
-		$record.id
-	} else if type::is_record($record) {
-		$record
+	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {
+		NONE
 	} else {
-		null
+		fn::ridParam("statementRow", $recordIDSource)
 	};
 
 	if !$recordID {

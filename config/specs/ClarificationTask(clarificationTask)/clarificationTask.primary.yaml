@@ -3,7 +3,7 @@ kind: table
 name: ClarificationTask
 primary: true
 tableType: primary
-description: Review task for uncertain transactions
+description: Review task for uncertain transaction meaning
 table:
   model: clarificationTask
   type: NORMAL
@@ -13,7 +13,7 @@ id:
   type: string
   exportType: true
   exportName: ClarificationTaskId
-  structure: stringID<space, key>
+  structure: key
 modelSettings:
   authority: source
 fields:
@@ -21,7 +21,6 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - key:
       type: string
       required: true
@@ -30,7 +29,6 @@ fields:
       type: record<transaction>
       required: true
       default: ""
-      assign: true
   - status:
       type: enum<"open" | "suggested" | "resolved" | "dismissed">
       required: true
@@ -52,8 +50,8 @@ fields:
       type: record<category>
       default: ""
   - resolvedAt:
-      type: datetime
-      default: null
+      type: string
+      default: ""
   - resolutionNotes:
       type: string
       default: ""
@@ -95,6 +93,19 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - key
+      - transaction
+      - status
+      - question
+      - reason
+      - suggestedSpace
+      - suggestedMerchant
+      - suggestedCategory
+      - resolvedAt
+      - resolutionNotes
+      - confidence
+      - notes
 refreshViews: true
 admin:
   authority: source

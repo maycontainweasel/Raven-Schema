@@ -2,5 +2,20 @@ DEFINE TABLE IF NOT EXISTS monthlySnapshot TYPE NORMAL SCHEMALESS PERMISSIONS FU
 
 DEFINE TABLE OVERWRITE MonthlySnapshotAdmin TYPE NORMAL AS
 SELECT
-    id
-FROM monthlySnapshot;
+    id,
+    space,
+    month,
+    currency,
+    incomeTotal,
+    outflowTotal,
+    netTotal,
+    transferTotal,
+    cashAvailable,
+    recurringTotal,
+    businessSpendTotal,
+    personalSpendTotal,
+    generatedAt,
+    status,
+    notes
+FROM monthlySnapshot
+PERMISSIONS FULL;

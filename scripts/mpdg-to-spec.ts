@@ -351,7 +351,7 @@ export function parseFile(text: string): TableAst[] {
   return chunks.map(parseTableChunk);
 }
 
-type AuditIssue = {
+export type AuditIssue = {
   level: 'error' | 'warning';
   table?: string;
   field?: string;

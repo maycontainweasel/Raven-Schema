@@ -3,7 +3,7 @@ kind: table
 name: Merchant
 primary: true
 tableType: primary
-description: Merchant memory record
+description: Merchant, customer, vendor, or counterparty memory record
 table:
   model: merchant
   type: NORMAL
@@ -13,7 +13,7 @@ id:
   type: string
   exportType: true
   exportName: MerchantId
-  structure: stringID<space, key>
+  structure: key
 modelSettings:
   authority: source
 fields:
@@ -21,7 +21,6 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - key:
       type: string
       required: true
@@ -72,6 +71,12 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - key
+      - name
+      - normalizedName
+      - active
+      - notes
 refreshViews: true
 admin:
   authority: source

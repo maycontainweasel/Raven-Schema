@@ -1,0 +1,255 @@
+version: 0.1
+
+project:
+  name: raven-schema
+  description: Schema canon and generation workspace for the Raven financial operating system.
+
+tooling:
+  repoMode: turbo
+
+environment:
+  defaultDatabase: local
+  mothership: local
+  migrationTargets:
+    - local
+
+features:
+  schemaMode: schemaless
+  autoApplyMigrations: false
+  emitDocumentation: true
+
+databases:
+  local:
+    active: true
+    url: http://127.0.0.1:2993
+    namespace: raven
+    database: raven1
+    username: CHANGE_ME
+    password: CHANGE_ME
+    allowScripting: true
+    root: true
+
+paths:
+  migrations: ./config/specs
+  surrealOutput: ./surreal/generated
+  docsOutput: ./docs/generated
+  modules: ./config/bootstrap/modules
+  overrides:
+    functions: ./config/overrides/functions
+  projects:
+    - name: raven
+      nuxtProjectRoot: ../raven
+      active: true
+
+ui:
+  specsPath: ./config/ui
+  projects: []
+
+trpc:
+  httpEndpoint: /api/trpc
+  generateTestPages: true
+  routerNamespace: admin
+  contextImport: '@schema/server/trpc/context'
+
+defaults:
+  schemaMode: schemaless
+  postRecordEnabled: true
+  bundlesEnabled: false
+
+schemaKit:
+  logModuleUpdates: true
+  features:
+    trpcClient: true
+    trpcServer: true
+    typesense: true
+    surrealdb:
+      enabled: true
+      reconnectOnAuthLoss: true
+      retryFailedRequestsAfterReconnect: true
+    redis:
+      enabled: false
+    sentry:
+      enabled: false
+      client: false
+      server: false
+      sourceMaps: false
+  projects:
+    - name: raven
+      features:
+        sentry:
+          enabled: false
+        redis:
+          enabled: false
+  module:
+    mode: force
+    sync: force
+    source: module
+
+layers:
+  source: ./layers
+  sync: force
+  defaults:
+    - auth
+  auth:
+    runtimeConfig:
+      sessionCookie: sid
+      sessionSecret: ''
+      cookieDomain: ''
+      sessionDuration: 604800
+      refreshInterval: 720000
+      appPaths:
+        - /
+      cookie:
+        httpOnly: true
+        secure: true
+        sameSite: lax
+        path: /
+        maxAge: 604800
+        legacyCookieNames:
+          - token
+          - sessionId
+          - refreshToken
+          - surreal_access
+          - surreal_refresh
+      redirectOnFail: /login
+      redirectOnSuccess: /dashboard
+      guard:
+        enabled: true
+        refresh: true
+        ignorePaths:
+          - /login
+          - /register
+        redirectOnFail: /login
+        redirectOnSuccess: /dashboard
+        redirectAliases: {}
+    publicRuntimeConfig:
+      sessionCookie: sid
+      cookieDomain: ''
+
+fileSync:
+  globalExclude:
+    module: []
+    layers: []
+    docs: []
+  projects: []
+
+databasesExport:
+  projectOutput: modules/schema-kit/runtime/generated/databases.ts
+
+modelsExport:
+  projectOutput: modules/schema-kit/runtime/generated/models.ts
+
+requestSchema:
+  output: ../../../packages/pmv2shared/trpc/request-schema.ts
+  projectOutput: modules/schema-kit/runtime/generated/request-schema.ts
+  includeInactive: false
+
+typesense:
+  enabled: true
+  collectionMinLength: 3
+  output:
+    - ./config/typesense
+  projectOutput: modules/schema-kit/runtime/generated/typesense
+  settings:
+    nestedFields: true
+    synonyms: false
+    searchAsYouType: false
+    perDocumentSynonyms: false
+    perDocumentSearchAsYouType: false
+
+graph:
+  input: ./config/graph.mpdg
+  output: graph.ts
+  mermaidOutput: graph.mmd
+  spec:
+    mode: live
+    stagingDir: ./config/specs_stage
+    liveDir: ./config/specs
+    conflictPolicy: overwrite
+    pruneStale: true
+
+modules:
+  - api
+  - name: instance
+    active: true
+  - refreshViews
+  - taxonomies
+
+importFilters:
+  onlyChanged: true
+  tables: []
+  bootstrap:
+    functions:
+      - utility/objectAssign.surql
+      - utility/objectRemove.surql
+      - utility/ridParam.surql
+      - utility/stringID.surql
+      - utility/RIDExists.surql
+      - utility/createEdge.surql
+      - utility/deleteEdge.surql
+      - utility/deleteEdgeFromIn.surql
+      - utility/deleteEdgeFromOut.surql
+      - utility/clearEdgesForRecord.surql
+      - utility/getTaxonomyMeta.surql
+      - utility/queryTaxonomy.surql
+      - utility/taxonomyTerms.surql
+      - utility/toRecordArray.surql
+    modules: []
+    seeds: []
+
+instance:
+  active: false
+  source: local
+  tenants: auto
+  fields:
+    instances:
+      type: array<string>
+      default: |-
+        [select value instance from only type::record("instance", "local")]
+
+taxonomies:
+  taxonomies:
+    fields:
+      - key:
+          type: string
+          required: true
+      - label:
+          type: string
+          required: true
+      - description:
+          type: string
+          required: false
+      - hierarchical:
+          type: boolean
+          required: false
+          default: false
+      - permalink:
+          type: <permalink<<field:key>>>
+          required: false
+          assign: true
+  terms:
+    fields:
+      - key:
+          type: string
+          required: true
+      - label:
+          type: string
+          required: true
+      - description:
+          type: string
+          required: false
+      - parent:
+          type: record<term>
+          required: false
+          default: ''
+
+documentation:
+  documentation:
+    enabled: true
+    format: markdown
+    includeSurrealExamples: true
+    locations:
+      - ./docs/mpd-framework
+  schemaApp:
+    enabled: true
+    location: ../schema-docs

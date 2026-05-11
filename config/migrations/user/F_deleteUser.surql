@@ -9,11 +9,6 @@ DEFINE FUNCTION OVERWRITE fn::deleteUser($UserID: any) {
 
 	let $result = (delete only $rid return before);
 
-	delete from Post where out = $rid;
-	let $PID = fn::PID($rid);
-	if type::is_record($PID) && record::exists($PID) {
-		fn::deletePost($PID);
-	};
 	delete from UserRoles where in = $rid;
 
 	return if $result {

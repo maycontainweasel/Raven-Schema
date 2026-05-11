@@ -3,7 +3,7 @@ kind: table
 name: StatementImport
 primary: true
 tableType: primary
-description: Raw statement import batch
+description: Source statement import batch for an account cycle
 table:
   model: statementImport
   type: NORMAL
@@ -13,7 +13,7 @@ id:
   type: string
   exportType: true
   exportName: StatementImportId
-  structure: stringID<account, key>
+  structure: key
 modelSettings:
   authority: source
 fields:
@@ -21,12 +21,10 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - account:
       type: record<account>
       required: true
       default: ""
-      assign: true
   - key:
       type: string
       required: true
@@ -38,14 +36,14 @@ fields:
   - sourceFormat:
       type: enum<"csv" | "ofx" | "qif" | "pdf" | "manual">
       required: true
-      default: csv
+      default: pdf
   - importedAt:
-      type: datetime
+      type: string
       required: true
-      default: time::now()
+      default: ""
   - statementDate:
-      type: datetime
-      default: null
+      type: string
+      default: ""
   - status:
       type: enum<"raw" | "parsed" | "matched" | "reviewed" | "error">
       required: true
@@ -65,13 +63,6 @@ fields:
   - notes:
       type: string
       default: ""
-edges:
-  has:
-    - table: StatementImportRows
-      in: statementImport
-      out: statementRow
-      unique: true
-  belongs: []
 crud:
   create:
     enabled: true
@@ -104,6 +95,19 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - account
+      - key
+      - sourceFileName
+      - sourceFormat
+      - importedAt
+      - statementDate
+      - status
+      - rowCount
+      - normalizedCount
+      - clarificationCount
+      - sourceChecksum
+      - notes
 refreshViews: true
 admin:
   authority: source

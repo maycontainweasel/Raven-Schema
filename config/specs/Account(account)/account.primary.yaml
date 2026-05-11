@@ -3,7 +3,8 @@ kind: table
 name: Account
 primary: true
 tableType: primary
-description: Real-world bank account within a financial space
+description: Real-world bank, card, savings, loan, debt, investment, cash, or
+  other account inside a financial space
 table:
   model: account
   type: NORMAL
@@ -13,7 +14,7 @@ id:
   type: string
   exportType: true
   exportName: AccountId
-  structure: stringID<space, key>
+  structure: key
 modelSettings:
   authority: source
 fields:
@@ -21,7 +22,6 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - key:
       type: string
       required: true
@@ -56,17 +56,6 @@ fields:
   - notes:
       type: string
       default: ""
-edges:
-  has:
-    - table: AccountStatementImports
-      in: account
-      out: statementImport
-      unique: true
-    - table: AccountTransactions
-      in: account
-      out: transaction
-      unique: true
-  belongs: []
 crud:
   create:
     enabled: true
@@ -99,6 +88,16 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - key
+      - name
+      - bankName
+      - accountType
+      - currency
+      - accountNumberLast4
+      - openingBalance
+      - active
+      - notes
 refreshViews: true
 admin:
   authority: source

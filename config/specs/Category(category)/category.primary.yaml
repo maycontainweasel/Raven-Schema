@@ -3,7 +3,7 @@ kind: table
 name: Category
 primary: true
 tableType: primary
-description: Transaction category
+description: Transaction category and category hierarchy node
 table:
   model: category
   type: NORMAL
@@ -13,7 +13,7 @@ id:
   type: string
   exportType: true
   exportName: CategoryId
-  structure: stringID<space, key>
+  structure: key
 modelSettings:
   authority: source
 fields:
@@ -21,7 +21,6 @@ fields:
       type: record<financialSpace>
       required: true
       default: ""
-      assign: true
   - key:
       type: string
       required: true
@@ -76,6 +75,13 @@ views:
   - name: Admin
     fields:
       - id
+      - space
+      - key
+      - name
+      - categoryKind
+      - parentCategory
+      - active
+      - notes
 refreshViews: true
 admin:
   authority: source

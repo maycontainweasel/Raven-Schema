@@ -37,10 +37,6 @@ DEFINE FUNCTION OVERWRITE fn::createCategory($payload: object) {
 	let $payload = fn::objectAssign($defaultData, $payload);
 
 	let $payload = fn::objectAssign($payload, {
-		space: if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { null } else { fn::ridParam("financialSpace", $payload.space) },
-	});
-
-	let $payload = fn::objectAssign($payload, {
 		space: if type::is_array($payload.space) { $payload.space } else if $payload.space = NONE || $payload.space = null || (type::is_string($payload.space) && string::len(string::trim($payload.space)) = 0) { $payload.space } else { fn::ridParam("financialSpace", $payload.space) },
 		parentCategory: if type::is_array($payload.parentCategory) { $payload.parentCategory } else if $payload.parentCategory = NONE || $payload.parentCategory = null || (type::is_string($payload.parentCategory) && string::len(string::trim($payload.parentCategory)) = 0) { $payload.parentCategory } else { fn::ridParam("category", $payload.parentCategory) },
 	});
@@ -56,7 +52,7 @@ DEFINE FUNCTION OVERWRITE fn::createCategory($payload: object) {
 		$payload
 	};
 
-	let $rid = type::record('category', fn::stringID([$payload.space, $payload.key]));
+	let $rid = type::record('category', $payload.key);
 	let $payload = fn::objectRemove($payload, ["id"]);
 	let $record = upsert $rid content $payload;
 	let $record = if type::is_array($record) { array::first($record) } else { $record };
@@ -66,12 +62,16 @@ DEFINE FUNCTION OVERWRITE fn::createCategory($payload: object) {
 		if type::is_array($fallback) { array::first($fallback) } else { $fallback };
 	};
 
-	let $recordID = if type::is_object($record) && type::is_record($record.id) {
+	let $recordIDSource = if type::is_object($record) && $record.id != NONE && $record.id != null {
 		$record.id
-	} else if type::is_record($record) {
-		$record
 	} else {
-		null
+		$record
+	};
+
+	let $recordID = if $recordIDSource = NONE || $recordIDSource = null || (type::is_string($recordIDSource) && string::len(string::trim($recordIDSource)) = 0) {
+		NONE
+	} else {
+		fn::ridParam("category", $recordIDSource)
 	};
 
 	if !$recordID {

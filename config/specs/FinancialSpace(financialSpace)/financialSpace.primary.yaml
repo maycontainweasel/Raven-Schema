@@ -3,7 +3,7 @@ kind: table
 name: FinancialSpace
 primary: true
 tableType: primary
-description: Personal or business money context
+description: Personal, business, trading, family, or other money context
 table:
   model: financialSpace
   type: NORMAL
@@ -18,7 +18,7 @@ modelSettings:
   authority: source
 fields:
   - key:
-      type: slug
+      type: string
       required: true
       default: ""
   - name:
@@ -41,15 +41,8 @@ fields:
       required: true
       default: true
   - archivedAt:
-      type: datetime
-      default: null
-edges:
-  has:
-    - table: FinancialSpaceAccounts
-      in: financialSpace
-      out: account
-      unique: true
-  belongs: []
+      type: string
+      default: ""
 crud:
   create:
     enabled: true
@@ -82,6 +75,13 @@ views:
   - name: Admin
     fields:
       - id
+      - key
+      - name
+      - spaceType
+      - currency
+      - description
+      - active
+      - archivedAt
 refreshViews: true
 admin:
   authority: source

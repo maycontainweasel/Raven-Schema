@@ -91,18 +91,13 @@ config/sync.yaml
 # config/schema-tenants.paths
 # config/schema-tenants.paths.local
 
-# Graph + generated artifacts (per-project or generated)
-config/graph.mpdg
+# Generated artifacts that are not app-schema canon
 config/graph.ts
 config/graph.mmd
-config/specs/
 config/specs_stage/
 config/specs-bak/
-config/migrations/
 config/generated/
 config/types/
-config/typesense/
-config/schema-assets.json
 config/admin/
 config/ui/
 config/ui-back/
@@ -139,11 +134,8 @@ sync-itemize.log
 # config/bootstrap/modules/post/migrations/post/Z_PostBundle.surql
 # config/bootstrap/seed/*
 # config/generated/*
-# config/migrations/*
 # config/overrides/*
-# config/specs/*
 # config/types/*
-# config/typesense/*
 # config/ui/*
 # config/ui-back/*
 # /sites/
@@ -171,17 +163,6 @@ config/temp/*
 # config/bootstrap/seed/**
 
 
-
-# Module
-
-module/src/runtime/generated/
-module/src/runtime/controllers/
-module/src/runtime/index.ts
-module/src/runtime/controllers/generated/
-module/src/runtime/controllers/controller-manifest.json
-
-module/docs/controllers/**/*
-module/src/runtime/generated/**/*
 
 # schema docs
 
